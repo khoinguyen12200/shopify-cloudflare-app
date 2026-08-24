@@ -69,7 +69,19 @@ npm run install:skill -- --locked              # exact versions from skills-lock
 npm run install:skill -- --agent claude-code   # one host only
 ```
 
-`skills-lock.json` is committed and lists every skill package this repo uses.
+`skills-lock.json` is committed and lists every skill package this repo uses —
+**47 skills from three sources**:
+
+| Source | What it gives an agent |
+| ------ | ---------------------- |
+| `Shopify/shopify-ai-toolkit` (21) | Look up Admin GraphQL, Polaris, Functions, CLI, App Store review — the lookups `@rules/shopify-and-ui.md` requires |
+| `obra/superpowers` (14) | `test-driven-development`, `verification-before-completion`, `systematic-debugging`, code review, planning |
+| `remotion-dev/skills` (12) | React video, if a project needs it |
+
+`test-driven-development` and `verification-before-completion` are named directly
+by `.claude/rules/testing.md`, so they are not optional extras — the rules assume
+they are present, and `install:skill` is what makes that true.
+
 The installed skills are **not** committed — they are ~90 MB and fully
 reproducible from that lockfile, which is exactly why this command exists.
 Expect the first run to take several minutes.

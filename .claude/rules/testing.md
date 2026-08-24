@@ -34,11 +34,19 @@ wired to the behavior at all.
 
 ## Before writing implementation code
 
-If a dedicated TDD skill is installed (for example
-`superpowers:test-driven-development`), invoke it — it carries the full cycle,
-good/bad test examples, and the rebuttals to every rationalization. This file is
-the repo layer on top; where they differ, **the stricter reading wins**. If no
-such skill is available, this file alone is the contract.
+**Invoke the `test-driven-development` skill.** It ships with this repo — `npm run
+install:skill` installs it from `skills-lock.json` — and it carries the full
+cycle, good and bad test examples, and the rebuttal to every rationalisation.
+This file is the repo-specific layer on top; where they differ, **the stricter
+reading wins**.
+
+Two companions from the same set are worth naming, because they encode rules this
+repo already has:
+
+- **`verification-before-completion`** — "evidence before assertions always". Use
+  it before claiming anything is done, fixed, or passing. It is the No-Cheating
+  rule as a procedure.
+- **`systematic-debugging`** — before proposing a fix for any bug or test failure.
 
 ## The loop — every behavior change, no exceptions
 
