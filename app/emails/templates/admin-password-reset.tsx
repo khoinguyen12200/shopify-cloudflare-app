@@ -1,3 +1,4 @@
+import type { AdminPasswordResetPayload } from "~/notifications/payloads";
 import { Cta, EmailLayout, Muted, P } from "../layout";
 import { renderEmail, type RenderedEmail } from "../render";
 
@@ -9,17 +10,8 @@ import { renderEmail, type RenderedEmail } from "../render";
  * needs arrives on the payload, which is what makes it renderable in a test with
  * no request context.
  */
-export interface AdminPasswordResetProps {
-  recipientName: string;
-  resetUrl: string;
-  /** Already formatted for the recipient — the template does not know a locale. */
-  expiresIn: string;
-  logoUrl?: string;
-  locale?: string;
-}
-
 export function adminPasswordResetEmail(
-  p: AdminPasswordResetProps,
+  p: AdminPasswordResetPayload,
 ): Promise<RenderedEmail> {
   return renderEmail(
     "Reset your password",

@@ -1,10 +1,11 @@
-import { buildEmail, type EmailPropsByEvent } from "~/emails/registry.server";
+import { buildEmail } from "~/emails/registry.server";
 import { NotificationLogRepo } from "~/models/notification-logs.server";
 import { dispatch, type DispatchResult } from "./dispatch.server";
 import { resolveEligibility } from "./eligibility/resolve";
 import { loadEligibilityContext } from "./eligibility/snapshot.server";
 import type { ChannelDecision } from "./eligibility/types";
-import type { ChannelKey, NotificationEvent } from "./types";
+import type { PayloadByEvent } from "./payloads";
+import type { ChannelKey, Message, NotificationEvent } from "./types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // THE ONE ENTRY POINT. Call sites use `notify()` and nothing else.
@@ -12,23 +13,61 @@ import type { ChannelKey, NotificationEvent } from "./types";
 // It does four things, in order:
 //   1. resolve the eligibility snapshot (one round of I/O)
 //   2. decide, purely, which channels may carry this event to this recipient
-//   3. render each allowed channel through its registered template
-//   4. hand each message to `dispatch`, which logs and dedupes
+//   3. compose a Message for each allowed channel, from its registered template
+//   4. hand each Message to `dispatch`, which logs and dedupes
 //
 // A caller never touches a channel, a template, a preference or the log. That is
 // the property worth protecting: there is no way to send something that leaves no
-// record, and no way to bypass a recipient's opt-out by reaching for a lower-level
-// function, because the lower-level functions are not the ones you would find.
+// record, and no way to bypass a recipient's opt-out by reaching for a
+// lower-level function.
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Turns an event + payload into a Message for ONE channel.
+ *
+ * A method with its own type parameter, not a plain function type, so the
+ * event/payload correlation survives into each composer — the builder receives
+ * exactly its own event's payload rather than a union of every payload.
+ */
+interface Composer {
+  compose<E extends NotificationEvent>(
+    event: E,
+    payload: PayloadByEvent[E],
+    to: string,
+  ): Promise<Message>;
+}
+
+/**
+ * ONE COMPOSER PER CHANNEL, and this is the seam that keeps `notify` closed.
+ *
+ * Keyed `[K in Message["kind"]]`, so adding `SmsMessage` to the union makes this
+ * object stop compiling until a composer exists — the same guarantee `HANDLERS`
+ * gives `dispatch`. The loop below then needs no `if (channel === …)` branch, so
+ * the only thing a new channel touches is this table.
+ */
+const COMPOSERS: { [K in Message["kind"]]: Composer } = {
+  email: {
+    async compose(event, payload, to) {
+      const rendered = await buildEmail(event, payload);
+      return {
+        kind: "email",
+        to,
+        subject: rendered.subject,
+        html: rendered.html,
+        text: rendered.text,
+      };
+    },
+  },
+};
 
 export interface NotifyInput<E extends NotificationEvent> {
   event: E;
   /**
-   * Where to reach the recipient, per channel. Email only, today. A channel with
-   * no address here is refused as `recipient_unreachable` rather than attempted.
+   * Where to reach the recipient, per channel. A channel with no address here is
+   * refused as `recipient_unreachable` rather than attempted.
    */
   to: Partial<Record<ChannelKey, string>>;
-  payload: EmailPropsByEvent[E];
+  payload: PayloadByEvent[E];
   /** Tenant scope for preferences and opt-outs. Defaults to app-wide. */
   scope?: string;
   /** Idempotency key for (event, recipient). Omit for inherently-unique sends. */
@@ -44,9 +83,9 @@ export interface NotifyResult {
   /**
    * Every channel considered, with its verdict.
    *
-   * Returned even for the allowed ones, because "why didn't they get the text?"
-   * is the most common question this system will ever be asked, and a function
-   * that only reports what it DID send cannot answer it.
+   * Returned even for the allowed ones, because "why didn't they get it?" is the
+   * question this system will be asked most, and a function that only reports
+   * what it DID send cannot answer it.
    */
   decisions: ChannelDecision[];
 }
@@ -65,23 +104,21 @@ export async function notify<E extends NotificationEvent>(
   // A refusal gets its own `refused` ROW, not just a log line.
   //
   // This is the record that answers "why didn't they get it?". A console line is
-  // not that: it is unqueryable, it ages out, and it makes a suppressed
+  // not that: it is unqueryable, it ages out, and it leaves a suppressed
   // notification indistinguishable from one that was never requested. The status
-  // is `refused` rather than `failed` because nothing was attempted — see the
-  // schema comment on notification_logs.
+  // is `refused` rather than `failed` because nothing was attempted.
   const logs = new NotificationLogRepo();
   const now = Date.now();
 
   for (const decision of eligibility.decisions) {
     if (decision.allowed) continue;
-    const to = input.to[decision.channel];
     await logs.recordSettled({
       id: crypto.randomUUID(),
       event: input.event,
       channel: decision.channel,
       // The address may legitimately be absent — that IS the refusal in the
       // `recipient_unreachable` case — so record what was asked for.
-      recipient: to ?? "(none)",
+      recipient: input.to[decision.channel] ?? "(none)",
       status: "refused",
       reasonCode: decision.reason,
       dedupeKey: input.dedupeKey,
@@ -93,30 +130,24 @@ export async function notify<E extends NotificationEvent>(
   const dispatched: DispatchResult[] = [];
 
   for (const channel of eligibility.allowed) {
-    // The address is guaranteed present: `recipientReachable` refused otherwise.
+    // Guaranteed present: `recipientReachable` refused the channel otherwise.
     const to = input.to[channel];
     if (!to) continue;
 
-    if (channel === "email") {
-      const rendered = await buildEmail(input.event, input.payload);
-      dispatched.push(
-        await dispatch(
-          {
-            kind: "email",
-            to,
-            subject: rendered.subject,
-            html: rendered.html,
-            text: rendered.text,
-          },
-          {
-            event: input.event,
-            dedupeKey: input.dedupeKey,
-            shop: input.scope,
-            logId: input.logId,
-          },
-        ),
-      );
-    }
+    const message = await COMPOSERS[channel].compose(
+      input.event,
+      input.payload,
+      to,
+    );
+
+    dispatched.push(
+      await dispatch(message, {
+        event: input.event,
+        dedupeKey: input.dedupeKey,
+        shop: input.scope,
+        logId: input.logId,
+      }),
+    );
   }
 
   return {

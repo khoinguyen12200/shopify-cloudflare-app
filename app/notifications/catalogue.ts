@@ -62,7 +62,21 @@ export function supportsChannel(
   return EVENTS[event].channels.includes(channel);
 }
 
+/**
+ * Narrow an untrusted string — a stored value, a form field — to an event.
+ *
+ * A real type guard rather than an assertion: the catalogue IS the set of valid
+ * events, so membership is the check. `as NotificationEvent` would claim the same
+ * thing without verifying it, and would keep claiming it after a stored row went
+ * stale.
+ */
+export function isNotificationEvent(value: string): value is NotificationEvent {
+  return Object.prototype.hasOwnProperty.call(EVENTS, value);
+}
+
 /** Every event, for a settings screen or an audit. */
 export function allEvents(): NotificationEvent[] {
-  return Object.keys(EVENTS) as NotificationEvent[];
+  // Object.keys widens to string[], so it goes through the guard above instead of
+  // an assertion — @rules/code-craft.md bans `as`.
+  return Object.keys(EVENTS).filter(isNotificationEvent);
 }
