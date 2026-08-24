@@ -246,6 +246,12 @@ Guards that keep the console from locking you out, all tested:
 - `INTERNAL_SESSION_SECRET` is **required** — the console refuses to serve rather
   than signing cookies with a constant.
 
+Removing an admin goes through ngk-dashboard's `ConfirmDialog`, whose confirm
+button submits a real hidden `<Form>` by id. So the destructive path is still a
+plain POST to the route action with the same server guards — no fetch, no
+client-side mutation path, and the copy is translated (a native `confirm()`
+cannot be styled or localised, and does not exist during SSR).
+
 ## Translations
 
 **Every user-visible string is translated — public pages and the embedded admin

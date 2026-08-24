@@ -69,8 +69,7 @@
       "enable": "Activar",
       "remove": "Eliminar",
       "makeOwner": "Hacer propietario",
-      "makeAdmin": "Hacer administrador",
-      "confirmRemove": "¿Eliminar a este administrador? Esta acción no se puede deshacer."
+      "makeAdmin": "Hacer administrador"
     },
     "you": "Tú",
     "errors": {
@@ -89,6 +88,12 @@
       "enabled": "{{name}} puede iniciar sesión de nuevo.",
       "removed": "Se ha eliminado a {{name}}.",
       "roleChanged": "{{name}} ahora es {{role}}."
+    },
+    "remove": {
+      "title": "¿Eliminar a {{name}}?",
+      "desc": "Perderá el acceso a la consola de inmediato. Esta acción no se puede deshacer.",
+      "confirm": "Eliminar",
+      "cancel": "Cancelar"
     }
   },
   "profile": {

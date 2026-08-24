@@ -69,8 +69,7 @@
       "enable": "Enable",
       "remove": "Remove",
       "makeOwner": "Make owner",
-      "makeAdmin": "Make admin",
-      "confirmRemove": "Remove this admin? This cannot be undone."
+      "makeAdmin": "Make admin"
     },
     "you": "You",
     "errors": {
@@ -89,6 +88,12 @@
       "enabled": "{{name}} can sign in again.",
       "removed": "{{name}} was removed.",
       "roleChanged": "{{name}} is now {{role}}."
+    },
+    "remove": {
+      "title": "Remove {{name}}?",
+      "desc": "They will lose access to the console immediately. This cannot be undone.",
+      "confirm": "Remove",
+      "cancel": "Cancel"
     }
   },
   "profile": {

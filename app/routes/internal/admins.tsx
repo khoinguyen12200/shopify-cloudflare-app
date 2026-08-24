@@ -6,6 +6,7 @@ import {
   useNavigation,
 } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import { useState } from "react";
 import {
   Alert,
   AlertDescription,
@@ -15,6 +16,7 @@ import {
   Card,
   CardContent,
   CardHeader,
+  ConfirmDialog,
   Input,
   Label,
   Page,
@@ -47,9 +49,12 @@ import type { AdminErrorReason } from "~/services/admin-management.server";
 import { MIN_PASSWORD_LENGTH } from "~/lib/password-policy";
 import { useLocale } from "~/i18n/useLocale";
 import { formatDateTime } from "~/i18n/format";
-import type { AdminRole } from "~/db/schema";
+import type { AdminRole, SafeAdminUser } from "~/db/schema";
 
 export const handle = { i18n: ["common", "internal"] };
+
+/** id of the hidden removal form that the ConfirmDialog submits. */
+const REMOVE_FORM_ID = "remove-admin";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Owner-only. requireOwner throws 403 for a signed-in non-owner, which the
@@ -146,6 +151,10 @@ export default function Admins() {
   const locale = useLocale();
 
   const busy = navigation.state !== "idle";
+
+  // One dialog for the whole table rather than one per row: only ever a single
+  // pending confirmation, so a single piece of state describes it.
+  const [confirming, setConfirming] = useState<SafeAdminUser | null>(null);
 
   return (
     <Page title={t("admins.heading")} subtitle={t("admins.subheading")}>
@@ -253,14 +262,15 @@ export default function Admins() {
                               )}
                               busy={busy}
                             />
-                            <RowAction
-                              id={admin.id}
-                              intent="remove"
-                              label={t("admins.actions.remove")}
-                              busy={busy}
-                              destructive
-                              confirm={t("admins.actions.confirmRemove")}
-                            />
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="destructive"
+                              disabled={busy}
+                              onClick={() => setConfirming(admin)}
+                            >
+                              {t("admins.actions.remove")}
+                            </Button>
                           </div>
                         )}
                       </TableCell>
@@ -327,44 +337,57 @@ export default function Admins() {
             </Form>
           </CardContent>
         </Card>
+        {/*
+          The dialog's confirm button submits THIS form by id, so removal stays a
+          normal POST to the action — no fetch, no client-side mutation path, and
+          the same server guards apply. Closing on submit is a plain event
+          handler rather than an effect watching the navigation state.
+        */}
+        <Form
+          method="post"
+          id={REMOVE_FORM_ID}
+          className="hidden"
+          onSubmit={() => setConfirming(null)}
+        >
+          <input type="hidden" name="intent" value="remove" />
+          <input type="hidden" name="id" value={confirming?.id ?? ""} />
+        </Form>
+
+        <ConfirmDialog
+          open={confirming !== null}
+          onOpenChange={(open) => {
+            if (!open) setConfirming(null);
+          }}
+          form={REMOVE_FORM_ID}
+          destructive
+          isLoading={busy}
+          title={t("admins.remove.title", { name: confirming?.name ?? "" })}
+          desc={t("admins.remove.desc")}
+          confirmText={t("admins.remove.confirm")}
+          cancelBtnText={t("admins.remove.cancel")}
+        />
       </BlockStack>
     </Page>
   );
 }
 
+/** A non-destructive row action: one small form, one button. */
 function RowAction({
   id,
   intent,
   label,
   busy,
-  destructive,
-  confirm,
 }: {
   id: string;
   intent: Intent;
   label: string;
   busy: boolean;
-  destructive?: boolean;
-  confirm?: string;
 }) {
   return (
-    <Form
-      method="post"
-      onSubmit={(event) => {
-        // A destructive action gets a confirmation. Native confirm() keeps this
-        // working without JS-driven dialog state; swap for ConfirmDialog if you
-        // want a styled one.
-        if (confirm && !window.confirm(confirm)) event.preventDefault();
-      }}
-    >
+    <Form method="post">
       <input type="hidden" name="intent" value={intent} />
       <input type="hidden" name="id" value={id} />
-      <Button
-        type="submit"
-        size="sm"
-        variant={destructive ? "destructive" : "outline"}
-        disabled={busy}
-      >
+      <Button type="submit" size="sm" variant="outline" disabled={busy}>
         {label}
       </Button>
     </Form>
