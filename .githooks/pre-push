@@ -1,0 +1,6 @@
+#!/bin/sh
+# The real gate: typecheck + lint + the whole suite.
+#
+# Slower (~35s), and correctly so — this is the last point before code leaves the
+# machine. A commit can be a work in progress; a push should not be.
+npm run prepush

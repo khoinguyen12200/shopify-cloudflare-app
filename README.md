@@ -19,6 +19,7 @@ link.)
 | Public UI  | SCSS design tokens (`app/styles/public/`), dark mode + a11y |
 | Staff console | `/internal` — ngk-dashboard + Tailwind v4, PBKDF2 auth      |
 | i18n       | i18next + `remix-i18next`, `en` + `es`, `Intl` formatting  |
+| Money      | integer minor units + currency (`app/money/`), never a float |
 | State      | D1 + Drizzle (`app/db/`, queried only in `app/models/`)   |
 | Sessions   | Workers KV (`app/session-storage.server.ts`)              |
 | Tests      | Vitest + `@cloudflare/vitest-pool-workers` (real workerd) |
@@ -309,6 +310,58 @@ instead of emailing it. **That on-screen fallback requires both an unconfigured
 mailer and a non-production deployment** — on a real deployment it would let
 anyone who can POST the form obtain a reset link for any account.
 
+## Money
+
+```
+NEVER A FLOAT. INTEGER MINOR UNITS AND A CURRENCY, ALWAYS TOGETHER.
+```
+
+Run in this project's own D1:
+
+```
+0.1 + 0.2          →  0.30000000000000004
+0.1 + 0.2 = 0.3    →  0  (false)
+ROUND(0.615, 2)    →  0.61   ← not 0.62; 0.615 is really 0.6149999… in binary
+```
+
+D1 is SQLite, so `REAL` is an IEEE-754 double, and **SQLite has no fixed-point
+decimal type** — its `NUMERIC` is a type *affinity*, not `DECIMAL(10,2)`. There is
+nothing to store money in safely except `INTEGER`.
+
+Shopify already protects you: in the Admin schema `Decimal` is *"a signed decimal
+number, which supports arbitrary precision and is **serialized as a string**"*.
+They send `"29.99"` deliberately. `parseFloat` throws that away.
+
+```ts
+import { fromMoneyV2, add, allocate, formatMoney, toMoneyV2 } from "~/money";
+
+// IN — the automatic transform from Shopify
+const price = fromMoneyV2(node.priceSet.shopMoney);   // Result<Money, MoneyError>
+
+// COMPUTE — integers throughout, mismatched currencies refused
+const total = add(price.value, shipping);
+
+// SPLIT — never loses a unit
+allocate(total.value, [1, 1, 1]);   // 334, 333, 333 — not 333, 333, 333
+
+// OUT
+formatMoney("de-DE", total.value);  // "19,99 €"
+toMoneyV2(total.value);             // { amount: "19.99", currencyCode: "EUR" }
+```
+
+| Guard | Why |
+| ----- | --- |
+| Branded `MinorUnits` | `formatMoney(locale, 19.99, "USD")` cannot typecheck — it would render `$0.20` |
+| Digit-string parsing | `Number("0.615")` is *already* `0.6149999…`; rounding afterwards cannot recover it |
+| Decimals from `Intl` | JPY/KRW/VND have **0**, KWD/BHD/JOD have **3**. `* 100` is wrong ~20 currencies of the time |
+| `toCurrency` checks membership | `Intl.NumberFormat` accepts any 3-letter code and uses it as the symbol, so `"ZZZ"` passes |
+| Precision loss **refused** | Shopify's own docs use `"29.999"`. Truncating loses a tenth of a cent per line |
+| `applyRate` demands a rounding mode | No universally correct choice; a silent default becomes unexplained variance |
+| `allocate` uses largest-remainder | Dividing $10 three ways and rounding gives $9.99. Property-tested over 1000+ inputs |
+| `money("total")` column helper | Emits `INTEGER` + currency, so nobody can reach for `real()` |
+
+Full contract: `.claude/rules/money.md`.
+
 ## Notifications
 
 One funnel, so nothing can be sent without leaving a record — and one decision
@@ -550,7 +603,8 @@ is reused across shops and module state would leak between tenants.
 | ------------------------ | ------------------------------------------------- |
 | `npm run dev`            | `shopify app dev` against the dev app + tunnel     |
 | `npm run dev:local`      | Vite only, no tunnel or Shopify CLI                |
-| `npm run verify`         | typecheck + lint + test (what the pre-commit hook runs) |
+| `npm run precommit`      | typecheck + lint — the **pre-commit** hook, ~5s     |
+| `npm run verify`         | typecheck + lint + test — the **pre-push** hook, ~35s |
 | `npm run db:generate`    | Drizzle schema → a new migration in `./drizzle`    |
 | `npm run db:migrate:local` | Apply migrations to local D1                    |
 | `npm run cf-typegen`     | Regenerate `worker-configuration.d.ts` (`Env`)     |

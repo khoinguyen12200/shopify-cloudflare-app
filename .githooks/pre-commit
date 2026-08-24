@@ -1,4 +1,10 @@
 #!/bin/sh
-# Installed by `npm run prepare` (git config core.hooksPath .githooks).
-# Never bypass with --no-verify; fix what it reports.
+# Fast gate: typecheck + lint, about 7 seconds.
+#
+# Tests are NOT here on purpose. They take ~26s (real workerd, real D1, SSR
+# renders), and a hook that slow gets bypassed with --no-verify — at which point
+# it protects nothing. They run in the pre-push hook and in CI instead, so nothing
+# untested reaches a shared branch.
+#
+# Never bypass this with --no-verify; fix what it reports.
 npm run precommit

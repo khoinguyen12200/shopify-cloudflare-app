@@ -8,7 +8,7 @@
   "scripts": {
     "prepare": "git config core.hooksPath .githooks",
     "verify": "npm run typecheck && npm run lint && npm test",
-    "precommit": "npm run verify",
+    "precommit": "npm run typecheck && npm run lint",
     "dev": "node scripts/shopify.mjs app dev --config dev",
     "predev": "npm run db:migrate:local && npm run db:seed",
     "dev:local": "react-router dev",
@@ -39,7 +39,8 @@
     "install:skill": "node scripts/install-skills.mjs",
     "db:seed": "node scripts/seed-admin.mjs",
     "admin:create": "node scripts/create-admin.mjs",
-    "check:placeholders": "node scripts/check-placeholders.mjs production"
+    "check:placeholders": "node scripts/check-placeholders.mjs production",
+    "prepush": "npm run verify"
   },
   "dependencies": {
     "@react-email/components": "^1.0.12",

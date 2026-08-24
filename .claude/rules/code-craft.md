@@ -19,8 +19,9 @@ clean, push mess to the edge.
   the design is wrong — fix the design.
 - **Brand every id and amount.** `ShopDomain`, `OrderId`, `MinorUnits`,
   `CurrencyCode`. Two `string` ids that can be swapped at a call site will be
-  swapped. Money is **integer minor units + currency, always together** — a
-  float anywhere is a bug.
+  swapped. Money is **integer minor units + currency, always together** — a float
+  anywhere is a bug, and `~/money` is the only way to make one
+  (@rules/money.md).
 - **Unions over booleans + optionals.** Model a status as
   `"pending" | "active" | "cancelled"`, never three nullable boolean fields.
   Switch exhaustively with a `never` fallthrough so adding a variant fails the

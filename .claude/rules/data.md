@@ -40,6 +40,13 @@ removing one is two deploys (stop reading, then drop). Any change under
 `app/db/` or `drizzle/` runs the **full** suite: a migration breaks tests that
 never mention it.
 
+## Money columns are INTEGER
+
+`real()` is banned. D1 is SQLite, `REAL` is an IEEE-754 double, and SQLite has no
+fixed-point decimal type — so integer minor units is the only safe
+representation. Use `money("total")` from `~/db/columns`, which emits
+`total_amount INTEGER` + `total_currency TEXT`. Full contract: @rules/money.md.
+
 ## Failure boundaries
 
 Independent panels fail independently with a sensible empty value **and a logged
