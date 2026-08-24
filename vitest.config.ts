@@ -54,6 +54,12 @@ export default defineConfig({
           SHOPIFY_API_KEY: "test-api-key",
           SHOPIFY_API_SECRET: "test-api-secret",
           SHOPIFY_APP_URL: "https://example.test",
+          // Signs the internal console's session cookie. Injected here so the
+          // session layer is TESTABLE: admin-auth.server.ts refuses to run
+          // without it (a constant default would make the cookie forgeable), so
+          // without this binding every session test would throw instead of
+          // exercising the code.
+          INTERNAL_SESSION_SECRET: "test-internal-session-secret",
         },
       },
     }),
