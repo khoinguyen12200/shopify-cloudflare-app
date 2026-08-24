@@ -1,19 +1,28 @@
-import type { MetaFunction } from "react-router";
+import type { LoaderFunctionArgs, MetaFunction } from "react-router";
+import { useTranslation } from "react-i18next";
+import { i18nServer } from "~/i18n/i18n.server";
+import { useLocale } from "~/i18n/useLocale";
+import { formatDate } from "~/i18n/format";
 import {
-  APP_NAME,
   COMPANY_NAME,
   COMPANY_ADDRESS,
   CONTACT_EMAIL,
   LAST_UPDATED,
-  PRIVACY_SECTIONS,
 } from "~/legal/content";
 
-export const meta: MetaFunction = () => [
-  { title: `Privacy policy · ${APP_NAME}` },
-  {
-    name: "description",
-    content: `How ${APP_NAME} collects, uses, and protects personal data.`,
-  },
+export const handle = { i18n: ["common", "public"] };
+
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const t = await i18nServer.getFixedT(request, "public");
+  const common = await i18nServer.getFixedT(request, "common");
+  return {
+    title: `${t("legal.privacy.heading")} · ${common("appName")}`,
+    appName: common("appName"),
+  };
+};
+
+export const meta: MetaFunction<typeof loader> = ({ data }) => [
+  { title: data?.title ?? "" },
 ];
 
 /**
@@ -22,43 +31,57 @@ export const meta: MetaFunction = () => [
  *
  * Put this URL in the "Privacy policy" field of your app submission.
  */
+const SECTION_KEYS = [
+  "collect",
+  "why",
+  "share",
+  "storage",
+  "security",
+  "rights",
+  "contactUs",
+  "changes",
+] as const;
+
 export default function PrivacyPolicy() {
+  const { t } = useTranslation("public");
+  const { t: common } = useTranslation("common");
+  const locale = useLocale();
+  const appName = common("appName");
+
+  // A date is formatted, never printed raw: 1/2/2026 means different days in
+  // different locales.
+  const updated = Number.isNaN(Date.parse(LAST_UPDATED))
+    ? LAST_UPDATED
+    : formatDate(locale, new Date(LAST_UPDATED), { dateStyle: "long" });
+
   return (
     <section className="section">
       <div className="prose stack">
-      <h1>Privacy policy</h1>
-      <p className="muted">Last updated: {LAST_UPDATED}</p>
+        <h1>{t("legal.privacy.heading")}</h1>
+        <p className="muted">{t("legal.lastUpdated", { date: updated })}</p>
 
-      <p className="notice notice--warning">
-        <strong>This is a scaffold, not a policy.</strong> Every section below is
-        a placeholder. Replace them before submitting to the App Store — shipping
-        this text as-is is a false statement about how you handle personal data.
-      </p>
+        <p className="notice notice--warning">{t("legal.privacy.warning")}</p>
 
-      <p>
-        This policy explains how {COMPANY_NAME} (&ldquo;we&rdquo;) handles
-        personal data in connection with {APP_NAME}, an application for Shopify
-        stores.
-      </p>
+        <p>{t("legal.privacy.intro", { company: COMPANY_NAME, appName })}</p>
 
-      {PRIVACY_SECTIONS.map((section) => (
-        <section key={section.heading}>
-          <h2>{section.heading}</h2>
-          <p>{section.body}</p>
-        </section>
-      ))}
+        {SECTION_KEYS.map((key) => (
+          <section key={key}>
+            <h2>{t(`legal.privacy.sections.${key}.heading`)}</h2>
+            <p>{t(`legal.privacy.sections.${key}.body`)}</p>
+          </section>
+        ))}
 
-      <div className="card stack">
-        <p>
-          <strong>Contact</strong>
-          <br />
-          {COMPANY_NAME}
-          <br />
-          {COMPANY_ADDRESS}
-          <br />
-          <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
-        </p>
-      </div>
+        <div className="card stack">
+          <p>
+            <strong>{t("legal.privacy.contact")}</strong>
+            <br />
+            {COMPANY_NAME}
+            <br />
+            {COMPANY_ADDRESS}
+            <br />
+            <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
+          </p>
+        </div>
       </div>
     </section>
   );

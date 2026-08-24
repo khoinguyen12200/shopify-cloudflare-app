@@ -1,6 +1,8 @@
 import { Link, Outlet } from "react-router";
 import type { LinksFunction } from "react-router";
-import { APP_NAME } from "~/legal/content";
+import { useTranslation } from "react-i18next";
+import { useLocale } from "~/i18n/useLocale";
+import { LocaleSwitcher } from "~/i18n/LocaleSwitcher";
 // The public stylesheet is loaded HERE, by this layout's links(), so it ships
 // only while a public route is matched. It must never reach the embedded admin,
 // whose Polaris web components bring their own styling.
@@ -10,43 +12,34 @@ export const links: LinksFunction = () => [
   { rel: "stylesheet", href: publicStyles },
 ];
 
-const NAV = [
-  { to: "/pricing", label: "Pricing" },
-  { to: "/support", label: "Support" },
-];
+/** Namespaces this route tree needs — entry.server only ships these. */
+export const handle = { i18n: ["common", "public"] };
 
-const FOOTER_LINKS = [
-  { to: "/legal/privacy", label: "Privacy" },
-  { to: "/legal/terms", label: "Terms" },
-  { to: "/support", label: "Support" },
-];
-
-/**
- * Shell for every public page. Owns the stylesheet, header, footer and skip
- * link, so a page only writes its own content.
- */
 export default function PublicLayout() {
+  const { t } = useTranslation("common");
+  const locale = useLocale();
+
+  const appName = t("appName");
+
   return (
     <div className="shell">
       <a className="skip-link" href="#main">
-        Skip to content
+        {t("a11y.skipToContent")}
       </a>
 
       <header className="header">
         <div className="header__inner">
           <Link to="/" className="header__brand">
-            {APP_NAME}
+            {appName}
           </Link>
-          <nav className="header__nav" aria-label="Main">
+          <nav className="header__nav" aria-label={t("nav.home")}>
             <div className="header__nav-secondary">
-              {NAV.map((item) => (
-                <Link key={item.to} to={item.to}>
-                  {item.label}
-                </Link>
-              ))}
+              <Link to="/pricing">{t("nav.pricing")}</Link>
+              <Link to="/support">{t("nav.support")}</Link>
             </div>
+            <LocaleSwitcher current={locale} />
             <Link to="/auth/login" className="btn btn--primary">
-              Install
+              {t("actions.install")}
             </Link>
           </nav>
         </div>
@@ -59,14 +52,15 @@ export default function PublicLayout() {
       <footer className="footer">
         <div className="footer__inner">
           <span>
-            © {new Date().getFullYear()} {APP_NAME}
+            {t("footer.copyright", {
+              year: new Date().getFullYear(),
+              appName,
+            })}
           </span>
           <div className="footer__links">
-            {FOOTER_LINKS.map((item) => (
-              <Link key={item.to} to={item.to}>
-                {item.label}
-              </Link>
-            ))}
+            <Link to="/legal/privacy">{t("nav.privacy")}</Link>
+            <Link to="/legal/terms">{t("nav.terms")}</Link>
+            <Link to="/support">{t("nav.support")}</Link>
           </div>
         </div>
       </footer>

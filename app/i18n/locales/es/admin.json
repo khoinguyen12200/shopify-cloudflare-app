@@ -1,0 +1,30 @@
+{
+  "nav": {
+    "home": "Inicio"
+  },
+  "home": {
+    "heading": "Esqueleto de Shopify + Cloudflare",
+    "connectedTo": "Conectado a {{shop}}",
+    "runtimeBody": "Esta aplicación se ejecuta en el entorno de Cloudflare Workers. Las sesiones viven en KV, el estado de la aplicación en D1 mediante Drizzle, y ambos son enlaces reales tanto en desarrollo local como en producción.",
+    "installRecorded": "Instalación registrada en D1 el {{date}}.",
+    "installMissing": "Todavía no hay ninguna fila de instalación en D1: se escribe cuando se completa OAuth.",
+    "stack": {
+      "heading": "Tecnologías",
+      "runtime": "Entorno:",
+      "framework": "Framework:",
+      "interface": "Interfaz:",
+      "database": "Base de datos:",
+      "sessions": "Sesiones:"
+    }
+  },
+  "login": {
+    "heading": "Iniciar sesión",
+    "shopDomain": "Dominio de la tienda",
+    "shopDomainHint": "ejemplo.myshopify.com",
+    "submit": "Iniciar sesión"
+  },
+  "errors": {
+    "boundaryHeading": "Algo ha ido mal",
+    "notFound": "Página no encontrada"
+  }
+}

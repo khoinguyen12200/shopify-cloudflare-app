@@ -17,6 +17,7 @@ link.)
 | Shopify    | `@shopify/shopify-app-react-router` v2, Admin API 2026-10  |
 | Admin UI   | Polaris **web components** + App Bridge (embedded only)    |
 | Public UI  | SCSS design tokens (`app/styles/public/`), dark mode + a11y |
+| i18n       | i18next + `remix-i18next`, `en` + `es`, `Intl` formatting  |
 | State      | D1 + Drizzle (`app/db/`, queried only in `app/models/`)   |
 | Sessions   | Workers KV (`app/session-storage.server.ts`)              |
 | Tests      | Vitest + `@cloudflare/vitest-pool-workers` (real workerd) |
@@ -178,6 +179,69 @@ app/routes/
 
 `_layout.tsx` is the shell for its folder and the only place that surface's
 stylesheet or shared auth check belongs.
+
+## Translations
+
+**Every user-visible string is translated — public pages and the embedded admin
+alike.** A hardcoded English string is a defect, like a hardcoded hex colour.
+
+```
+app/i18n/
+├── config.ts                supported locales, labels, direction, narrowing
+├── options.ts               i18next options shared by server + client
+├── resources.ts             static JSON imports (workerd has no filesystem)
+├── i18n.server.ts           locale detection
+├── useLocale.ts             the render's locale, read from i18next
+├── format.ts                Intl date / number / money / list helpers
+├── i18next.d.ts             types t() against the en files
+└── locales/{en,es}/{common,public,admin}.json
+```
+
+Namespaces split by surface, so the admin bundle never ships marketing and legal
+copy. A route declares what it needs:
+
+```ts
+export const handle = { i18n: ["common", "admin"] };
+```
+
+### Where the locale comes from
+
+| Priority | Source |
+| -------- | ------ |
+| 1 | **`?locale=` — Shopify's own parameter.** Authoritative in the embedded admin |
+| 2 | `?lng=` — explicit switch on the public pages |
+| 3 | `locale` cookie — remembered public choice |
+| 4 | `Accept-Language` |
+| 5 | `en` |
+
+Apps rendered in the Shopify admin receive the merchant's chosen locale in the
+`locale` request parameter, so the embedded app follows the language the merchant
+already picked in Shopify. **Never add a language switcher to the admin** — it
+would let the app disagree with the Shopify chrome around it. The switcher is
+public-only, and persists to a cookie so the *server* renders the next request in
+the right language.
+
+Shopify sends regional tags (`es-ES`), so everything narrows through
+`toLocale()`, which falls back to the base language. A strict equality check
+would silently serve English to a Spanish merchant.
+
+### Formatting is part of translation
+
+`1/2/2026` is January 2nd in `en` and February 1st in `es`; `1,5` is
+one-and-a-half in `es` and one thousand five hundred in `en`. **Never hand-format
+a date, number, currency, list, or relative time** — use `app/i18n/format.ts`.
+`formatMoney(locale, minorUnits, currency)` takes integer minor units and derives
+the divisor from the currency, so JPY (0 decimals) and KWD (3) are right without
+a special case.
+
+### Adding a locale
+
+Add the code to `config.ts`, add `locales/<code>/*.json`, register them in
+`resources.ts`. The suite then enforces **identical key sets, no empty strings,
+and identical `{{interpolation}}` placeholders** across every locale — a renamed
+placeholder renders literal braces to a merchant, so it fails the build.
+
+Full contract: `.claude/rules/i18n.md`.
 
 ## Styling
 

@@ -1,0 +1,144 @@
+{
+  "landing": {
+    "eyebrow": "TODO: categoría",
+    "heading": "TODO: qué hace tu aplicación, en una línea",
+    "lead": "TODO: la frase siguiente: para quién es y por qué importa.",
+    "installCta": "Instalar en Shopify",
+    "pricingCta": "Ver precios",
+    "featuresHeading": "TODO: título de la sección",
+    "features": {
+      "one": {
+        "title": "TODO: primera funcionalidad",
+        "body": "TODO: qué hace por el comerciante, con sus palabras, no con las tuyas."
+      },
+      "two": {
+        "title": "TODO: segunda funcionalidad",
+        "body": "TODO: el beneficio, no la implementación."
+      },
+      "three": {
+        "title": "TODO: tercera funcionalidad",
+        "body": "TODO: sé concreto: los comerciantes leen en diagonal."
+      }
+    }
+  },
+  "pricing": {
+    "heading": "Precios",
+    "lead": "TODO: una línea sobre cómo funcionan los precios.",
+    "warning": "Marcador de posición. Estos planes deben coincidir con lo que la aplicación cobra realmente antes de enviarla a revisión.",
+    "popular": "Popular",
+    "getStarted": "Empezar",
+    "questions": "¿Tienes dudas sobre un plan?",
+    "contactSupport": "Contacta con soporte",
+    "perMonth": "al mes",
+    "forever": "para siempre",
+    "plans": {
+      "starter": {
+        "name": "TODO: Inicial",
+        "price": "0 $"
+      },
+      "growth": {
+        "name": "TODO: Crecimiento",
+        "price": "X $"
+      },
+      "plus": {
+        "name": "TODO: Plus",
+        "price": "Y $"
+      }
+    },
+    "featureTodo": "TODO: qué incluye"
+  },
+  "support": {
+    "heading": "Soporte",
+    "subheading": "Ayuda con {{appName}}",
+    "warning": "Marcador de posición. Sustitúyelo por contenido de ayuda real y específico de Shopify: pasos de configuración, problemas habituales y cómo contactarte.",
+    "gettingStarted": "Primeros pasos",
+    "gettingStartedBody": "TODO: instalación y primeros pasos.",
+    "faq": "Preguntas frecuentes",
+    "faqBody": "TODO: las preguntas que los comerciantes hacen de verdad.",
+    "contact": "Contacta con nosotros",
+    "contactBody": "Escribe a {{email}}. TODO: indica tu horario de soporte y el tiempo de respuesta."
+  },
+  "legal": {
+    "lastUpdated": "Última actualización: {{date}}",
+    "privacy": {
+      "heading": "Política de privacidad",
+      "warning": "Esto es un esqueleto, no una política. Cada sección es un marcador de posición. Sustitúyelas antes de enviar la aplicación a la App Store: publicar este texto tal cual es una declaración falsa sobre cómo tratas los datos personales.",
+      "intro": "Esta política explica cómo {{company}} («nosotros») trata los datos personales en relación con {{appName}}, una aplicación para tiendas de Shopify.",
+      "contact": "Contacto",
+      "sections": {
+        "collect": {
+          "heading": "¿Qué datos personales recogemos?",
+          "body": "TODO. Enumera cada categoría de datos personales que recoge la aplicación, tanto de los comerciantes como de sus clientes. Sé exhaustivo y concreto: «datos de uso» no es una categoría. Si no recoge ninguno, dilo claramente."
+        },
+        "why": {
+          "heading": "¿Por qué los recogemos y qué hacemos con ellos?",
+          "body": "TODO. Indica la finalidad de cada categoría anterior y la base jurídica si te apoyas en alguna. Aclara si se usan para entrenar modelos, crear perfiles o tomar decisiones automatizadas."
+        },
+        "share": {
+          "heading": "¿Con quién los compartimos?",
+          "body": "TODO. Nombra a cada tercero y subencargado que recibe los datos (alojamiento, analítica, correo, herramientas de soporte, proveedores de IA) y qué hace cada uno con ellos."
+        },
+        "storage": {
+          "heading": "¿Dónde se almacenan y durante cuánto tiempo?",
+          "body": "TODO. Indica las regiones donde se almacenan y tratan los datos, y el plazo de conservación de cada categoría. Las transferencias internacionales pueden requerir una garantía específica."
+        },
+        "security": {
+          "heading": "¿Cómo los protegemos?",
+          "body": "TODO. Describe el cifrado en tránsito y en reposo, los controles de acceso y cómo gestionas una brecha de seguridad, incluidos a quién notificas y en cuánto tiempo."
+        },
+        "rights": {
+          "heading": "¿Qué derechos tienen las personas y cómo los ejercen?",
+          "body": "TODO. Explica cómo se solicita el acceso, la rectificación o la supresión de los datos, y cuánto tardas. Esta aplicación implementa los webhooks de cumplimiento obligatorios de Shopify, por lo que las solicitudes hechas a través de una tienda de Shopify nos llegan automáticamente."
+        },
+        "contactUs": {
+          "heading": "¿Cómo puedes contactarnos?",
+          "body": "TODO. Una dirección que alguien lea, y una dirección física donde la jurisdicción lo exija. Indica si tienes un Delegado de Protección de Datos."
+        },
+        "changes": {
+          "heading": "¿Cómo te informaremos de los cambios?",
+          "body": "TODO. Cómo se versiona esta política y cómo se avisa a los comerciantes cuando cambia de forma sustancial."
+        }
+      }
+    },
+    "terms": {
+      "heading": "Términos del servicio",
+      "warning": "Marcador de posición. Sustituye todas las secciones y pide a un abogado que revise la redacción sobre responsabilidad, garantías y ley aplicable.",
+      "intro": "Estos términos rigen el uso de {{appName}}, proporcionada por {{company}}.",
+      "questions": "Dudas:",
+      "sections": {
+        "agreement": {
+          "heading": "El acuerdo",
+          "body": "TODO. Entre quiénes se establece el acuerdo, y que instalar la aplicación implica aceptar estos términos."
+        },
+        "service": {
+          "heading": "Qué hace la aplicación",
+          "body": "TODO. El servicio que realmente prometes, en lenguaje claro."
+        },
+        "fees": {
+          "heading": "Tarifas y facturación",
+          "body": "TODO. Cargos, periodicidad de facturación, condiciones de prueba y qué ocurre al mejorar, reducir o cancelar el plan. Los comerciantes deben poder cambiar de plan sin contactar con soporte."
+        },
+        "acceptableUse": {
+          "heading": "Uso aceptable",
+          "body": "TODO. Qué no puede hacer un comerciante con la aplicación."
+        },
+        "availability": {
+          "heading": "Disponibilidad y soporte",
+          "body": "TODO. Cualquier compromiso de disponibilidad, horario de soporte y tiempos de respuesta."
+        },
+        "liability": {
+          "heading": "Responsabilidad y garantías",
+          "body": "TODO. Que lo redacte un abogado. No improvises esta sección."
+        },
+        "termination": {
+          "heading": "Terminación",
+          "body": "TODO. Cómo cualquiera de las partes finaliza el acuerdo y qué ocurre después con los datos almacenados (esta aplicación borra los datos de la tienda con el webhook shop/redact, que Shopify envía 48 horas después de la desinstalación)."
+        },
+        "law": {
+          "heading": "Ley aplicable",
+          "body": "TODO. Qué jurisdicción se aplica y dónde se resuelven los conflictos."
+        }
+      }
+    }
+  }
+}

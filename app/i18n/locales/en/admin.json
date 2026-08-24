@@ -1,0 +1,30 @@
+{
+  "nav": {
+    "home": "Home"
+  },
+  "home": {
+    "heading": "Shopify + Cloudflare scaffold",
+    "connectedTo": "Connected to {{shop}}",
+    "runtimeBody": "This app runs in the Cloudflare Workers runtime. Sessions live in KV, app state lives in D1 via Drizzle, and both are real bindings in local dev as well as production.",
+    "installRecorded": "Install recorded in D1 at {{date}}.",
+    "installMissing": "No install row in D1 yet — it is written when OAuth completes.",
+    "stack": {
+      "heading": "Stack",
+      "runtime": "Runtime:",
+      "framework": "Framework:",
+      "interface": "Interface:",
+      "database": "Database:",
+      "sessions": "Sessions:"
+    }
+  },
+  "login": {
+    "heading": "Log in",
+    "shopDomain": "Shop domain",
+    "shopDomainHint": "example.myshopify.com",
+    "submit": "Log in"
+  },
+  "errors": {
+    "boundaryHeading": "Something went wrong",
+    "notFound": "Page not found"
+  }
+}

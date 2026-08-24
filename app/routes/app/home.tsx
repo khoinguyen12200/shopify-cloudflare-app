@@ -1,10 +1,15 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { useTranslation } from "react-i18next";
 
 import { createShopify } from "~/shopify.server";
 import { getEnv } from "~/request-context.server";
 import { ShopRepo } from "~/models/shops.server";
+import { useLocale } from "~/i18n/useLocale";
+import { formatDateTime } from "~/i18n/format";
+
+export const handle = { i18n: ["common", "admin"] };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } =
@@ -33,37 +38,38 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export default function Index() {
   const { shopName, installedAt } = useLoaderData<typeof loader>();
+  const { t } = useTranslation("admin");
+  const locale = useLocale();
 
   return (
-    <s-page heading="Shopify + Cloudflare scaffold">
-      <s-section heading={`Connected to ${shopName}`}>
-        <s-paragraph>
-          This app runs in the Cloudflare Workers runtime. Sessions live in KV,
-          app state lives in D1 via Drizzle, and both are real bindings in
-          local dev (Miniflare) as well as production.
-        </s-paragraph>
+    <s-page heading={t("home.heading")}>
+      <s-section heading={t("home.connectedTo", { shop: shopName })}>
+        <s-paragraph>{t("home.runtimeBody")}</s-paragraph>
         <s-paragraph>
           {installedAt
-            ? `Install recorded in D1 at ${new Date(installedAt).toISOString()}.`
-            : "No install row in D1 yet — it is written when OAuth completes."}
+            ? // Formatted for the merchant's locale, never a raw ISO string.
+              t("home.installRecorded", {
+                date: formatDateTime(locale, installedAt),
+              })
+            : t("home.installMissing")}
         </s-paragraph>
       </s-section>
 
-      <s-section slot="aside" heading="Stack">
+      <s-section slot="aside" heading={t("home.stack.heading")}>
         <s-paragraph>
-          <s-text>Runtime: </s-text>
+          <s-text>{t("home.stack.runtime")} </s-text>
           <s-link href="https://developers.cloudflare.com/workers/" target="_blank">
             Cloudflare Workers
           </s-link>
         </s-paragraph>
         <s-paragraph>
-          <s-text>Framework: </s-text>
+          <s-text>{t("home.stack.framework")} </s-text>
           <s-link href="https://reactrouter.com/" target="_blank">
             React Router
           </s-link>
         </s-paragraph>
         <s-paragraph>
-          <s-text>Interface: </s-text>
+          <s-text>{t("home.stack.interface")} </s-text>
           <s-link
             href="https://shopify.dev/docs/api/app-home/using-polaris-components"
             target="_blank"
@@ -72,14 +78,14 @@ export default function Index() {
           </s-link>
         </s-paragraph>
         <s-paragraph>
-          <s-text>Database: </s-text>
+          <s-text>{t("home.stack.database")} </s-text>
           <s-link href="https://developers.cloudflare.com/d1/" target="_blank">
             D1
           </s-link>
           <s-text> + Drizzle</s-text>
         </s-paragraph>
         <s-paragraph>
-          <s-text>Sessions: </s-text>
+          <s-text>{t("home.stack.sessions")} </s-text>
           <s-link href="https://developers.cloudflare.com/kv/" target="_blank">
             Workers KV
           </s-link>

@@ -1,86 +1,84 @@
 import { Link } from "react-router";
-import type { MetaFunction } from "react-router";
-import { APP_NAME } from "~/legal/content";
+import type { LoaderFunctionArgs, MetaFunction } from "react-router";
+import { useTranslation } from "react-i18next";
+import { i18nServer } from "~/i18n/i18n.server";
 
-export const meta: MetaFunction = () => [{ title: `Pricing — ${APP_NAME}` }];
+export const handle = { i18n: ["common", "public"] };
+
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const t = await i18nServer.getFixedT(request, "public");
+  const common = await i18nServer.getFixedT(request, "common");
+  return { title: `${t("pricing.heading")} — ${common("appName")}` };
+};
+
+export const meta: MetaFunction<typeof loader> = ({ data }) => [
+  { title: data?.title ?? "" },
+];
 
 /**
- * Public pricing page.
- *
  * Whatever you show here MUST match what the app actually charges. Shopify's app
  * requirements expect merchants to change plan without contacting support, and a
  * listing price that disagrees with the real charge is a review failure.
- * Consider Shopify Managed Pricing so the plan page is Shopify-hosted and always
- * consistent with billing.
+ *
+ * Prices live in the translation files, not here: currency symbol and decimal
+ * separator differ per locale, and a Spanish merchant should see "1,50 €", not
+ * "$1.50". For real amounts, use formatMoney() from ~/i18n/format so Intl does
+ * it rather than a hand-built string.
  */
-const PLANS = [
-  {
-    name: "TODO: Free / Starter",
-    price: "$0",
-    cadence: "forever",
-    highlight: false,
-    features: ["TODO: what is included", "TODO: the real limit", "TODO: support level"],
-  },
-  {
-    name: "TODO: Growth",
-    price: "$X",
-    cadence: "per month",
-    highlight: true,
-    features: ["TODO: everything in Starter", "TODO: the differentiator", "TODO: support level"],
-  },
-  {
-    name: "TODO: Plus",
-    price: "$Y",
-    cadence: "per month",
-    highlight: false,
-    features: ["TODO: everything in Growth", "TODO: the high-volume limit", "TODO: support level"],
-  },
-];
+const PLAN_KEYS = ["starter", "growth", "plus"] as const;
+const POPULAR: (typeof PLAN_KEYS)[number] = "growth";
 
 export default function Pricing() {
+  const { t } = useTranslation("public");
+
   return (
     <section className="section">
       <div className="container stack--lg">
         <div className="stack center">
-          <h1>Pricing</h1>
-          <p className="lead">TODO: one line on how pricing works.</p>
+          <h1>{t("pricing.heading")}</h1>
+          <p className="lead">{t("pricing.lead")}</p>
         </div>
 
-        <p className="notice notice--warning">
-          <strong>Placeholder.</strong> These plans must match what the app
-          actually charges before you submit for review.
-        </p>
+        <p className="notice notice--warning">{t("pricing.warning")}</p>
 
         <div className="grid">
-          {PLANS.map((plan) => (
-            <article key={plan.name} className="card stack">
-              <div className="row">
-                <h3>{plan.name}</h3>
-                {plan.highlight && <span className="badge">Popular</span>}
-              </div>
-              <p>
-                <strong style={{ fontSize: "1.75rem" }}>{plan.price}</strong>{" "}
-                <span className="muted">{plan.cadence}</span>
-              </p>
-              <ul role="list" className="stack">
-                {plan.features.map((f) => (
-                  <li key={f} className="muted">
-                    {f}
-                  </li>
-                ))}
-              </ul>
-              <Link
-                to="/auth/login"
-                className={`btn ${plan.highlight ? "btn--primary" : "btn--secondary"}`}
-              >
-                Get started
-              </Link>
-            </article>
-          ))}
+          {PLAN_KEYS.map((key) => {
+            const popular = key === POPULAR;
+            return (
+              <article key={key} className="card stack">
+                <div className="row">
+                  <h3>{t(`pricing.plans.${key}.name`)}</h3>
+                  {popular && <span className="badge">{t("pricing.popular")}</span>}
+                </div>
+                <p>
+                  <strong style={{ fontSize: "1.75rem" }}>
+                    {t(`pricing.plans.${key}.price`)}
+                  </strong>{" "}
+                  <span className="muted">
+                    {key === "starter" ? t("pricing.forever") : t("pricing.perMonth")}
+                  </span>
+                </p>
+                <ul role="list" className="stack">
+                  {[0, 1, 2].map((i) => (
+                    <li key={i} className="muted">
+                      {t("pricing.featureTodo")}
+                    </li>
+                  ))}
+                </ul>
+                <Link
+                  to="/auth/login"
+                  className={`btn ${popular ? "btn--primary" : "btn--secondary"}`}
+                >
+                  {t("pricing.getStarted")}
+                </Link>
+              </article>
+            );
+          })}
         </div>
 
         <p className="muted center">
-          Questions about a plan? <Link to="/support">Contact support</Link>.
+          {t("pricing.questions")}{" "}
+          <Link to="/support">{t("pricing.contactSupport")}</Link>.
         </p>
       </div>
     </section>

@@ -49,6 +49,10 @@ export default [
     route("*", "routes/auth/callback.tsx"),
   ]),
 
+  // ── Resource routes ────────────────────────────────────────────────────────
+  // Action-only endpoints with no UI of their own.
+  route("locale", "routes/resources/locale.tsx"),
+
   // ── Webhooks ──────────────────────────────────────────────────────────────
   // URIs must match the subscriptions in BOTH shopify.app.toml files.
   ...prefix("webhooks", [

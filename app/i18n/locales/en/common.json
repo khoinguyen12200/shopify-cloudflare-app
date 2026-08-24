@@ -1,0 +1,35 @@
+{
+  "appName": "TODO: Your App Name",
+  "actions": {
+    "install": "Install",
+    "save": "Save",
+    "cancel": "Cancel",
+    "retry": "Try again",
+    "back": "Back"
+  },
+  "nav": {
+    "pricing": "Pricing",
+    "support": "Support",
+    "privacy": "Privacy",
+    "terms": "Terms",
+    "home": "Home"
+  },
+  "language": {
+    "label": "Language",
+    "change": "Change language"
+  },
+  "state": {
+    "loading": "Loading…",
+    "empty": "Nothing here yet",
+    "error": "Something went wrong"
+  },
+  "footer": {
+    "copyright": "© {{year}} {{appName}}"
+  },
+  "a11y": {
+    "skipToContent": "Skip to content"
+  },
+  "placeholder": {
+    "notice": "Placeholder — replace this before launch."
+  }
+}

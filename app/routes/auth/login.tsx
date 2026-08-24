@@ -2,10 +2,13 @@ import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { useState } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { Form, useActionData, useLoaderData } from "react-router";
+import { useTranslation } from "react-i18next";
 
 import { createShopify } from "~/shopify.server";
 import { getEnv } from "~/request-context.server";
 import { loginErrorMessage } from "./login-error.server";
+
+export const handle = { i18n: ["common", "admin"] };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const env = getEnv();
@@ -26,6 +29,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 export default function Auth() {
   const loaderData = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
+  const { t } = useTranslation("admin");
   const [shop, setShop] = useState("");
   const { errors, apiKey } = actionData || loaderData;
 
@@ -33,17 +37,17 @@ export default function Auth() {
     <AppProvider apiKey={apiKey}>
       <s-page>
         <Form method="post">
-          <s-section heading="Log in">
+          <s-section heading={t("login.heading")}>
             <s-text-field
               name="shop"
-              label="Shop domain"
-              details="example.myshopify.com"
+              label={t("login.shopDomain")}
+              details={t("login.shopDomainHint")}
               value={shop}
               onChange={(e) => setShop(e.currentTarget.value)}
               autocomplete="on"
               error={errors.shop}
             ></s-text-field>
-            <s-button type="submit">Log in</s-button>
+            <s-button type="submit">{t("login.submit")}</s-button>
           </s-section>
         </Form>
       </s-page>

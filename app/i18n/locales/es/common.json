@@ -1,0 +1,35 @@
+{
+  "appName": "TODO: Nombre de tu aplicación",
+  "actions": {
+    "install": "Instalar",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "retry": "Inténtalo de nuevo",
+    "back": "Atrás"
+  },
+  "nav": {
+    "pricing": "Precios",
+    "support": "Soporte",
+    "privacy": "Privacidad",
+    "terms": "Términos",
+    "home": "Inicio"
+  },
+  "language": {
+    "label": "Idioma",
+    "change": "Cambiar idioma"
+  },
+  "state": {
+    "loading": "Cargando…",
+    "empty": "Todavía no hay nada aquí",
+    "error": "Algo ha ido mal"
+  },
+  "footer": {
+    "copyright": "© {{year}} {{appName}}"
+  },
+  "a11y": {
+    "skipToContent": "Saltar al contenido"
+  },
+  "placeholder": {
+    "notice": "Marcador de posición: reemplázalo antes del lanzamiento."
+  }
+}

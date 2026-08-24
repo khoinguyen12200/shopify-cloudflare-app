@@ -1,53 +1,54 @@
 import { Link, redirect } from "react-router";
 import type { LoaderFunctionArgs, MetaFunction } from "react-router";
-import { APP_NAME } from "~/legal/content";
+import { useTranslation } from "react-i18next";
+import { i18nServer } from "~/i18n/i18n.server";
 
-export const meta: MetaFunction = () => [
-  { title: `${APP_NAME} — a Shopify app` },
-  { name: "description", content: `TODO: one-sentence description of ${APP_NAME}.` },
-];
+export const handle = { i18n: ["common", "public"] };
 
-export const loader = ({ request }: LoaderFunctionArgs) => {
+/**
+ * Titles and meta descriptions are rendered on the server before React runs, so
+ * they cannot use the `useTranslation` hook — the loader translates them with
+ * `getFixedT` and passes the result through.
+ */
+export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   // Shopify sends merchants here with ?shop=… when they open the app from the
   // admin. Hand them straight to the embedded app instead of the landing page.
   if (url.searchParams.get("shop")) {
     throw redirect(`/app?${url.searchParams.toString()}`);
   }
-  return null;
+
+  const t = await i18nServer.getFixedT(request, "public");
+  const common = await i18nServer.getFixedT(request, "common");
+  return {
+    title: `${common("appName")} — ${t("landing.heading")}`,
+    description: t("landing.lead"),
+  };
 };
 
-const FEATURES = [
-  {
-    title: "TODO: first capability",
-    body: "TODO: what it does for the merchant, in their words, not yours.",
-  },
-  {
-    title: "TODO: second capability",
-    body: "TODO: the benefit, not the implementation.",
-  },
-  {
-    title: "TODO: third capability",
-    body: "TODO: keep these concrete — reviewers and merchants both skim.",
-  },
+export const meta: MetaFunction<typeof loader> = ({ data }) => [
+  { title: data?.title ?? "" },
+  { name: "description", content: data?.description ?? "" },
 ];
 
+const FEATURE_KEYS = ["one", "two", "three"] as const;
+
 export default function Landing() {
+  const { t } = useTranslation("public");
+
   return (
     <>
       <section className="section">
         <div className="container stack--lg center">
-          <p className="eyebrow">TODO: category</p>
-          <h1>TODO: what your app does, in one line</h1>
-          <p className="lead">
-            TODO: the follow-up sentence — who it is for and why it matters.
-          </p>
+          <p className="eyebrow">{t("landing.eyebrow")}</p>
+          <h1>{t("landing.heading")}</h1>
+          <p className="lead">{t("landing.lead")}</p>
           <div className="row" style={{ justifyContent: "center" }}>
             <Link to="/auth/login" className="btn btn--primary">
-              Install on Shopify
+              {t("landing.installCta")}
             </Link>
             <Link to="/pricing" className="btn btn--secondary">
-              See pricing
+              {t("landing.pricingCta")}
             </Link>
           </div>
         </div>
@@ -55,12 +56,12 @@ export default function Landing() {
 
       <section className="section section--subtle">
         <div className="container stack--lg">
-          <h2 className="center">TODO: section heading</h2>
+          <h2 className="center">{t("landing.featuresHeading")}</h2>
           <div className="grid">
-            {FEATURES.map((f) => (
-              <article key={f.title} className="card stack">
-                <h3>{f.title}</h3>
-                <p className="muted">{f.body}</p>
+            {FEATURE_KEYS.map((key) => (
+              <article key={key} className="card stack">
+                <h3>{t(`landing.features.${key}.title`)}</h3>
+                <p className="muted">{t(`landing.features.${key}.body`)}</p>
               </article>
             ))}
           </div>

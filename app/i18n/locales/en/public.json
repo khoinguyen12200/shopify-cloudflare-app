@@ -1,0 +1,144 @@
+{
+  "landing": {
+    "eyebrow": "TODO: category",
+    "heading": "TODO: what your app does, in one line",
+    "lead": "TODO: the follow-up sentence — who it is for and why it matters.",
+    "installCta": "Install on Shopify",
+    "pricingCta": "See pricing",
+    "featuresHeading": "TODO: section heading",
+    "features": {
+      "one": {
+        "title": "TODO: first capability",
+        "body": "TODO: what it does for the merchant, in their words, not yours."
+      },
+      "two": {
+        "title": "TODO: second capability",
+        "body": "TODO: the benefit, not the implementation."
+      },
+      "three": {
+        "title": "TODO: third capability",
+        "body": "TODO: keep these concrete — merchants skim."
+      }
+    }
+  },
+  "pricing": {
+    "heading": "Pricing",
+    "lead": "TODO: one line on how pricing works.",
+    "warning": "Placeholder. These plans must match what the app actually charges before you submit for review.",
+    "popular": "Popular",
+    "getStarted": "Get started",
+    "questions": "Questions about a plan?",
+    "contactSupport": "Contact support",
+    "perMonth": "per month",
+    "forever": "forever",
+    "plans": {
+      "starter": {
+        "name": "TODO: Starter",
+        "price": "$0"
+      },
+      "growth": {
+        "name": "TODO: Growth",
+        "price": "$X"
+      },
+      "plus": {
+        "name": "TODO: Plus",
+        "price": "$Y"
+      }
+    },
+    "featureTodo": "TODO: what is included"
+  },
+  "support": {
+    "heading": "Support",
+    "subheading": "Help with {{appName}}",
+    "warning": "Placeholder. Replace with real, Shopify-specific help content: setup steps, common problems, and how to reach you.",
+    "gettingStarted": "Getting started",
+    "gettingStartedBody": "TODO: installation and first-run steps.",
+    "faq": "Common questions",
+    "faqBody": "TODO: the questions merchants actually ask.",
+    "contact": "Contact us",
+    "contactBody": "Email {{email}}. TODO: state your support hours and response target."
+  },
+  "legal": {
+    "lastUpdated": "Last updated: {{date}}",
+    "privacy": {
+      "heading": "Privacy policy",
+      "warning": "This is a scaffold, not a policy. Every section below is a placeholder. Replace them before submitting to the App Store — shipping this text as-is is a false statement about how you handle personal data.",
+      "intro": "This policy explains how {{company}} (\"we\") handles personal data in connection with {{appName}}, an application for Shopify stores.",
+      "contact": "Contact",
+      "sections": {
+        "collect": {
+          "heading": "What personal data do we collect?",
+          "body": "TODO. List every category of personal data the app collects, from merchants and from their customers. Be exhaustive and specific — \"usage data\" is not a category. If the app collects none, say so plainly."
+        },
+        "why": {
+          "heading": "Why do we collect it, and what do we do with it?",
+          "body": "TODO. State the purpose for each category above, and the legal basis if you rely on one. Say whether any of it is used to train models, build profiles, or make automated decisions."
+        },
+        "share": {
+          "heading": "Who do we share it with?",
+          "body": "TODO. Name every third party and sub-processor that receives the data (hosting, analytics, email, support tooling, AI providers) and what each one does with it."
+        },
+        "storage": {
+          "heading": "Where is it stored, and for how long?",
+          "body": "TODO. Name the regions data is stored and processed in, and your retention period for each category. Cross-border transfers may need a specific safeguard."
+        },
+        "security": {
+          "heading": "How do we keep it secure?",
+          "body": "TODO. Describe encryption in transit and at rest, access controls, and how you handle a breach — including who you notify and how quickly."
+        },
+        "rights": {
+          "heading": "What rights do individuals have, and how are they exercised?",
+          "body": "TODO. Explain how someone requests access to, correction of, or deletion of their data, and how long you take. This app implements Shopify's mandatory compliance webhooks, so requests made through a Shopify store reach us automatically."
+        },
+        "contactUs": {
+          "heading": "How do you contact us?",
+          "body": "TODO. A monitored address, and a physical address where a jurisdiction requires one. Say whether you have a Data Protection Officer."
+        },
+        "changes": {
+          "heading": "How will we tell you about changes?",
+          "body": "TODO. How this policy is versioned and how merchants are notified when it changes materially."
+        }
+      }
+    },
+    "terms": {
+      "heading": "Terms of service",
+      "warning": "Placeholder. Replace every section, and have a lawyer review the liability, warranty, and governing-law wording.",
+      "intro": "These terms govern use of {{appName}}, provided by {{company}}.",
+      "questions": "Questions:",
+      "sections": {
+        "agreement": {
+          "heading": "The agreement",
+          "body": "TODO. Who the agreement is between, and that installing the app accepts these terms."
+        },
+        "service": {
+          "heading": "What the app does",
+          "body": "TODO. The service you are actually promising, in plain language."
+        },
+        "fees": {
+          "heading": "Fees and billing",
+          "body": "TODO. Charges, billing interval, trial terms, and what happens on upgrade, downgrade, and cancellation. Merchants must be able to change plans without contacting support."
+        },
+        "acceptableUse": {
+          "heading": "Acceptable use",
+          "body": "TODO. What a merchant may not do with the app."
+        },
+        "availability": {
+          "heading": "Availability and support",
+          "body": "TODO. Any uptime commitment, support hours, and response targets."
+        },
+        "liability": {
+          "heading": "Liability and warranties",
+          "body": "TODO. Have a lawyer write this section. Do not improvise it."
+        },
+        "termination": {
+          "heading": "Termination",
+          "body": "TODO. How either side ends the agreement, and what happens to stored data afterwards (this app purges shop data on the shop/redact webhook, which Shopify sends 48 hours after uninstall)."
+        },
+        "law": {
+          "heading": "Governing law",
+          "body": "TODO. Which jurisdiction governs, and where disputes are heard."
+        }
+      }
+    }
+  }
+}
