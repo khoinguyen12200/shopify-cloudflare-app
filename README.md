@@ -1,7 +1,12 @@
 # shopify-cloudflare-app
 
-Scaffold for Shopify apps on Cloudflare Workers. Fork it, run two commands, and
-start building — nothing app-specific is in here.
+Scaffold for Shopify apps on Cloudflare Workers. Start a repo from it, run two
+commands, and start building — nothing app-specific is in here.
+
+This is a **GitHub template repository**, not something you fork. (GitHub will
+not let you fork a repo you already own into your own account, and a template is
+the better fit anyway: the new repo starts with clean history and no upstream
+link.)
 
 ## Stack
 
@@ -18,7 +23,14 @@ start building — nothing app-specific is in here.
 Dev runs in workerd with real D1/KV bindings under Miniflare, so local
 behaviour matches production.
 
-## First run on a fork
+## Starting a new project from it
+
+```bash
+gh repo create my-new-app --template khoinguyen12200/shopify-cloudflare-app --private --clone
+cd my-new-app
+```
+
+Or hit **Use this template → Create a new repository** on GitHub. Then:
 
 ```bash
 npm install
@@ -37,7 +49,11 @@ npm run cf-typegen                  # regenerate Env after editing wrangler.json
 npm run dev
 ```
 
-Then set the production `client_id` into `wrangler.jsonc`
+Nothing above touches production. Local dev runs entirely on Miniflare, which
+simulates each binding by name and ignores the placeholder ids in the top-level
+`wrangler.jsonc`.
+
+When you are ready to deploy, set the production `client_id` into `wrangler.jsonc`
 (`env.production.vars.SHOPIFY_API_KEY`) and `SHOPIFY_APP_URL`, and
 `npx wrangler secret put SHOPIFY_API_SECRET --env production`.
 
@@ -52,6 +68,7 @@ npm run install:skill -- --agent claude-code   # one host only
 `skills-lock.json` is committed and lists every skill package this repo uses.
 The installed skills are **not** committed — they are ~90 MB and fully
 reproducible from that lockfile, which is exactly why this command exists.
+Expect the first run to take several minutes.
 
 Where they land:
 
@@ -69,7 +86,8 @@ it records the source in `skills-lock.json`, and every fork picks it up from
 `shopify app dev` rewrites `application_url` and `redirect_urls` to the current
 tunnel URL every run. Pointed at your production app, that repoints live
 merchants at a tunnel on your laptop. So there are two configs, each linked to
-its own app in the Dev Dashboard:
+its own app in the Dev Dashboard — every project started from this template
+creates its own pair, since `client_id` ships empty:
 
 | File                   | App        | `automatically_update_urls_on_dev` | Used by                       |
 | ---------------------- | ---------- | ---------------------------------- | ----------------------------- |
