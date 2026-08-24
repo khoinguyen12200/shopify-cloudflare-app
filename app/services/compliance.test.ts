@@ -108,7 +108,42 @@ describe("shop/redact", () => {
   });
 });
 
-describe("customers/* — honest about storing no customer data", () => {
+describe("customers/* — placeholders that say so", () => {
+  it("data_request declares itself unimplemented, not that no data exists", async () => {
+    // "no customer data stored; affected: 0" is true for the scaffold and false
+    // the moment anyone adds a customer column — and nothing fails when it goes
+    // stale, so the app keeps telling a merchant that nothing was held. The
+    // outcome carries the placeholder status instead of a bare zero.
+    const outcome = await inRequest(() =>
+      handleCompliance("CUSTOMERS_DATA_REQUEST", {
+        shop: "s.myshopify.com",
+        payload: { customer: { id: 1 } },
+      }),
+    );
+    expect(outcome).toMatchObject({ implemented: false });
+  });
+
+  it("redact declares itself unimplemented", async () => {
+    const outcome = await inRequest(() =>
+      handleCompliance("CUSTOMERS_REDACT", {
+        shop: "s.myshopify.com",
+        payload: { customer: { id: 1 } },
+      }),
+    );
+    expect(outcome).toMatchObject({ implemented: false });
+  });
+
+  it("shop_redact does real work, so it is marked implemented", async () => {
+    const outcome = await inRequest(async () => {
+      await new ShopRepo().recordInstall("real.myshopify.com", 1);
+      return handleCompliance("SHOP_REDACT", {
+        shop: "real.myshopify.com",
+        payload: { shop_domain: "real.myshopify.com" },
+      });
+    });
+    expect(outcome).toMatchObject({ implemented: true, affected: 1 });
+  });
+
   it("data_request reports nothing collected", async () => {
     const outcome = await inRequest(() =>
       handleCompliance("CUSTOMERS_DATA_REQUEST", {

@@ -1,0 +1,39 @@
+# Copy to `.dev.vars` (gitignored) and FILL IN — copying it blank is worse than
+# not having it at all. Read by the Cloudflare Vite plugin / `wrangler dev`.
+#
+# An empty `KEY=` line is a DEFINED empty string, not an absent value, so it
+# shadows whatever `shopify app dev` injects. That is why SHOPIFY_API_SECRET
+# below is commented out rather than left blank.
+#
+# Secret NAMES are declared in wrangler.jsonc (`secrets.required`), so
+# `wrangler types` no longer needs this file to type `Env` — a fresh clone
+# compiles with no `.dev.vars` at all.
+
+# Shopify app client secret — Dev Dashboard → your app → API access.
+# `npm run dev` (via the Shopify CLI) injects this automatically. Uncomment it
+# ONLY for `npm run dev:local` (plain react-router dev, no CLI); leaving it set
+# to an empty string breaks `npm run dev` with "Cannot initialize Shopify API
+# Library. Missing values for: apiSecretKey" — a failure that appears at the
+# first request, nowhere near the cause.
+# SHOPIFY_API_SECRET=
+
+# Optional: custom dev-store domain.
+# SHOP_CUSTOM_DOMAIN=
+
+# Signs the internal console's session cookie (/internal). Any long random
+# string locally; in production use a real one:
+#   wrangler secret put INTERNAL_SESSION_SECRET --env production
+# The app REFUSES to serve /internal without it rather than signing with a
+# constant, which would make the session cookie forgeable.
+INTERNAL_SESSION_SECRET=dev-only-internal-session-secret-change-me
+
+# Transactional email. The `send_email` binding is already declared, but nothing
+# sends until the domain is onboarded and EMAIL_FROM is set (in wrangler.jsonc
+# vars, per environment — it is not a secret):
+#   npx wrangler email sending enable yourdomain.com
+# The binding is `remote: true`, so a send during `npm run dev` goes through the
+# REAL service and needs `wrangler login`. Leave EMAIL_FROM empty and the
+# forgot-password page shows the reset link on screen instead of emailing it.
+
+# NOTE: never set SHOPIFY_APP_URL here — it would shadow the live tunnel URL
+# that `shopify app dev` injects.

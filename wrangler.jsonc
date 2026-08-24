@@ -47,6 +47,27 @@
     }
   ],
 
+  // Secret NAMES, declared rather than inferred. Values never live here.
+  //
+  // Without this, `wrangler types` infers the secret half of `Env` from
+  // `.dev.vars` — which is gitignored, so on a fresh clone or a CI runner these
+  // three vanish from the generated `Env` and the app stops compiling
+  // (`Property 'SHOPIFY_API_SECRET' does not exist on type 'Env'`). Declaring
+  // them "replaces .dev.vars/.env/process.env inference for type generation"
+  // and warns in local dev when one is missing.
+  //
+  // It also removes the trap in the workaround: copying the template with blank
+  // values makes `SHOPIFY_API_SECRET=` a DEFINED empty string, which shadows the
+  // real one `shopify app dev` injects — and the app then fails at the first
+  // request with "Missing values for: apiSecretKey", nowhere near the cause.
+  "secrets": {
+    "required": [
+      "SHOPIFY_API_SECRET",
+      "SHOP_CUSTOM_DOMAIN",
+      "INTERNAL_SESSION_SECRET"
+    ]
+  },
+
   // Non-secret vars. SHOPIFY_API_KEY is the public client_id — `shopify app
   // dev` injects the real one (plus the live tunnel URL) via vite.config.ts,
   // overriding these local fallbacks. Secrets go in .dev.vars locally and
@@ -84,6 +105,16 @@
           "migrations_dir": "drizzle"
         }
       ],
+      // NOT inherited from the top level — the schema is explicit that `secrets`
+      // "must be specified in every named environment". Omit it here and
+      // production types itself from inference again.
+      "secrets": {
+        "required": [
+          "SHOPIFY_API_SECRET",
+          "SHOP_CUSTOM_DOMAIN",
+          "INTERNAL_SESSION_SECRET"
+        ]
+      },
       "vars": {
         // The production client_id, from shopify.app.toml.
         "SHOPIFY_API_KEY": "",

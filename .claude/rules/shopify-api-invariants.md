@@ -29,7 +29,8 @@ without its consequence gets re-argued.
 
 | Finding | Verified how / when | Design consequence |
 |---|---|---|
-| _(nothing recorded yet)_ | | |
+| **Events (`[events]` in `shopify.app.toml`) is a developer preview and exists only on the `unstable` API version.** The docs are explicit: *"Events is available only on the unstable API version… For all production use cases continue to use webhooks."* Inside `[events]`, `api_version` is a required field; needs CLI ≥ 3.92 | shopify.dev docs lookup, 2026-08-24 — [Manage Events subscriptions](https://shopify.dev/docs/apps/build/events/subscribe), [Events reference](https://shopify.dev/docs/api/events/unstable) | **Do not add `[events]` to this repo's tomls.** Subscriptions stay in `[webhooks]`. `api_version` in `[events]` is a separate track from the webhooks `api_version` and would pin to `unstable` — never keep them in step |
+| Subscriptions are array-of-tables entries: `[[events.subscription]]` with `handle` / `topic` / `actions` / `uri`. There is no documented `subscription = []` scalar form | Same lookup, 2026-08-24 | If Events is ever adopted, copy the documented shape; an empty-array placeholder is not it |
 
 Two that hold for every Shopify app, so they are here from the start:
 
@@ -45,7 +46,8 @@ against a real store or reads it in current docs. **Repetition is not
 verification.** Recording a guess here is fine and useful; presenting it as
 settled is not.
 
-- _(nothing recorded yet)_
+- **`shopify app dev` failing with `Validation error … [events]: Required`.** Reported from another project on CLI 4.7.0, and plausible, but **not reproducible here** (this repo's `shopify.app.dev.toml` has `client_id = ""`, so `shopify app config validate` demands linking and interactive auth first). It is almost certainly **not** a CLI-version fact: `[events]` is an opt-in developer preview per the settled rows above, and the same report notes both that error and the contradictory `Unsupported section(s) in app configuration: events` derive from *the linked app's remote specification set*. So it is a property of a particular app's spec set, not of the scaffold.
+  If you hit it: add the section to the toml that failed, using the documented shape and `api_version = "unstable"` (the only value Events accepts), confirm with `shopify app config validate --json`, and record here which app and CLI version it applied to. Do **not** add it pre-emptively — that opts every app built on this scaffold into a preview API the docs say to keep out of production.
 
 ## When you verify something
 

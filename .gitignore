@@ -32,6 +32,10 @@ pnpm-lock.yaml
 # Secrets & local env
 .dev.vars
 .dev.vars.*
+# ...except the template README.md tells you to copy. Without this
+# negation the line above ignores it, so it never reaches the repo and the
+# documented first-run step cannot be performed on a fresh clone.
+!.dev.vars.example
 .env
 .env.*
 

@@ -22,6 +22,19 @@ export interface ComplianceOutcome {
   action: string;
   /** Records actually erased or collected. 0 is a valid, honest answer. */
   affected: number;
+  /**
+   * False while this topic is still a scaffold placeholder that collects and
+   * erases nothing.
+   *
+   * `affected: 0` alone cannot tell "there was genuinely nothing to erase" apart
+   * from "nobody has written this handler yet", and the second one silently
+   * becomes a false answer to a legal request the moment a customer column is
+   * added. This flag keeps the difference visible in the logs, so a stale
+   * placeholder is greppable in Observability instead of indistinguishable from
+   * a real zero. Flip it to `true` in the same change that makes the handler do
+   * the work.
+   */
+  implemented: boolean;
 }
 
 type ComplianceHandler = (ctx: ComplianceContext) => Promise<ComplianceOutcome>;
@@ -36,8 +49,13 @@ type ComplianceHandler = (ctx: ComplianceContext) => Promise<ComplianceOutcome>;
  *
  * The moment you add a column holding customer data — an email, a name, a
  * phone, an address, an order line — you MUST extend these handlers to really
- * collect and erase it. Shopify rejects apps whose compliance webhooks do not
- * do what they claim, and "it returned 200" is not compliance.
+ * collect and erase it, and set `implemented: true` in the same change. Shopify
+ * rejects apps whose compliance webhooks do not do what they claim, and "it
+ * returned 200" is not compliance.
+ *
+ * Until then both handlers report `implemented: false` and log
+ * `….unimplemented`, so a placeholder that has outlived its truth shows up in
+ * the logs rather than quietly answering "nothing held" forever.
  *
  * You have 30 days from receipt to complete the action.
  */
@@ -53,19 +71,20 @@ const customersDataRequest: ComplianceHandler = async ({ shop, payload }) => {
 
   console.log(
     JSON.stringify({
-      event: "compliance.customers_data_request",
+      event: "compliance.customers_data_request.unimplemented",
       shop,
       customerId: customer?.id ?? null,
       ordersRequested: orders.length,
       collected: 0,
-      note: "app stores no customer data",
+      note: "placeholder: this app declares it stores no customer data",
     }),
   );
 
   return {
     topic: "CUSTOMERS_DATA_REQUEST",
-    action: "no customer data stored; nothing to disclose",
+    action: "PLACEHOLDER: declares no customer data stored; nothing collected",
     affected: 0,
+    implemented: false,
   };
 };
 
@@ -76,19 +95,20 @@ const customersRedact: ComplianceHandler = async ({ shop, payload }) => {
 
   console.log(
     JSON.stringify({
-      event: "compliance.customers_redact",
+      event: "compliance.customers_redact.unimplemented",
       shop,
       customerId: customer?.id ?? null,
       ordersToRedact: orders.length,
       erased: 0,
-      note: "app stores no customer data",
+      note: "placeholder: this app declares it stores no customer data",
     }),
   );
 
   return {
     topic: "CUSTOMERS_REDACT",
-    action: "no customer data stored; nothing to erase",
+    action: "PLACEHOLDER: declares no customer data stored; nothing erased",
     affected: 0,
+    implemented: false,
   };
 };
 
@@ -113,6 +133,7 @@ const shopRedact: ComplianceHandler = async ({ shop, payload }) => {
     topic: "SHOP_REDACT",
     action: "purged all shop-scoped rows",
     affected,
+    implemented: true,
   };
 };
 

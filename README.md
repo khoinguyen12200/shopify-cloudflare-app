@@ -39,11 +39,16 @@ Or hit **Use this template → Create a new repository** on GitHub. Then:
 ```bash
 npm install
 npm run install:skill               # AI-agent skills, for every agent host
-cp .dev.vars.example .dev.vars      # fill in SHOPIFY_API_SECRET
+cp .dev.vars.example .dev.vars      # then READ it — an empty KEY= line is worse
+                                    # than an absent one; it shadows what
+                                    # `shopify app dev` injects
 
-# Create your own Shopify apps — one for dev, one for prod (see below)
-npm run config:link:dev
-npm run config:link:prod
+# Create your own Shopify apps — one for dev, one for prod (see below).
+# `config link` OVERWRITES the local toml with the remote app's configuration —
+# it is not a read-only "fill in the client_id" step. It will discard comments,
+# the [build] block, webhook subscriptions, scopes and redirect URLs. Diff it:
+npm run config:link:dev && git diff shopify.app.dev.toml
+npm run config:link:prod && git diff shopify.app.toml
 
 # Create the Cloudflare resources and paste the ids into wrangler.jsonc
 npx wrangler d1 create app-db-prod
@@ -60,6 +65,20 @@ simulates each binding by name and ignores the placeholder ids in the top-level
 When you are ready to deploy, set the production `client_id` into `wrangler.jsonc`
 (`env.production.vars.SHOPIFY_API_KEY`) and `SHOPIFY_APP_URL`, and
 `npx wrangler secret put SHOPIFY_API_SECRET --env production`.
+
+Secret **names** are declared in `wrangler.jsonc` under `secrets.required`, so
+`npm run cf-typegen` types `Env` correctly with no `.dev.vars` present — a fresh
+clone and a CI runner both compile. Add a name there when you add a secret;
+values never go in that file.
+
+### Before you subscribe to an order or customer topic
+
+`orders/*` and `customers/*` payloads carry protected customer data (name,
+email, address), and Shopify gates them: without an approved request,
+`shopify app dev` will not start. Approval is a Dev Dashboard step — Apps → your
+app → API access requests — and it needs a distribution method selected first.
+It blocks local development, not just launch, so do it before you write the
+handler.
 
 ## AI-agent skills
 
