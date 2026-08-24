@@ -1,0 +1,119 @@
+{
+  "brand": "Consola interna",
+  "nav": {
+    "overview": "Resumen",
+    "dashboard": "Panel",
+    "team": "Equipo",
+    "admins": "Administradores",
+    "account": "Cuenta",
+    "profile": "Perfil",
+    "signOut": "Cerrar sesión"
+  },
+  "theme": {
+    "toggle": "Cambiar tema"
+  },
+  "login": {
+    "heading": "Iniciar sesión",
+    "subheading": "Consola interna",
+    "email": "Correo electrónico",
+    "password": "Contraseña",
+    "submit": "Iniciar sesión",
+    "submitting": "Iniciando sesión…",
+    "invalidCredentials": "Ese correo y contraseña no coinciden con ninguna cuenta.",
+    "disabled": "Esta cuenta ha sido desactivada.",
+    "missingFields": "El correo y la contraseña son obligatorios.",
+    "devHint": "Datos de desarrollo: admin@localhost / admin123"
+  },
+  "dashboard": {
+    "heading": "Panel",
+    "welcome": "Sesión iniciada como {{name}}",
+    "stats": {
+      "admins": "Cuentas de administrador",
+      "shops": "Tiendas instaladas",
+      "activeShops": "Instalaciones activas"
+    },
+    "empty": "Todavía no hay nada que mostrar. Esta página es un punto de partida: añade los paneles que necesite tu aplicación."
+  },
+  "admins": {
+    "heading": "Administradores",
+    "subheading": "Quién puede acceder a esta consola",
+    "table": {
+      "name": "Nombre",
+      "email": "Correo electrónico",
+      "role": "Rol",
+      "status": "Estado",
+      "lastLogin": "Último acceso",
+      "created": "Añadido",
+      "actions": "Acciones",
+      "never": "Nunca"
+    },
+    "role": {
+      "owner": "Propietario",
+      "admin": "Administrador"
+    },
+    "status": {
+      "active": "Activo",
+      "disabled": "Desactivado"
+    },
+    "add": {
+      "heading": "Añadir un administrador",
+      "name": "Nombre",
+      "email": "Correo electrónico",
+      "password": "Contraseña temporal",
+      "role": "Rol",
+      "submit": "Añadir administrador",
+      "hint": "Al menos {{min}} caracteres. Pídele que la cambie después de iniciar sesión."
+    },
+    "actions": {
+      "disable": "Desactivar",
+      "enable": "Activar",
+      "remove": "Eliminar",
+      "makeOwner": "Hacer propietario",
+      "makeAdmin": "Hacer administrador",
+      "confirmRemove": "¿Eliminar a este administrador? Esta acción no se puede deshacer."
+    },
+    "you": "Tú",
+    "errors": {
+      "emailTaken": "Ya existe una cuenta con ese correo electrónico.",
+      "nameRequired": "El nombre es obligatorio.",
+      "emailInvalid": "Introduce una dirección de correo válida.",
+      "tooShort": "La contraseña debe tener al menos {{min}} caracteres.",
+      "notFound": "Esa cuenta ya no existe.",
+      "lastOwner": "Es el último propietario activo. Asciende a otra persona primero.",
+      "notYourself": "No puedes hacer eso con tu propia cuenta.",
+      "forbidden": "Solo un propietario puede gestionar administradores."
+    },
+    "success": {
+      "created": "{{name}} ya puede iniciar sesión.",
+      "disabled": "{{name}} ya no puede iniciar sesión.",
+      "enabled": "{{name}} puede iniciar sesión de nuevo.",
+      "removed": "Se ha eliminado a {{name}}.",
+      "roleChanged": "{{name}} ahora es {{role}}."
+    }
+  },
+  "profile": {
+    "heading": "Perfil",
+    "details": "Tus datos",
+    "name": "Nombre",
+    "email": "Correo electrónico",
+    "emailHint": "Pide a un propietario que cambie tu dirección de correo.",
+    "saveDetails": "Guardar",
+    "changePassword": "Cambiar la contraseña",
+    "currentPassword": "Contraseña actual",
+    "newPassword": "Contraseña nueva",
+    "confirmPassword": "Confirma la contraseña nueva",
+    "savePassword": "Cambiar la contraseña",
+    "errors": {
+      "wrongPassword": "Tu contraseña actual no es correcta.",
+      "mismatch": "Las contraseñas nuevas no coinciden.",
+      "tooShort": "La contraseña debe tener al menos {{min}} caracteres.",
+      "sameAsOld": "La contraseña nueva debe ser distinta de la actual.",
+      "nameRequired": "El nombre es obligatorio.",
+      "notFound": "Esa cuenta ya no existe."
+    },
+    "success": {
+      "detailsSaved": "Se han guardado tus datos.",
+      "passwordChanged": "Se ha cambiado tu contraseña."
+    }
+  }
+}

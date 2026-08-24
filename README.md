@@ -17,6 +17,7 @@ link.)
 | Shopify    | `@shopify/shopify-app-react-router` v2, Admin API 2026-10  |
 | Admin UI   | Polaris **web components** + App Bridge (embedded only)    |
 | Public UI  | SCSS design tokens (`app/styles/public/`), dark mode + a11y |
+| Staff console | `/internal` — ngk-dashboard + Tailwind v4, PBKDF2 auth      |
 | i18n       | i18next + `remix-i18next`, `en` + `es`, `Intl` formatting  |
 | State      | D1 + Drizzle (`app/db/`, queried only in `app/models/`)   |
 | Sessions   | Workers KV (`app/session-storage.server.ts`)              |
@@ -179,6 +180,71 @@ app/routes/
 
 `_layout.tsx` is the shell for its folder and the only place that surface's
 stylesheet or shared auth check belongs.
+
+## Internal staff console — `/internal`
+
+Every app needs one, so it is scaffolded. Not merchant-facing: this is your
+team's console for operating the app.
+
+```
+/internal/login       sign in (outside the layout, so it cannot redirect to itself)
+/internal/dashboard   counts + a starting point for your own panels
+/internal/admins      list, add, enable/disable, promote/demote, remove  (owner only)
+/internal/profile     change your own name and password
+/internal/logout
+```
+
+`admin_users` is **the one table that is not shop-scoped** — internal staff are
+your team, not a merchant's records. Everything else stays shop-scoped.
+
+### Signing in locally
+
+`npm run dev` applies migrations and seeds a local admin automatically:
+
+| | |
+| --- | --- |
+| URL | `http://localhost:3000/internal/login` |
+| Email | `admin@localhost` |
+| Password | `admin123` |
+
+**That seed is a development fixture and cannot reach a real database.** It only
+ever runs `wrangler d1 execute --local`, refuses any argument that looks like a
+remote or production target, and refuses when `CI` or `NODE_ENV=production` is
+set. `admin123` is deliberately below the 12-character minimum the console
+enforces on passwords a human types.
+
+For a real account:
+
+```bash
+npm run admin:create -- --email you@example.com --name "Your Name"
+npm run admin:create -- --email you@example.com --name "You" --remote   # production
+```
+
+It prompts for the password (never pass it as an argument — arguments land in
+shell history and `ps` output) and enforces the same policy as the UI.
+
+### Auth
+
+Passwords use **PBKDF2-HMAC-SHA256 at 600,000 iterations** over WebCrypto, which
+workerd implements natively. `bcryptjs` — the usual choice — is pure JavaScript,
+so every round burns the isolate's CPU budget as interpreted code. Measured here:
+two full derivations at production parameters complete in well under a second.
+
+The iteration count is stored **inside** the hash
+(`pbkdf2$sha256$600000$<salt>$<hash>`), so it can be raised later without
+invalidating existing passwords; `needsRehash()` upgrades a row on its next
+successful login, the only moment the plaintext exists.
+
+Guards that keep the console from locking you out, all tested:
+
+- The **last active owner** cannot be disabled, demoted, or deleted — and a
+  *disabled* owner does not count as a remaining one.
+- You cannot disable, demote, or delete **yourself**.
+- Disabling revokes access immediately, not at cookie expiry.
+- An unknown email still runs a full hash derivation, so "no such user" is not
+  measurably faster than "wrong password" (user-enumeration oracle).
+- `INTERNAL_SESSION_SECRET` is **required** — the console refuses to serve rather
+  than signing cookies with a constant.
 
 ## Translations
 

@@ -10,16 +10,30 @@ alwaysApply: true
 
 # Styling the public pages
 
-## Two surfaces, two systems — never mix them
+## Three surfaces, three systems — never mix them
 
 | Surface | Styled with | Loaded by |
 |---|---|---|
 | **Public** — landing, pricing, legal, support, errors | **SCSS** in `app/styles/public/` | `app/routes/public/_layout.tsx` `links()` |
 | **Embedded Shopify admin** (`/app/**`) | **Polaris web components** + App Bridge | `AppProvider` |
+| **Internal staff console** (`/internal/**`) | **Tailwind v4 + ngk-dashboard** | `app/routes/internal/_layout.tsx` and `login.tsx` `links()` |
 
 `@rules/shopify-and-ui.md` bans hand-rolled CSS in the *merchant admin*, and that
-still holds: never style the embedded app yourself. This file governs the public
-site, which is not embedded, has no Polaris, and needs its own base.
+still holds: never style the embedded app yourself. This file governs the other
+two, which are not embedded and have no Polaris.
+
+Why three and not one: the merchant admin must look like Shopify, the public
+pages must be fast and brandable with no framework, and the staff console wants a
+component library so internal tooling is cheap to build. Mixing them would ship a
+CSS reset into the Polaris iframe.
+
+**Tailwind is confined to `/internal`.** It only affects CSS that
+`@import "tailwindcss"`, which is only
+`app/styles/internal/internal.tailwind.css`. Never add that import anywhere else,
+and never use a Tailwind utility class in a public or admin route. The internal
+stylesheet also uses `source(none)` with explicit `@source` globs — without them
+Tailwind resolves its scan base inconsistently for a `?url` import and silently
+generates no utilities.
 
 **A stylesheet is loaded by exactly one layout's `links()`, never by `root.tsx`.**
 That is what keeps the public reset out of the admin iframe. A global import

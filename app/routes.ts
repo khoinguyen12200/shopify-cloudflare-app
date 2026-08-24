@@ -49,6 +49,20 @@ export default [
     route("*", "routes/auth/callback.tsx"),
   ]),
 
+  // ── Internal staff console ────────────────────────────────────────────────
+  // Not merchant-facing: this is the team's console for operating the app.
+  // Login and logout sit OUTSIDE the layout — the layout's loader requires a
+  // signed-in user, so a login page inside it would redirect to itself.
+  route("internal/login", "routes/internal/login.tsx"),
+  route("internal/logout", "routes/internal/logout.tsx"),
+  layout("routes/internal/_layout.tsx", [
+    // /internal redirects to the dashboard.
+    route("internal", "routes/internal/index.tsx"),
+    route("internal/dashboard", "routes/internal/dashboard.tsx"),
+    route("internal/admins", "routes/internal/admins.tsx"),
+    route("internal/profile", "routes/internal/profile.tsx"),
+  ]),
+
   // ── Resource routes ────────────────────────────────────────────────────────
   // Action-only endpoints with no UI of their own.
   route("locale", "routes/resources/locale.tsx"),

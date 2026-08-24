@@ -1,5 +1,6 @@
 import { reactRouter } from "@react-router/dev/vite";
 import { cloudflare } from "@cloudflare/vite-plugin";
+import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 
 // `shopify app dev` passes the live tunnel URL as SHOPIFY_APP_URL (older CLIs:
@@ -59,6 +60,10 @@ export default defineConfig(({ command }) => ({
         ? { config: () => ({ vars: shopifyDevVars() }) }
         : {}),
     }),
+    // Tailwind only affects CSS that `@import "tailwindcss"` — which is only
+    // app/styles/internal/internal.tailwind.css, loaded by the /internal routes.
+    // The public SCSS and the Polaris admin are untouched.
+    tailwindcss(),
     reactRouter(),
   ],
   build: {

@@ -16,11 +16,12 @@ export const DEFAULT_LOCALE: Locale = "en";
 /**
  * Namespaces split by surface, so the embedded admin bundle does not ship
  * marketing and legal copy (and vice versa).
- *   common — used by both surfaces
- *   public — landing, pricing, legal, support
- *   admin  — the embedded Shopify admin
+ *   common   — used everywhere
+ *   public   — landing, pricing, legal, support
+ *   admin    — the embedded Shopify admin (merchant-facing)
+ *   internal — the staff console at /internal
  */
-export const NAMESPACES = ["common", "public", "admin"] as const;
+export const NAMESPACES = ["common", "public", "admin", "internal"] as const;
 
 export type Namespace = (typeof NAMESPACES)[number];
 

@@ -35,6 +35,18 @@ export default tseslint.config(
       globals: { ...globals.browser, ...globals.serviceworker },
     },
     rules: {
+      // `const { passwordHash: _x, ...safe } = user` is how a field is
+      // deliberately DISCARDED. Allow the underscore convention so stripping a
+      // secret from an object does not need an eslint-disable.
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+          ignoreRestSiblings: true,
+        },
+      ],
       // The Workers runtime has no `process`; app code must read config from
       // the `env` binding via getEnv(). Config files (below) are exempt —
       // they run in Node under Vite/the CLI.

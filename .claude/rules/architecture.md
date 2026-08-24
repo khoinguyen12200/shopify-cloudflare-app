@@ -64,8 +64,9 @@ The rules:
 
 - **One folder per surface**, and every route lives under one:
   `public/` (unauthenticated marketing, legal, support) · `app/` (embedded
-  Shopify admin) · `auth/` (OAuth) · `webhooks/`. A route that fits none of them
-  is a new surface — add a group in `routes.ts` and a folder for it.
+  Shopify admin) · `internal/` (staff console) · `auth/` (OAuth) · `webhooks/` ·
+  `resources/` (action-only endpoints). A route that fits none of them is a new
+  surface — add a group in `routes.ts` and a folder for it.
 - **Nest to match the URL.** A path segment is a directory. `/webhooks/app/
   uninstalled` is `webhooks/app/uninstalled.tsx`.
 - **`_layout.tsx` is the shell for its folder**, and the only thing that may
@@ -86,6 +87,10 @@ and tooling · tests sit beside their subject as `*.test.ts`, shared helpers in
 
 Most of these directories do not exist yet — this table is where a file goes
 when you create it, not a structure to scaffold up front.
+
+**`admin_users` is the one table that is not shop-scoped**, because internal
+staff are your team rather than a merchant's records. Every other table stays
+shop-scoped per `@rules/data.md`; do not treat this as a precedent.
 
 There is no `app/utils/`. "Utils" is a junk drawer — pure helpers go to
 `app/lib/<topic>.ts`, named for the topic.

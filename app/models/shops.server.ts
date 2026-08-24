@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, isNull, sql } from "drizzle-orm";
 import { getDb } from "~/request-context.server";
 import { shops, type Shop } from "~/db/schema";
 
@@ -33,6 +33,15 @@ export class ShopRepo {
       .update(shops)
       .set({ uninstalledAt: now })
       .where(eq(shops.shop, shop));
+  }
+
+  /** Shops with the app still installed — for the internal dashboard. */
+  async countInstalled(): Promise<number> {
+    const [row] = await getDb()
+      .select({ count: sql<number>`count(*)` })
+      .from(shops)
+      .where(isNull(shops.uninstalledAt));
+    return Number(row?.count ?? 0);
   }
 
   /**

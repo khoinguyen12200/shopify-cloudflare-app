@@ -10,9 +10,9 @@
     "verify": "npm run typecheck && npm run lint && npm test",
     "precommit": "npm run verify",
     "dev": "node scripts/shopify.mjs app dev --config dev",
-    "predev": "wrangler d1 migrations apply app-db --local",
+    "predev": "wrangler d1 migrations apply app-db --local && npm run db:seed",
     "dev:local": "react-router dev",
-    "predev:local": "wrangler d1 migrations apply app-db --local",
+    "predev:local": "wrangler d1 migrations apply app-db --local && npm run db:seed",
     "build": "react-router build",
     "preview": "npm run build && vite preview",
     "typecheck": "react-router typegen && tsc --noEmit",
@@ -36,7 +36,9 @@
     "env": "node scripts/shopify.mjs app env",
     "shopify:logout": "node scripts/shopify.mjs auth logout",
     "graphql-codegen": "graphql-codegen",
-    "install:skill": "node scripts/install-skills.mjs"
+    "install:skill": "node scripts/install-skills.mjs",
+    "db:seed": "node scripts/seed-admin.mjs",
+    "admin:create": "node scripts/create-admin.mjs"
   },
   "dependencies": {
     "@react-router/dev": "^7.18.2",

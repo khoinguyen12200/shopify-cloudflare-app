@@ -1,0 +1,119 @@
+{
+  "brand": "Internal console",
+  "nav": {
+    "overview": "Overview",
+    "dashboard": "Dashboard",
+    "team": "Team",
+    "admins": "Admins",
+    "account": "Account",
+    "profile": "Profile",
+    "signOut": "Sign out"
+  },
+  "theme": {
+    "toggle": "Toggle theme"
+  },
+  "login": {
+    "heading": "Sign in",
+    "subheading": "Internal console",
+    "email": "Email",
+    "password": "Password",
+    "submit": "Sign in",
+    "submitting": "Signing in…",
+    "invalidCredentials": "That email and password do not match an account.",
+    "disabled": "This account has been disabled.",
+    "missingFields": "Email and password are both required.",
+    "devHint": "Development seed: admin@localhost / admin123"
+  },
+  "dashboard": {
+    "heading": "Dashboard",
+    "welcome": "Signed in as {{name}}",
+    "stats": {
+      "admins": "Admin accounts",
+      "shops": "Installed shops",
+      "activeShops": "Active installs"
+    },
+    "empty": "Nothing to show yet. This page is a starting point — add the panels your app needs."
+  },
+  "admins": {
+    "heading": "Admins",
+    "subheading": "Who can sign in to this console",
+    "table": {
+      "name": "Name",
+      "email": "Email",
+      "role": "Role",
+      "status": "Status",
+      "lastLogin": "Last sign-in",
+      "created": "Added",
+      "actions": "Actions",
+      "never": "Never"
+    },
+    "role": {
+      "owner": "Owner",
+      "admin": "Admin"
+    },
+    "status": {
+      "active": "Active",
+      "disabled": "Disabled"
+    },
+    "add": {
+      "heading": "Add an admin",
+      "name": "Name",
+      "email": "Email",
+      "password": "Temporary password",
+      "role": "Role",
+      "submit": "Add admin",
+      "hint": "At least {{min}} characters. Ask them to change it after signing in."
+    },
+    "actions": {
+      "disable": "Disable",
+      "enable": "Enable",
+      "remove": "Remove",
+      "makeOwner": "Make owner",
+      "makeAdmin": "Make admin",
+      "confirmRemove": "Remove this admin? This cannot be undone."
+    },
+    "you": "You",
+    "errors": {
+      "emailTaken": "An account with that email already exists.",
+      "nameRequired": "A name is required.",
+      "emailInvalid": "Enter a valid email address.",
+      "tooShort": "The password must be at least {{min}} characters.",
+      "notFound": "That account no longer exists.",
+      "lastOwner": "This is the last active owner. Promote someone else first.",
+      "notYourself": "You cannot do that to your own account.",
+      "forbidden": "Only an owner can manage admins."
+    },
+    "success": {
+      "created": "{{name}} can now sign in.",
+      "disabled": "{{name}} can no longer sign in.",
+      "enabled": "{{name}} can sign in again.",
+      "removed": "{{name}} was removed.",
+      "roleChanged": "{{name}} is now {{role}}."
+    }
+  },
+  "profile": {
+    "heading": "Profile",
+    "details": "Your details",
+    "name": "Name",
+    "email": "Email",
+    "emailHint": "Ask an owner to change your email address.",
+    "saveDetails": "Save",
+    "changePassword": "Change password",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm new password",
+    "savePassword": "Change password",
+    "errors": {
+      "wrongPassword": "Your current password is not correct.",
+      "mismatch": "The new passwords do not match.",
+      "tooShort": "The password must be at least {{min}} characters.",
+      "sameAsOld": "The new password must be different from the current one.",
+      "nameRequired": "A name is required.",
+      "notFound": "That account no longer exists."
+    },
+    "success": {
+      "detailsSaved": "Your details were saved.",
+      "passwordChanged": "Your password was changed."
+    }
+  }
+}
