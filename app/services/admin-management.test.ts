@@ -6,6 +6,7 @@ import { AdminUserRepo } from "~/models/admin-users.server";
 import {
   createAdmin,
   removeAdmin,
+  resetAdminPassword,
   setAdminRole,
   setAdminStatus,
   changeOwnPassword,
@@ -292,5 +293,138 @@ describe("updateOwnProfile", () => {
       return updateOwnProfile({ userId: owner.id, name: "   " });
     });
     expect(result).toMatchObject({ ok: false, reason: "nameRequired" });
+  });
+});
+
+describe("resetAdminPassword — an owner helping someone who is locked out", () => {
+  it("replaces the target's password", async () => {
+    const outcome = await inRequest(async () => {
+      const owner = await seedOwner("owner@example.com");
+      const created = await createAdmin({
+        name: "Forgetful",
+        email: "forgetful@example.com",
+        password: GOOD_PASSWORD,
+        role: "admin",
+      });
+      if (!created.ok) throw new Error("fixture");
+
+      const result = await resetAdminPassword({
+        actorId: owner.id,
+        targetId: created.value.id,
+        newPassword: "a-fresh-temporary-pass",
+      });
+      const after = await new AdminUserRepo().findByIdWithHash(created.value.id);
+      return { result, hash: after!.passwordHash };
+    });
+
+    expect(outcome.result.ok).toBe(true);
+    expect(await verifyPassword("a-fresh-temporary-pass", outcome.hash)).toBe(true);
+    // The old password must stop working immediately.
+    expect(await verifyPassword(GOOD_PASSWORD, outcome.hash)).toBe(false);
+  });
+
+  it("does not require knowing the target's old password", async () => {
+    // That is the whole point: the owner cannot know it.
+    const result = await inRequest(async () => {
+      const owner = await seedOwner("owner@example.com");
+      const created = await createAdmin({
+        name: "Locked out",
+        email: "locked@example.com",
+        password: GOOD_PASSWORD,
+        role: "admin",
+      });
+      if (!created.ok) throw new Error("fixture");
+      return resetAdminPassword({
+        actorId: owner.id,
+        targetId: created.value.id,
+        newPassword: "another-long-password",
+      });
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("refuses to target YOUR OWN account", async () => {
+    // Otherwise a borrowed session becomes a permanent takeover with no
+    // knowledge of the old password. Use changeOwnPassword instead.
+    const result = await inRequest(async () => {
+      const owner = await seedOwner();
+      return resetAdminPassword({
+        actorId: owner.id,
+        targetId: owner.id,
+        newPassword: "a-long-enough-new-one",
+      });
+    });
+    expect(result).toMatchObject({ ok: false, reason: "notYourself" });
+  });
+
+  it("enforces the same length policy as the UI", async () => {
+    const result = await inRequest(async () => {
+      const owner = await seedOwner("owner@example.com");
+      const created = await createAdmin({
+        name: "Target",
+        email: "target@example.com",
+        password: GOOD_PASSWORD,
+        role: "admin",
+      });
+      if (!created.ok) throw new Error("fixture");
+      return resetAdminPassword({
+        actorId: owner.id,
+        targetId: created.value.id,
+        newPassword: "short",
+      });
+    });
+    expect(result).toMatchObject({ ok: false, reason: "tooShort" });
+  });
+
+  it("leaves the password untouched when the policy rejects it", async () => {
+    const hash = await inRequest(async () => {
+      const owner = await seedOwner("owner@example.com");
+      const created = await createAdmin({
+        name: "Target",
+        email: "target@example.com",
+        password: GOOD_PASSWORD,
+        role: "admin",
+      });
+      if (!created.ok) throw new Error("fixture");
+      await resetAdminPassword({
+        actorId: owner.id,
+        targetId: created.value.id,
+        newPassword: "short",
+      });
+      const after = await new AdminUserRepo().findByIdWithHash(created.value.id);
+      return after!.passwordHash;
+    });
+    expect(await verifyPassword(GOOD_PASSWORD, hash)).toBe(true);
+  });
+
+  it("reports notFound for an unknown target", async () => {
+    const result = await inRequest(() =>
+      resetAdminPassword({
+        actorId: "actor",
+        targetId: "no-such-id",
+        newPassword: "a-long-enough-password-x",
+      }),
+    );
+    expect(result).toMatchObject({ ok: false, reason: "notFound" });
+  });
+
+  it("does not change the target's role or status", async () => {
+    const after = await inRequest(async () => {
+      const owner = await seedOwner("owner@example.com");
+      const created = await createAdmin({
+        name: "Target",
+        email: "target@example.com",
+        password: GOOD_PASSWORD,
+        role: "admin",
+      });
+      if (!created.ok) throw new Error("fixture");
+      await resetAdminPassword({
+        actorId: owner.id,
+        targetId: created.value.id,
+        newPassword: "a-fresh-temporary-pass",
+      });
+      return new AdminUserRepo().findById(created.value.id);
+    });
+    expect(after).toMatchObject({ role: "admin", status: "active" });
   });
 });

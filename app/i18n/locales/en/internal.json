@@ -87,12 +87,21 @@
       "disabled": "{{name}} can no longer sign in.",
       "enabled": "{{name}} can sign in again.",
       "removed": "{{name}} was removed.",
-      "roleChanged": "{{name}} is now {{role}}."
+      "roleChanged": "{{name}} is now {{role}}.",
+      "passwordReset": "Password reset for {{name}}. Give them the new password directly."
     },
     "remove": {
       "title": "Remove {{name}}?",
       "desc": "They will lose access to the console immediately. This cannot be undone.",
       "confirm": "Remove",
+      "cancel": "Cancel"
+    },
+    "reset": {
+      "action": "Reset password",
+      "title": "Reset the password for {{name}}?",
+      "desc": "Set a new password and give it to them directly. Their current password stops working immediately.",
+      "newPassword": "New password",
+      "confirm": "Reset password",
       "cancel": "Cancel"
     }
   },

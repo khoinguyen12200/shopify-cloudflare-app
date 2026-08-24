@@ -87,12 +87,21 @@
       "disabled": "{{name}} ya no puede iniciar sesión.",
       "enabled": "{{name}} puede iniciar sesión de nuevo.",
       "removed": "Se ha eliminado a {{name}}.",
-      "roleChanged": "{{name}} ahora es {{role}}."
+      "roleChanged": "{{name}} ahora es {{role}}.",
+      "passwordReset": "Contraseña restablecida para {{name}}. Entrégale la contraseña nueva directamente."
     },
     "remove": {
       "title": "¿Eliminar a {{name}}?",
       "desc": "Perderá el acceso a la consola de inmediato. Esta acción no se puede deshacer.",
       "confirm": "Eliminar",
+      "cancel": "Cancelar"
+    },
+    "reset": {
+      "action": "Restablecer la contraseña",
+      "title": "¿Restablecer la contraseña de {{name}}?",
+      "desc": "Establece una contraseña nueva y entrégasela directamente. Su contraseña actual deja de funcionar de inmediato.",
+      "newPassword": "Contraseña nueva",
+      "confirm": "Restablecer la contraseña",
       "cancel": "Cancelar"
     }
   },

@@ -10,7 +10,7 @@ import { createInstance } from "i18next";
 import { I18nextProvider, initReactI18next } from "react-i18next";
 import { i18nOptions } from "~/i18n/options";
 import type { Locale } from "~/i18n/config";
-import Admins from "./admins";
+import Admins from "./index";
 import type { SafeAdminUser } from "~/db/schema";
 
 /**
@@ -121,6 +121,27 @@ describe("the removal confirmation", () => {
       expect(html, locale).not.toMatch(/\badmins\.[a-zA-Z]+\.[a-zA-Z.]+/);
       expect(html, locale).not.toContain("{{");
     }
+  });
+
+  it("links to the reset page rather than embedding the field", async () => {
+    // The field lives on its own route so it exists without JavaScript; a
+    // dialog's contents only render once opened.
+    const html = await render("en", [ACTOR, admin()]);
+    expect(html).toContain("/internal/admins/other-id/reset");
+    expect(html).toContain("Reset password");
+    expect(html).not.toContain('name="newPassword"');
+  });
+
+  it("offers no reset on your own row — /internal/profile is that path", async () => {
+    const html = await render("en", [ACTOR]);
+    expect(html).not.toContain("Reset password");
+    expect(html).not.toContain("/reset");
+  });
+
+  it("translates the reset control", async () => {
+    const html = await render("es", [ACTOR, admin()]);
+    expect(html).toContain("Restablecer la contraseña");
+    expect(html).not.toContain("Reset password");
   });
 
   it("shows 'Never' rather than a blank cell for an account that never signed in", async () => {

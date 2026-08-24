@@ -156,6 +156,45 @@ export async function removeAdmin(input: {
   return ok(target);
 }
 
+/**
+ * An owner resets someone ELSE's password.
+ *
+ * This is the recovery path that always ends up being needed: without it, an
+ * admin who forgets their password cannot be helped except by writing to the
+ * database by hand.
+ *
+ * Deliberately NOT allowed on your own account — use `changeOwnPassword`, which
+ * requires the current password. Letting this path target yourself would turn a
+ * borrowed session into a permanent takeover with no knowledge of the old
+ * password.
+ *
+ * There is no email delivery here: the new password is returned once so the
+ * owner can hand it over out of band, and it is never stored in plaintext or
+ * logged. Wire a "must change on next sign-in" flag if you want to force
+ * rotation.
+ */
+export async function resetAdminPassword(input: {
+  actorId: string;
+  targetId: string;
+  newPassword: string;
+}): Promise<Result<{ user: SafeAdminUser }>> {
+  if (input.actorId === input.targetId) return fail("notYourself");
+
+  const weak = validatePasswordStrength(input.newPassword);
+  if (weak) return fail("tooShort");
+
+  const repo = new AdminUserRepo();
+  const target = await repo.findById(input.targetId);
+  if (!target) return fail("notFound");
+
+  await repo.updatePassword(
+    target.id,
+    await hashPassword(input.newPassword),
+    Date.now(),
+  );
+  return ok({ user: target });
+}
+
 export async function updateOwnProfile(input: {
   userId: string;
   name: string;

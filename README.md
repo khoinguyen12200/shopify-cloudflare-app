@@ -190,6 +190,7 @@ team's console for operating the app.
 /internal/login       sign in (outside the layout, so it cannot redirect to itself)
 /internal/dashboard   counts + a starting point for your own panels
 /internal/admins      list, add, enable/disable, promote/demote, remove  (owner only)
+/internal/admins/:id/reset   an owner resets someone else's password  (owner only)
 /internal/profile     change your own name and password
 /internal/logout
 ```
@@ -251,6 +252,19 @@ button submits a real hidden `<Form>` by id. So the destructive path is still a
 plain POST to the route action with the same server guards — no fetch, no
 client-side mutation path, and the copy is translated (a native `confirm()`
 cannot be styled or localised, and does not exist during SSR).
+
+**Password recovery.** An owner resets another admin's password at
+`/internal/admins/:id/reset` — its own page, not a dialog, because the field has
+to exist without JavaScript (a dialog's contents live in a portal that only
+renders once opened) and a validated form needs somewhere to show its errors. It
+does not require knowing the old password, which is the point. It refuses to
+target your own account: that would turn a borrowed session into a takeover with
+no knowledge of the old password, so your own password goes through
+`/internal/profile`, which does require the current one.
+
+There is **no self-service "forgot password" flow**, because it needs email
+delivery the scaffold does not wire up. Cloudflare Email Sending is in scope
+(`.claude/rules/cloudflare.md`) if you want to add one.
 
 ## Translations
 

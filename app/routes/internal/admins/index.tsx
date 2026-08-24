@@ -1,6 +1,7 @@
 import {
   data,
   Form,
+  Link,
   useActionData,
   useLoaderData,
   useNavigation,
@@ -40,6 +41,7 @@ import { AdminUserRepo } from "~/models/admin-users.server";
 import {
   createAdmin,
   removeAdmin,
+  resetAdminPassword,
   setAdminRole,
   setAdminStatus,
 } from "~/services/admin-management.server";
@@ -107,11 +109,29 @@ const INTENTS = {
   async remove(form: FormData, actorId: string) {
     return removeAdmin({ actorId, targetId: String(form.get("id") ?? "") });
   },
+  async resetPassword(form: FormData, actorId: string) {
+    const result = await resetAdminPassword({
+      actorId,
+      targetId: String(form.get("id") ?? ""),
+      newPassword: String(form.get("newPassword") ?? ""),
+    });
+    // Normalise to the same { name, role } shape the other intents return, so
+    // the action stays a thin dispatch.
+    return result.ok
+      ? ({ ok: true, value: result.value.user } as const)
+      : result;
+  },
 } as const;
 
 type Intent = keyof typeof INTENTS;
 
-type SuccessKey = "created" | "disabled" | "enabled" | "removed" | "roleChanged";
+type SuccessKey =
+  | "created"
+  | "disabled"
+  | "enabled"
+  | "removed"
+  | "roleChanged"
+  | "passwordReset";
 
 const SUCCESS_KEY: Record<Intent, SuccessKey> = {
   create: "created",
@@ -120,6 +140,7 @@ const SUCCESS_KEY: Record<Intent, SuccessKey> = {
   makeOwner: "roleChanged",
   makeAdmin: "roleChanged",
   remove: "removed",
+  resetPassword: "passwordReset",
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -262,6 +283,14 @@ export default function Admins() {
                               )}
                               busy={busy}
                             />
+                            {/* Its own page, not a dialog: the field needs to
+                                exist without JavaScript, and a portal's
+                                contents only render once opened. */}
+                            <Button asChild size="sm" variant="outline">
+                              <Link to={`/internal/admins/${admin.id}/reset`}>
+                                {t("admins.reset.action")}
+                              </Link>
+                            </Button>
                             <Button
                               type="button"
                               size="sm"

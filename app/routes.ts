@@ -59,7 +59,10 @@ export default [
     // /internal redirects to the dashboard.
     route("internal", "routes/internal/index.tsx"),
     route("internal/dashboard", "routes/internal/dashboard.tsx"),
-    route("internal/admins", "routes/internal/admins.tsx"),
+    route("internal/admins", "routes/internal/admins/index.tsx"),
+    // Resetting someone else's password is its own page, not a dialog: the field
+    // must exist without JavaScript.
+    route("internal/admins/:adminId/reset", "routes/internal/admins/reset.tsx"),
     route("internal/profile", "routes/internal/profile.tsx"),
   ]),
 
