@@ -171,6 +171,26 @@ Two generated files are committed on purpose:
 - **`package-lock.json`** — what makes the pinned versions reproducible, and what
   `npm ci` needs in CI.
 
+## Dependency overrides — do not remove
+
+`package.json` carries two `overrides`. Both fix real advisories in **transitive
+dev-only** dependencies, and `npm audit` reports **0 vulnerabilities** with them
+in place.
+
+| Override | Fixes |
+| -------- | ----- |
+| `@esbuild-kit/core-utils` → `esbuild ^0.25.12` | `drizzle-kit` still pulls the deprecated `@esbuild-kit/esm-loader` ("merged into tsx") *alongside* `tsx`, and only that legacy chain drags in esbuild 0.18 — GHSA-67mh-4wv8-2f99. Pinned to the line drizzle-kit already resolves, so npm dedupes to one copy. |
+| `@shopify/graphql-codegen` → `lodash ^4.18.1` | `@shopify/api-codegen-preset` → `@graphql-codegen/*` pin lodash 4.17.x — GHSA-r5fr-rjxr-66jc (code injection via `_.template`) and GHSA-f23m-r3pf-42rh (prototype pollution). 4.18.1 is the patched line. |
+
+**Never run `npm audit fix --force` in this repo.** It "fixes" these by
+*downgrading* `drizzle-kit` to 0.18.1 and `@shopify/api-codegen-preset` to 0.0.4
+— years-old majors that would break the schema and codegen pipelines. That is
+the tool trading your working build for a clean report.
+
+Both overrides are verified by running the tools that consume them, not by
+trusting the audit number: `npm run db:generate` exercises the esbuild-kit path,
+and `npm run graphql-codegen` exercises every `@graphql-codegen` package.
+
 ## Conventions for agents
 
 `AGENTS.md` is the single contract — no cheating, strict TDD, CLEAN rings,
