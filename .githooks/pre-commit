@@ -1,0 +1,4 @@
+#!/bin/sh
+# Installed by `npm run prepare` (git config core.hooksPath .githooks).
+# Never bypass with --no-verify; fix what it reports.
+npm run precommit

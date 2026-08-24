@@ -1,0 +1,49 @@
+{
+  "include": [
+    "env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".react-router/types/**/*"
+  ],
+  // Installed AI-agent skills ship their own example .ts/.tsx assets with
+  // dependencies this project does not have. They are documentation, not source
+  // — never let them into the typecheck. (`npm run install:skill` writes
+  // .agents/, .claude/skills/ and agent/.)
+  "exclude": [
+    "node_modules",
+    "build",
+    "extensions",
+    ".agents",
+    ".claude",
+    ".cursor",
+    ".gemini",
+    "agent"
+  ],
+  "compilerOptions": {
+    "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "strict": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true,
+    "allowJs": true,
+    "resolveJsonModule": true,
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ES2022",
+    // No baseUrl (deprecated in TS 6) — `paths` resolves relative to this file.
+    "paths": {
+      "~/*": ["./app/*"]
+    },
+    // @shopify/polaris-types provides the JSX types for the Polaris web
+    // components (`s-page`, `s-button`, …) used in the embedded admin.
+    "types": [
+      "vite/client",
+      "@shopify/polaris-types",
+      "@cloudflare/vitest-pool-workers/types"
+    ],
+    "rootDirs": [".", "./.react-router/types"]
+  }
+}

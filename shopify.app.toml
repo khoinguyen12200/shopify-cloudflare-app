@@ -1,0 +1,45 @@
+# PRODUCTION app config. Learn more:
+# https://shopify.dev/docs/apps/tools/cli/configuration
+#
+# This is the DEFAULT config, so a bare `shopify app deploy` targets production.
+# Local development uses shopify.app.dev.toml (`npm run dev`), which points at a
+# SEPARATE app in your Dev Dashboard — see that file's header.
+#
+# Fill client_id in with `npm run config:link:prod`.
+
+client_id = ""
+name = "My App"
+application_url = "https://example.com"
+embedded = true
+
+[build]
+# Production's URL is fixed; never let `shopify app dev` rewrite it. Dev runs
+# against shopify.app.dev.toml, which keeps that true.
+automatically_update_urls_on_dev = false
+
+[webhooks]
+api_version = "2026-10"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "/webhooks/app/uninstalled"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/scopes_update" ]
+  uri = "/webhooks/app/scopes_update"
+
+  # Mandatory privacy-compliance webhooks for every DISTRIBUTED app. Uncomment
+  # and add a handler before submitting to the App Store.
+  # https://shopify.dev/docs/apps/build/compliance/privacy-law-compliance
+  # [[webhooks.subscriptions]]
+  # compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
+  # uri = "/webhooks/compliance"
+
+[access_scopes]
+# https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+# Keep this minimal, and keep it in sync with shopify.app.dev.toml — a scope
+# that exists in only one env produces bugs that reproduce in only one env.
+scopes = "write_products"
+
+[auth]
+redirect_urls = [ "https://example.com/auth/callback" ]

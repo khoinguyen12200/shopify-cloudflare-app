@@ -1,0 +1,38 @@
+# DEVELOPMENT app config — a SEPARATE app in your Dev Dashboard from the one in
+# shopify.app.toml.
+#
+# Why two apps rather than one: `shopify app dev` rewrites application_url and
+# redirect_urls to the current tunnel URL on every run. Pointed at the
+# production app, that repoints live merchants at a tunnel on your laptop. Two
+# apps means dev churns its own URLs and production's stay fixed.
+#
+# Selected by the `--config dev` flag: `npm run dev`.
+# Fill client_id in with `npm run config:link:dev`.
+
+client_id = ""
+name = "My App (Dev)"
+application_url = "https://shopify.dev/apps/default-app-home"
+embedded = true
+
+[build]
+# The opposite of production: dev SHOULD track the tunnel URL automatically.
+automatically_update_urls_on_dev = true
+
+[webhooks]
+api_version = "2026-10"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "/webhooks/app/uninstalled"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/scopes_update" ]
+  uri = "/webhooks/app/scopes_update"
+
+[access_scopes]
+# Mirror shopify.app.toml. `shopify app config link` empties this when it links
+# a fresh app; `npm run dev` pushes it to the dev app on the next OAuth grant.
+scopes = "write_products"
+
+[auth]
+redirect_urls = [ "https://shopify.dev/apps/default-app-home/api/auth" ]

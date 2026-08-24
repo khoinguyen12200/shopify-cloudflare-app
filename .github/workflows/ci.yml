@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      # typecheck + lint + tests. Tests run against real workerd via
+      # @cloudflare/vitest-pool-workers, with outbound network blocked.
+      - run: npm run verify
+
+      # Prove the production build works — it is where the environment gets
+      # baked in, so a broken one only shows up here.
+      - run: CLOUDFLARE_ENV=production npm run build
