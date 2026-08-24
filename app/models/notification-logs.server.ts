@@ -64,6 +64,43 @@ export class NotificationLogRepo {
   }
 
   /**
+   * Write one ALREADY-SETTLED row, for an outcome decided before any attempt.
+   *
+   * There is nothing in flight to reserve, so a reserve-then-settle pair would be
+   * two writes describing one fact. Used by `notify` when the eligibility layer
+   * refuses a channel — a suppressed notification has to be queryable, or
+   * "why didn't they get it?" is answerable only from log lines nobody greps.
+   */
+  async recordSettled(input: {
+    id: string;
+    event: string;
+    channel: string;
+    recipient: string;
+    status: Exclude<NotificationLogStatus, "queued">;
+    reasonCode?: string;
+    detail?: string;
+    dedupeKey?: string;
+    shop?: string;
+    now: number;
+  }): Promise<void> {
+    await getDb().insert(notificationLogs).values({
+      id: input.id,
+      event: input.event,
+      channel: input.channel,
+      recipient: input.recipient,
+      status: input.status,
+      reasonCode: input.reasonCode ?? null,
+      detail: input.detail ?? null,
+      providerStatus: null,
+      providerMessageId: null,
+      dedupeKey: input.dedupeKey ?? null,
+      shop: input.shop ?? null,
+      createdAt: input.now,
+      settledAt: input.now,
+    });
+  }
+
+  /**
    * Is this (dedupeKey, recipient) already in flight or done?
    *
    * Matches `queued` as well as `sent`, so two workers cannot both notify while

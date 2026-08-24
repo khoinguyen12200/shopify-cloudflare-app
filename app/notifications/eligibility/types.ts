@@ -1,4 +1,4 @@
-import type { ChannelKey, NotificationEvent } from "../types";
+import type { ChannelKey, NotificationEvent, RefusalReason } from "../types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Whether a notification MAY go out, on which channel, to whom.
@@ -19,19 +19,14 @@ import type { ChannelKey, NotificationEvent } from "../types";
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Why a channel was not used. Every member maps onto a `RefusalReason` that the
- * log already understands, so the reason stored, the reason logged and the reason
- * shown to a human are one value rather than three vocabularies.
+ * Why a channel was not used.
+ *
+ * An ALIAS of `RefusalReason`, not a parallel set. The reason stored in
+ * `notification_logs.reason_code`, the reason logged, and the reason shown to a
+ * human are then one value — where two overlapping vocabularies drift apart and
+ * nothing fails when they do.
  */
-export type BlockReason =
-  /** The channel itself cannot send — no binding, not configured, not entitled. */
-  | "channel_unavailable"
-  /** We hold no address for this recipient on this channel. */
-  | "recipient_unreachable"
-  /** The recipient opted out. Legal; never bypassable. */
-  | "recipient_opted_out"
-  /** The tenant's settings do not select this channel for this event. */
-  | "not_selected";
+export type BlockReason = RefusalReason;
 
 /** One channel's verdict. A union, so `reason` cannot be read on an allow. */
 export type ChannelDecision =

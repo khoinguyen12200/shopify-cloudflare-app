@@ -35,7 +35,7 @@ export class EmailChannel implements Channel<EmailMessage> {
     if (!env.EMAIL || !env.EMAIL_FROM) {
       return {
         status: "refused",
-        reason: "channel_not_configured",
+        reason: "channel_unavailable",
         detail:
           "Email Sending is not set up. Onboard the domain with `wrangler email sending enable` and set EMAIL_FROM.",
       };
@@ -81,7 +81,7 @@ function refuseUnsendable(to: string): SendOutcome | null {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
     return {
       status: "refused",
-      reason: "recipient_undeliverable",
+      reason: "recipient_unreachable",
       detail: `${to} is not a usable email address`,
     };
   }
@@ -93,7 +93,7 @@ function refuseUnsendable(to: string): SendOutcome | null {
   ) {
     return {
       status: "refused",
-      reason: "recipient_undeliverable",
+      reason: "recipient_unreachable",
       detail: `${to} is a reserved address that can never receive mail`,
     };
   }

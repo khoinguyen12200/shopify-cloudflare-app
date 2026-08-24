@@ -1,4 +1,5 @@
 import { buildEmail, type EmailPropsByEvent } from "~/emails/registry.server";
+import { NotificationLogRepo } from "~/models/notification-logs.server";
 import { dispatch, type DispatchResult } from "./dispatch.server";
 import { resolveEligibility } from "./eligibility/resolve";
 import { loadEligibilityContext } from "./eligibility/snapshot.server";
@@ -61,19 +62,32 @@ export async function notify<E extends NotificationEvent>(
 
   const eligibility = resolveEligibility(context);
 
-  // A refusal is logged, not silently dropped. Otherwise a suppressed
-  // notification is indistinguishable from one that was never requested — and
-  // that is exactly the case someone will be asked to explain.
+  // A refusal gets its own `refused` ROW, not just a log line.
+  //
+  // This is the record that answers "why didn't they get it?". A console line is
+  // not that: it is unqueryable, it ages out, and it makes a suppressed
+  // notification indistinguishable from one that was never requested. The status
+  // is `refused` rather than `failed` because nothing was attempted — see the
+  // schema comment on notification_logs.
+  const logs = new NotificationLogRepo();
+  const now = Date.now();
+
   for (const decision of eligibility.decisions) {
     if (decision.allowed) continue;
-    console.log(
-      JSON.stringify({
-        event: "notification.blocked",
-        notification: input.event,
-        channel: decision.channel,
-        reason: decision.reason,
-      }),
-    );
+    const to = input.to[decision.channel];
+    await logs.recordSettled({
+      id: crypto.randomUUID(),
+      event: input.event,
+      channel: decision.channel,
+      // The address may legitimately be absent — that IS the refusal in the
+      // `recipient_unreachable` case — so record what was asked for.
+      recipient: to ?? "(none)",
+      status: "refused",
+      reasonCode: decision.reason,
+      dedupeKey: input.dedupeKey,
+      shop: input.scope,
+      now,
+    });
   }
 
   const dispatched: DispatchResult[] = [];

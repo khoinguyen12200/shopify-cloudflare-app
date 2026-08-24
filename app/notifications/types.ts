@@ -55,21 +55,33 @@ export type Message = EmailMessage;
 // ─── Outcomes ────────────────────────────────────────────────────────────────
 
 /**
- * Why a send could not even be attempted. A closed union, because this value is
- * STORED and then read back to decide what a human is told about it.
+ * Why a send was never attempted. A closed union, because this value is STORED
+ * and then read back to decide what a human is told about it.
  *
- * Add a member and every exhaustive `switch` over it stops compiling until it
- * says what this reason means — which is the point. The alternative, a free
- * string, means the reader recovers meaning with a regex over its own
- * vocabulary, and nothing fails when the two drift apart.
+ * ONE VOCABULARY for the whole system. The eligibility layer
+ * (`eligibility/types.ts` → `BlockReason`) is an alias of this, deliberately: two
+ * overlapping-but-different reason sets for the same concept is how the reason in
+ * the database stops matching the reason on the screen, and nothing fails when
+ * they drift.
+ *
+ * Add a member and every exhaustive reader stops compiling until it says what
+ * this reason means — which is the point.
  */
 export type RefusalReason =
-  /** No transport configured for this channel (missing binding, missing from-address). */
-  | "channel_not_configured"
-  /** The recipient address cannot receive mail at all — malformed, reserved domain. */
-  | "recipient_undeliverable"
-  /** A policy said no: quota, plan, consent, quiet hours. */
-  | "not_permitted";
+  /**
+   * The channel cannot send: no binding, not configured, not entitled, or this
+   * event has no renderer for it.
+   */
+  | "channel_unavailable"
+  /**
+   * We hold no usable address for this recipient on this channel — absent,
+   * malformed, or a reserved domain that can never receive mail.
+   */
+  | "recipient_unreachable"
+  /** The recipient opted out. Legal; never bypassable. */
+  | "recipient_opted_out"
+  /** The tenant's settings do not select this channel for this event. */
+  | "not_selected";
 
 /** Why an attempted send failed. Same closed-union reasoning as above. */
 export type FailureReason =
