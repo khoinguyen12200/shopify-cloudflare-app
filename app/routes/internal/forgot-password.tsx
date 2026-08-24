@@ -15,6 +15,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { requestPasswordReset } from "~/services/password-reset.server";
 import { isProductionLike } from "~/lib/deployment";
+import { paths } from "~/urls";
 import { INTERNAL_FONT_LINKS, THEME_INIT_SCRIPT } from "~/internal/components";
 import internalStyles from "~/styles/internal/internal.tailwind.css?url";
 
@@ -107,7 +108,7 @@ export default function ForgotPassword() {
                   <AlertDescription className="break-all">
                     {t("passwordReset.forgot.devLink")}{" "}
                     <Link
-                      to={`/internal/reset-password/${actionData.devToken}`}
+                      to={paths.internal.resetPassword(actionData.devToken)}
                       className="underline"
                     >
                       /internal/reset-password/{actionData.devToken}

@@ -49,6 +49,7 @@ import {
 // client bundle.
 import type { AdminErrorReason } from "~/services/admin-management.server";
 import { MIN_PASSWORD_LENGTH } from "~/lib/password-policy";
+import { paths } from "~/urls";
 import { useLocale } from "~/i18n/useLocale";
 import { formatDateTime } from "~/i18n/format";
 import type { AdminRole, SafeAdminUser } from "~/db/schema";
@@ -287,7 +288,7 @@ export default function Admins() {
                                 exist without JavaScript, and a portal's
                                 contents only render once opened. */}
                             <Button asChild size="sm" variant="outline">
-                              <Link to={`/internal/admins/${admin.id}/reset`}>
+                              <Link to={paths.internal.resetAdminPassword(admin.id)}>
                                 {t("admins.reset.action")}
                               </Link>
                             </Button>

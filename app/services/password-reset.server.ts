@@ -4,6 +4,7 @@ import { generateToken, hashToken } from "~/lib/token";
 import { hashPassword } from "~/lib/password";
 import { validatePasswordStrength } from "~/lib/password-policy";
 import { notify } from "~/notifications/notify.server";
+import { absolute, paths } from "~/urls";
 
 /** An unclicked link should not stay valid all day. */
 export const TOKEN_TTL_MS = 60 * 60 * 1000;
@@ -85,7 +86,10 @@ export async function requestPasswordReset(input: {
     dedupeKey: `admin_password_reset:${await hashToken(token)}`,
     payload: {
       recipientName: user.name,
-      resetUrl: `${input.origin}/internal/reset-password/${token}`,
+      resetUrl: absolute(
+        input.origin,
+        paths.internal.resetPassword(token),
+      ),
       expiresIn: "one hour",
     },
   });

@@ -70,6 +70,22 @@ export default tseslint.config(
       "scripts/**/*.mjs",
     ],
     languageOptions: { globals: { ...globals.node } },
-    rules: { "no-restricted-globals": "off" },
+    rules: {
+      "no-restricted-globals": "off",
+      // Same underscore convention as the app code: `const { env: _env, ...rest }`
+      // is how a key is deliberately discarded. Repeated here because the .ts
+      // block above does not match .mjs scripts — and it must be the
+      // typescript-eslint rule, since that plugin's recommended config applies to
+      // these files too and would otherwise win.
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+          ignoreRestSiblings: true,
+        },
+      ],
+    },
   },
 );

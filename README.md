@@ -136,6 +136,18 @@ Wrangler environments do **not** inherit bindings, vars, triggers or routes from
 the top level, so `env.production` in `wrangler.jsonc` re-declares every one. Add
 a binding in one place and it is simply absent in the other.
 
+**`cf:deploy` refuses to run while a production binding still says `REPLACE_ME`.**
+Without that gate, `wrangler deploy` succeeds and ships a Worker whose D1 and KV
+point at nothing — which fails on a real request, with an error that says nothing
+about the cause. The check runs first, so it costs seconds rather than a full
+build.
+
+**Migrations retry on a transient Cloudflare 5xx.** `wrangler d1 migrations apply`
+intermittently fails while querying migration state; in a deploy chain that
+aborts the whole release for no reason. Applying migrations is idempotent, so
+`scripts/migrate.mjs` retries with backoff — that property is what makes the
+retry correct rather than hopeful.
+
 ## Layout
 
 ```
@@ -544,6 +556,7 @@ is reused across shops and module state would leak between tenants.
 | `npm run cf-typegen`     | Regenerate `worker-configuration.d.ts` (`Env`)     |
 | `npm run cf:deploy`      | Verify, production build, migrate, deploy          |
 | `npm run install:skill`  | Install every AI-agent skill, for every agent host |
+| `npm run check:placeholders` | Fail if production bindings still hold `REPLACE_ME` ids |
 
 Two generated files are committed on purpose:
 
@@ -572,6 +585,19 @@ the tool trading your working build for a clean report.
 Both overrides are verified by running the tools that consume them, not by
 trusting the audit number: `npm run db:generate` exercises the esbuild-kit path,
 and `npm run graphql-codegen` exercises every `@graphql-codegen` package.
+
+## Links are built in one place
+
+`app/urls.ts` is the only place a path is constructed. A link is used from more
+places than it looks — a route, a redirect, a nav item, an email body, a test —
+and each one that builds its own string is a copy that can drift. A link inside an
+**email** cannot be corrected after sending, so a drift there is permanent for
+everyone who already received it.
+
+Relative paths come from `paths.*`; `absolute(origin, path)` takes the origin from
+the incoming request, so a link always points at the deployment the recipient is
+actually using. Reading the origin from config is how a dev tunnel URL ends up in
+a production email.
 
 ## Conventions for agents
 
