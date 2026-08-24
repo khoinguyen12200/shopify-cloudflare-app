@@ -108,3 +108,71 @@ export const passwordResetTokens = sqliteTable(
 );
 
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+
+/**
+ * One row per notification ATTEMPT — the system's whole paper trail.
+ *
+ * Written by `app/notifications/dispatch.server.ts` and nothing else. Every
+ * attempt lands here, sent or not, because a side effect that did not happen
+ * needs a queryable record rather than a log line nobody greps.
+ *
+ * `status` is OUR lifecycle; `providerStatus` is the carrier's. Two columns
+ * because they are two different facts and their vocabularies overlap
+ * ("queued", "sent") — sharing one column makes "did it actually arrive?"
+ * unanswerable, and lets a provider callback accidentally reopen a dedupe.
+ */
+export const notificationLogs = sqliteTable(
+  "notification_logs",
+  {
+    id: text("id").primaryKey(),
+    /** Which notification this was. A NotificationEvent — see notifications/types.ts. */
+    event: text("event").notNull(),
+    channel: text("channel").notNull(),
+    recipient: text("recipient").notNull(),
+    /**
+     * Our dispatch lifecycle:
+     *   queued  — row reserved, transport not yet answered
+     *   sent    — the provider accepted it
+     *   failed  — attempted and failed
+     *   refused — never attempted (policy, configuration, bad address)
+     *
+     * `refused` is distinct from `failed` on purpose. Collapsing them loses the
+     * difference between "we tried and it broke" and "we declined to try", which
+     * is exactly the distinction someone reading this table needs.
+     */
+    status: text("status", {
+      enum: ["queued", "sent", "failed", "refused"],
+    }).notNull(),
+    /**
+     * The machine-readable reason, from the RefusalReason / FailureReason unions.
+     * Its own column rather than a token prefixed onto a prose string — prose
+     * gets improved, and a parser over it breaks the first time someone does.
+     */
+    reasonCode: text("reason_code"),
+    /** Human detail. Free-form, never parsed. */
+    detail: text("detail"),
+    /** The carrier's verdict, verbatim. */
+    providerStatus: text("provider_status"),
+    /** The carrier's id, so an async delivery callback can find this row. */
+    providerMessageId: text("provider_message_id"),
+    /**
+     * Idempotency key for (event, recipient). When set, an existing `queued` or
+     * `sent` row short-circuits the send, so a retried job never re-notifies.
+     */
+    dedupeKey: text("dedupe_key"),
+    /** Optional tenant scope. Null for notifications that are not shop-specific. */
+    shop: text("shop"),
+    createdAt: integer("created_at").notNull(),
+    settledAt: integer("settled_at"),
+  },
+  (table) => [
+    index("notification_logs_event_idx").on(table.event),
+    index("notification_logs_recipient_idx").on(table.recipient),
+    index("notification_logs_dedupe_idx").on(table.dedupeKey),
+    index("notification_logs_shop_idx").on(table.shop),
+    index("notification_logs_created_idx").on(table.createdAt),
+  ],
+);
+
+export type NotificationLog = typeof notificationLogs.$inferSelect;
+export type NotificationLogStatus = NotificationLog["status"];

@@ -41,6 +41,8 @@
     "admin:create": "node scripts/create-admin.mjs"
   },
   "dependencies": {
+    "@react-email/components": "^1.0.12",
+    "@react-email/render": "^2.1.0",
     "@react-router/dev": "^7.18.2",
     "@shopify/app-bridge-react": "^4.2.12",
     "@shopify/shopify-api": "^14.0.0",

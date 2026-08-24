@@ -297,6 +297,81 @@ instead of emailing it. **That on-screen fallback requires both an unconfigured
 mailer and a non-production deployment** — on a real deployment it would let
 anyone who can POST the form obtain a reset link for any account.
 
+## Notifications
+
+One funnel, so nothing can be sent without leaving a record.
+
+```
+app/notifications/
+├── types.ts               Message + SendOutcome as discriminated unions, Channel, Policy
+├── catalogue.ts           event metadata — CLIENT-SAFE, no renderers
+├── dispatch.server.ts     dedupe → policy → reserve → send → settle
+├── notify.server.ts       the one call sites use: notify({ event, to, payload })
+└── channels/email/        transport only
+
+app/emails/                React Email — the templates
+├── tokens.ts              palette mirroring the site's SCSS (enforced by a test)
+├── layout.tsx             THE layout + P / Muted / Cta primitives
+├── render.ts              renderEmail() → { subject, html, text }
+├── registry.server.ts     event → builder, mapped so a missing one fails the build
+└── templates/             one file per notification
+```
+
+### Adding a notification
+
+1. Add the key to `NotificationEvent` in `notifications/types.ts`.
+2. Add a spec to `catalogue.ts` (audience, gate, channels).
+3. Add props + a builder, and register it in `emails/registry.server.ts`.
+
+Steps 2 and 3 are not optional: both objects are typed `Record<NotificationEvent, …>`,
+so the build fails until they exist. That matters because the failure mode being
+prevented is a **silent no-send** — with a plain lookup returning `undefined`, the
+notification simply never arrives and nothing throws.
+
+Then call it:
+
+```ts
+await notify({
+  event: "admin_password_reset",
+  to: user.email,
+  dedupeKey: `admin_password_reset:${hash}`,
+  payload: { recipientName: user.name, resetUrl, expiresIn: "one hour" },
+});
+```
+
+### Adding a channel
+
+Add the message shape to the `Message` union, add a `Channel`, add a `REGISTRY`
+entry and a `HANDLERS` entry. `HANDLERS` is keyed `[K in Message["kind"]]`, so
+adding to the union fails the build until the handler exists. **`dispatch` itself
+never changes.**
+
+### Templates are React, never HTML strings
+
+Every email composes the single `EmailLayout` plus its primitives. `renderEmail`
+produces the HTML **and** the plain-text part from the same JSX, so the two cannot
+drift and no message ships HTML-only (which essentially every spam filter
+penalises).
+
+**Why not SCSS here:** email clients strip `<style>` blocks and ignore external
+stylesheets and CSS custom properties — every rule has to be an inline attribute,
+so there is no stylesheet for SCSS to compile into. `emails/tokens.ts` holds the
+literal values instead, and `emails/tokens.test.ts` reads
+`app/styles/public/_tokens.scss` and **fails the build when an email colour no
+longer matches the site's**. So the two stay in step without pretending email can
+use a stylesheet.
+
+### What the log gives you
+
+`notification_logs` gets one row per attempt: `queued → sent | failed | refused`.
+
+- **`refused` is distinct from `failed`** — "we declined to try" is not "we tried and it broke".
+- **`reasonCode` is its own column**, from a closed union, not a token prefixed onto prose. Prose gets improved; a parser over it breaks the first time someone does.
+- **`providerStatus` is separate from `status`** — ours means the API accepted it, the provider's means it believes it was delivered. Collapsing them makes "are our emails arriving?" unanswerable.
+- **The row is reserved BEFORE the send.** Writing it after means a crash in between leaves a message the recipient received with no row at all: invisible, and re-sent by the next retry.
+- **Dedupe matches `queued` too**, so two workers cannot both notify while neither has settled.
+- **A retriable failure throws** (`RetryableNotificationError`) so a queue retries it; a permanent one returns normally. Returning a transient failure lets the job complete and the message is gone for good.
+
 ## Translations
 
 **Every user-visible string is translated — public pages and the embedded admin

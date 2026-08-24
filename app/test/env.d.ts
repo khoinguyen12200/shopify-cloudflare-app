@@ -9,5 +9,7 @@ declare namespace Cloudflare {
   interface Env {
     /** The ./drizzle migrations, serialized by vitest.config.ts. */
     TEST_MIGRATIONS: string;
+    /** app/styles/public/_tokens.scss as source text — see emails/tokens.test.ts. */
+    TEST_PUBLIC_TOKENS_SCSS: string;
   }
 }

@@ -3,7 +3,7 @@ import { PasswordResetTokenRepo } from "~/models/password-reset-tokens.server";
 import { generateToken, hashToken } from "~/lib/token";
 import { hashPassword } from "~/lib/password";
 import { validatePasswordStrength } from "~/lib/password-policy";
-import { sendEmail } from "./email.server";
+import { notify } from "~/notifications/notify.server";
 
 /** An unclicked link should not stay valid all day. */
 export const TOKEN_TTL_MS = 60 * 60 * 1000;
@@ -75,23 +75,33 @@ export async function requestPasswordReset(input: {
     now,
   });
 
-  const link = `${input.origin}/internal/reset-password/${token}`;
-  const result = await sendEmail({
+  // Goes through the notification system, so this send is logged, deduped and
+  // rendered from the registered template like every other notification. The
+  // dedupe key is the token itself: a retried job cannot email the same link
+  // twice, while a genuinely new request has a new token and sends.
+  const [result] = await notify({
+    event: "admin_password_reset",
     to: user.email,
-    subject: "Reset your password",
-    text: resetText(user.name, link),
-    html: resetHtml(user.name, link),
+    dedupeKey: `admin_password_reset:${await hashToken(token)}`,
+    payload: {
+      recipientName: user.name,
+      resetUrl: `${input.origin}/internal/reset-password/${token}`,
+      expiresIn: "one hour",
+    },
   });
+
+  const emailSent = result?.outcome.status === "sent";
 
   console.log(
     JSON.stringify({
       event: "password_reset.issued",
       adminUserId: user.id,
-      emailSent: result.sent,
+      emailSent,
+      notificationLogId: result?.logId,
     }),
   );
 
-  return { requested: true, token, emailSent: result.sent };
+  return { requested: true, token, emailSent };
 }
 
 export type ResetFailure =
@@ -162,47 +172,4 @@ export async function completePasswordReset(input: {
   );
 
   return { ok: true };
-}
-
-// ── Email bodies ────────────────────────────────────────────────────────────
-// Plain strings rather than a template library: two short messages do not
-// justify a dependency, and both parts must always be sent.
-
-function resetText(name: string, link: string): string {
-  return [
-    `Hello ${name},`,
-    "",
-    "Someone asked to reset the password for your account.",
-    "Open this link to choose a new one. It expires in one hour and can only be used once:",
-    "",
-    link,
-    "",
-    "If this was not you, you can ignore this email — your password has not changed.",
-  ].join("\n");
-}
-
-function resetHtml(name: string, link: string): string {
-  // Inline styles only: email clients strip <style> blocks and support no
-  // external CSS.
-  return `<!doctype html>
-<html><body style="margin:0;padding:24px;background:#f7f7f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#18181b;line-height:1.6">
-  <div style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:12px;padding:32px">
-    <p style="margin:0 0 16px">Hello ${escapeHtml(name)},</p>
-    <p style="margin:0 0 16px">Someone asked to reset the password for your account.</p>
-    <p style="margin:0 0 24px">
-      <a href="${escapeHtml(link)}" style="display:inline-block;background:#4f46e5;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600">Choose a new password</a>
-    </p>
-    <p style="margin:0 0 16px;color:#5b5b66;font-size:14px">This link expires in one hour and can only be used once.</p>
-    <p style="margin:0;color:#5b5b66;font-size:14px">If this was not you, ignore this email — your password has not changed.</p>
-  </div>
-</body></html>`;
-}
-
-/** The name comes from the database, but escaping it costs nothing. */
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }

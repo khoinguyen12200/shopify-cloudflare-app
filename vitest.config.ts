@@ -4,11 +4,23 @@ import {
 } from "@cloudflare/vitest-pool-workers";
 import { defineConfig } from "vitest/config";
 import path from "node:path";
+import { readFile } from "node:fs/promises";
 
 // Hand the Drizzle-generated migrations to workerd so tests can build the
 // schema in a real D1 instance via applyD1Migrations().
 const migrations = await readD1Migrations(
   path.join(import.meta.dirname, "drizzle"),
+);
+
+// The public design tokens, as SOURCE text. app/emails/tokens.test.ts compares
+// the email palette against it, so the two cannot drift.
+//
+// Read here, in Node, rather than with a `?raw` import: Vite's SCSS plugin
+// handles `.scss` before `?raw` can take effect, and the import resolves to an
+// empty string — which would make every assertion in that test vacuously pass.
+const publicTokensScss = await readFile(
+  path.join(import.meta.dirname, "app/styles/public/_tokens.scss"),
+  "utf8",
 );
 
 export default defineConfig({
@@ -36,6 +48,7 @@ export default defineConfig({
           ),
         bindings: {
           TEST_MIGRATIONS: JSON.stringify(migrations),
+          TEST_PUBLIC_TOKENS_SCSS: publicTokensScss,
           // Keep the suite self-contained: locally these come from .dev.vars,
           // which is gitignored and absent on a CI runner.
           SHOPIFY_API_KEY: "test-api-key",

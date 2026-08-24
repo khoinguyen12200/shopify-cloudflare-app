@@ -14,7 +14,7 @@ import {
 } from "ngk-dashboard";
 import { useTranslation } from "react-i18next";
 import { requestPasswordReset } from "~/services/password-reset.server";
-import { isProductionLike } from "~/services/email.server";
+import { isProductionLike } from "~/lib/deployment";
 import { INTERNAL_FONT_LINKS, THEME_INIT_SCRIPT } from "~/internal/components";
 import internalStyles from "~/styles/internal/internal.tailwind.css?url";
 
