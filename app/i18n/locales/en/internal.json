@@ -129,5 +129,37 @@
       "detailsSaved": "Your details were saved.",
       "passwordChanged": "Your password was changed."
     }
+  },
+  "passwordReset": {
+    "forgot": {
+      "link": "Forgot your password?",
+      "heading": "Reset your password",
+      "lead": "Enter your email address and we will send you a link to choose a new password.",
+      "email": "Email",
+      "submit": "Send reset link",
+      "submitting": "Sending…",
+      "sent": "If an account exists for that address, a reset link is on its way. The link expires in one hour.",
+      "backToLogin": "Back to sign in",
+      "emailRequired": "Enter your email address.",
+      "devLink": "Email is not configured locally, so here is the link:"
+    },
+    "reset": {
+      "heading": "Choose a new password",
+      "lead": "Pick a password you have not used here before.",
+      "newPassword": "New password",
+      "confirmPassword": "Confirm new password",
+      "submit": "Set password",
+      "submitting": "Saving…",
+      "done": "Your password was changed. You can sign in now.",
+      "signIn": "Sign in",
+      "errors": {
+        "invalidToken": "That reset link is not valid. Request a new one.",
+        "expiredToken": "That reset link has expired. Request a new one.",
+        "usedToken": "That reset link has already been used. Request a new one.",
+        "tooShort": "The password must be at least {{min}} characters.",
+        "mismatch": "The passwords do not match."
+      },
+      "requestAnother": "Request a new link"
+    }
   }
 }

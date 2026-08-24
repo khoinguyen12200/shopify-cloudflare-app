@@ -75,3 +75,36 @@ export type AdminStatus = AdminUser["status"];
 
 /** What is safe to send to the browser: never the password hash. */
 export type SafeAdminUser = Omit<AdminUser, "passwordHash">;
+
+/**
+ * Single-use password-reset tokens for the internal console.
+ *
+ * ONLY A HASH OF THE TOKEN IS STORED. The token itself exists in exactly two
+ * places: the email that was sent, and the URL the recipient clicks. A database
+ * leak therefore hands an attacker nothing usable — the same reason
+ * `admin_users` stores a password hash rather than a password.
+ *
+ * Rows are kept after use rather than deleted, so `used_at` can prove a token
+ * was already spent (a deleted row is indistinguishable from one that never
+ * existed, which makes replay impossible to report accurately).
+ */
+export const passwordResetTokens = sqliteTable(
+  "password_reset_tokens",
+  {
+    /** SHA-256 of the token, hex. Never the token. */
+    tokenHash: text("token_hash").primaryKey(),
+    adminUserId: text("admin_user_id")
+      .notNull()
+      .references(() => adminUsers.id, { onDelete: "cascade" }),
+    expiresAt: integer("expires_at").notNull(),
+    /** Set the moment it is spent. A non-null value means the token is dead. */
+    usedAt: integer("used_at"),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    index("password_reset_tokens_user_idx").on(table.adminUserId),
+    index("password_reset_tokens_expires_idx").on(table.expiresAt),
+  ],
+);
+
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;

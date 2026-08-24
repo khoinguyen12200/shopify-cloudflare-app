@@ -55,6 +55,11 @@ export default [
   // signed-in user, so a login page inside it would redirect to itself.
   route("internal/login", "routes/internal/login.tsx"),
   route("internal/logout", "routes/internal/logout.tsx"),
+  // Self-service recovery, also outside the layout: nobody is signed in yet.
+  route("internal/forgot-password", "routes/internal/forgot-password.tsx"),
+  // The token is IN THE PATH, so this page must never be indexed — it sets
+  // robots noindex. It is also why the token is single-use and short-lived.
+  route("internal/reset-password/:token", "routes/internal/reset-password.tsx"),
   layout("routes/internal/_layout.tsx", [
     // /internal redirects to the dashboard.
     route("internal", "routes/internal/index.tsx"),

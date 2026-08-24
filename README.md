@@ -262,9 +262,40 @@ target your own account: that would turn a borrowed session into a takeover with
 no knowledge of the old password, so your own password goes through
 `/internal/profile`, which does require the current one.
 
-There is **no self-service "forgot password" flow**, because it needs email
-delivery the scaffold does not wire up. Cloudflare Email Sending is in scope
-(`.claude/rules/cloudflare.md`) if you want to add one.
+**Self-service recovery.** `/internal/forgot-password` → emailed link →
+`/internal/reset-password/:token`.
+
+| Property | How |
+| --- | --- |
+| No user enumeration | The response is identical whether the account exists, is disabled, or the throttle tripped. What happened is in the log, never in the response |
+| Token never stored | Only its SHA-256 goes in `password_reset_tokens`. A database leak yields nothing usable |
+| Single use | Spending it sets `used_at`; a replay is reported as *used*, distinct from *invalid*, so clicking an old link twice gives an accurate message |
+| Siblings die too | A successful reset invalidates every other outstanding link for that account, so an older email stops being a live key |
+| Short lived | One hour |
+| Throttled | At most 3 live links per account, so repeated requests cannot flood an inbox |
+| A typo is free | The password policy and confirmation are checked **before** the token is spent, so one mistake does not burn the link |
+| Not auto-signed-in | Clicking proves control of the inbox, not of the new password. You then sign in with it |
+| Never indexed | The token is in the URL, so the page sets `robots: noindex, nofollow` |
+
+Expired rows are pruned by a daily cron (`workers/app.ts` → `runScheduledSweeps`),
+kept for 7 days first so a replay still reports accurately.
+
+### Email setup, per project
+
+The `send_email` binding is declared, but nothing sends until you do this:
+
+```bash
+npx wrangler email sending enable yourdomain.com
+```
+
+then set `EMAIL_FROM` (an address on that domain) and `EMAIL_FROM_NAME` in
+`wrangler.jsonc` `vars`, **per environment** — named envs inherit nothing.
+
+Until then `sendEmail()` returns `{ sent: false, reason: "notConfigured" }` rather
+than throwing, and the forgot-password page shows the reset link on screen
+instead of emailing it. **That on-screen fallback requires both an unconfigured
+mailer and a non-production deployment** — on a real deployment it would let
+anyone who can POST the form obtain a reset link for any account.
 
 ## Translations
 

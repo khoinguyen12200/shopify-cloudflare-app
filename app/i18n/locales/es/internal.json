@@ -129,5 +129,37 @@
       "detailsSaved": "Se han guardado tus datos.",
       "passwordChanged": "Se ha cambiado tu contraseña."
     }
+  },
+  "passwordReset": {
+    "forgot": {
+      "link": "¿Has olvidado tu contraseña?",
+      "heading": "Restablece tu contraseña",
+      "lead": "Introduce tu correo electrónico y te enviaremos un enlace para elegir una contraseña nueva.",
+      "email": "Correo electrónico",
+      "submit": "Enviar el enlace",
+      "submitting": "Enviando…",
+      "sent": "Si existe una cuenta con esa dirección, el enlace ya está en camino. Caduca en una hora.",
+      "backToLogin": "Volver al inicio de sesión",
+      "emailRequired": "Introduce tu correo electrónico.",
+      "devLink": "El correo no está configurado en local, así que aquí tienes el enlace:"
+    },
+    "reset": {
+      "heading": "Elige una contraseña nueva",
+      "lead": "Elige una contraseña que no hayas usado aquí antes.",
+      "newPassword": "Contraseña nueva",
+      "confirmPassword": "Confirma la contraseña nueva",
+      "submit": "Guardar la contraseña",
+      "submitting": "Guardando…",
+      "done": "Se ha cambiado tu contraseña. Ya puedes iniciar sesión.",
+      "signIn": "Iniciar sesión",
+      "errors": {
+        "invalidToken": "Ese enlace no es válido. Solicita uno nuevo.",
+        "expiredToken": "Ese enlace ha caducado. Solicita uno nuevo.",
+        "usedToken": "Ese enlace ya se ha utilizado. Solicita uno nuevo.",
+        "tooShort": "La contraseña debe tener al menos {{min}} caracteres.",
+        "mismatch": "Las contraseñas no coinciden."
+      },
+      "requestAnother": "Solicitar un enlace nuevo"
+    }
   }
 }

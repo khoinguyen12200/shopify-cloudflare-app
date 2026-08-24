@@ -2,6 +2,7 @@ import {
   data,
   redirect,
   Form,
+  Link,
   useActionData,
   useLoaderData,
   useNavigation,
@@ -132,6 +133,15 @@ export default function InternalLogin() {
               {submitting ? t("login.submitting") : t("login.submit")}
             </Button>
           </Form>
+
+          <p className="mt-4 text-center text-sm">
+            <Link
+              to="/internal/forgot-password"
+              className="text-muted-foreground underline"
+            >
+              {t("passwordReset.forgot.link")}
+            </Link>
+          </p>
 
           {showDevHint && (
             <p className="mt-6 text-center text-xs text-muted-foreground">

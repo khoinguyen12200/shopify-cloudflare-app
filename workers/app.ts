@@ -4,6 +4,7 @@ import {
   RouterContextProvider,
 } from "react-router";
 import { runWithRequestContext } from "../app/request-context.server";
+import { runScheduledSweeps } from "../app/services/scheduled.server";
 
 /**
  * With `future.v8_middleware`, a loader/action's `context` is a
@@ -33,8 +34,14 @@ export default {
     });
   },
 
-  // Add `scheduled` (wrangler.jsonc `triggers.crons`) and `queue`
-  // (`queues.consumers`) handlers here as the app grows. Wrap each in
-  // runWithRequestContext(env, …) so getEnv()/getDb() work inside them too —
-  // work longer than ~30s belongs on a Queue, not in waitUntil.
+  /**
+   * Cron (wrangler.jsonc `triggers.crons`). Wrapped in the request context so
+   * getEnv()/getDb() resolve here exactly as they do in `fetch`.
+   *
+   * Add a `queue` handler the same way when a consumer appears — work longer
+   * than ~30s belongs on a Queue, never in waitUntil.
+   */
+  async scheduled(_controller, env) {
+    await runWithRequestContext(env, () => runScheduledSweeps(Date.now()));
+  },
 } satisfies ExportedHandler<Env>;
