@@ -79,9 +79,9 @@ export async function requestPasswordReset(input: {
   // rendered from the registered template like every other notification. The
   // dedupe key is the token itself: a retried job cannot email the same link
   // twice, while a genuinely new request has a new token and sends.
-  const [result] = await notify({
+  const notified = await notify({
     event: "admin_password_reset",
-    to: user.email,
+    to: { email: user.email },
     dedupeKey: `admin_password_reset:${await hashToken(token)}`,
     payload: {
       recipientName: user.name,
@@ -90,6 +90,7 @@ export async function requestPasswordReset(input: {
     },
   });
 
+  const [result] = notified.dispatched;
   const emailSent = result?.outcome.status === "sent";
 
   console.log(
@@ -98,6 +99,8 @@ export async function requestPasswordReset(input: {
       adminUserId: user.id,
       emailSent,
       notificationLogId: result?.logId,
+      // Recorded so a suppressed reset is explainable rather than mysterious.
+      decisions: notified.decisions,
     }),
   );
 

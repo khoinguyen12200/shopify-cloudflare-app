@@ -299,67 +299,134 @@ anyone who can POST the form obtain a reset link for any account.
 
 ## Notifications
 
-One funnel, so nothing can be sent without leaving a record.
+One funnel, so nothing can be sent without leaving a record — and one decision
+layer, so nothing can be sent that a recipient asked not to receive.
 
 ```
 app/notifications/
-├── types.ts               Message + SendOutcome as discriminated unions, Channel, Policy
-├── catalogue.ts           event metadata — CLIENT-SAFE, no renderers
-├── dispatch.server.ts     dedupe → policy → reserve → send → settle
-├── notify.server.ts       the one call sites use: notify({ event, to, payload })
-└── channels/email/        transport only
+├── types.ts                  Message + SendOutcome (discriminated unions), Channel, Policy
+├── catalogue.ts              event metadata — CLIENT-SAFE, no renderers
+├── dispatch.server.ts        dedupe → policy → reserve → send → settle
+├── notify.server.ts          the one call sites use
+├── eligibility/
+│   ├── types.ts                BlockReason, ChannelDecision, EligibilityRule
+│   ├── rules.ts                the rule chain — PURE
+│   ├── resolve.ts              runs the chain — PURE
+│   └── snapshot.server.ts      the only I/O in the layer
+└── channels/email/           transport only
 
-app/emails/                React Email — the templates
-├── tokens.ts              palette mirroring the site's SCSS (enforced by a test)
-├── layout.tsx             THE layout + P / Muted / Cta primitives
-├── render.ts              renderEmail() → { subject, html, text }
-├── registry.server.ts     event → builder, mapped so a missing one fails the build
-└── templates/             one file per notification
+app/emails/                   React Email — the templates
+├── tokens.ts                 palette mirroring the site's SCSS (test-enforced)
+├── layout.tsx                THE layout + P / Muted / Cta
+├── render.ts                 renderEmail() → { subject, html, text }
+├── registry.server.ts        event → builder, mapped so a missing one fails the build
+└── templates/                one file per notification
 ```
+
+### The patterns, and what each one buys
+
+| Pattern | Where | What it prevents |
+| ------- | ----- | ---------------- |
+| **Discriminated union** | `Message`, `SendOutcome`, `ChannelDecision` | One medium's fields leaking into another; `error` being readable on a success |
+| **Strategy + Registry** | `REGISTRY` / `HANDLERS` in `dispatch.server.ts` | `dispatch` changing every time a channel is added |
+| **Exhaustive mapped type** | `HANDLERS`, `BUILDERS`, `EVENTS` | A **silent no-send** — a missing renderer that throws nothing and delivers nothing |
+| **Chain of Responsibility** | `eligibility/rules.ts` | Four different questions collapsing into one `if` nobody can extend |
+| **Functional core / imperative shell** | pure `rules.ts` + `snapshot.server.ts` | N queries per decision; a gating layer that needs a database to test |
+| **Port & Adapter** | `NotificationSettingsRepo` behind the snapshot | The decision logic knowing about Drizzle |
+| **Idempotency guard** | `dedupeKey` in `dispatch` | A retried queue job notifying twice |
+| **Reserve → settle** | `NotificationLogRepo` | A crash mid-send leaving a delivered message with no row |
+| **Template method** | `EmailLayout` + `P` / `Muted` / `Cta` | Hand-built HTML drifting per template |
+
+### The four questions, kept separate
+
+"Is it enabled?" is really four questions that behave differently:
+
+| Question | Rule | Bypassable by an `essential` event? |
+| -------- | ---- | ---------------------------------- |
+| **Capability** — can this channel send at all? | `channel_unavailable` | **No** — essential cannot conjure a transport |
+| **Reachability** — do we hold an address? | `recipient_unreachable` | **No** |
+| **Consent** — has the recipient said no? | `recipient_opted_out` | **Never.** Legal, not a preference |
+| **Preference** — did the tenant select this channel? | `not_selected` | **Yes** — the recipient asked for this message |
+
+That last column is a `bypassableByEssential` boolean on each rule, so the
+exemption cannot be applied to the wrong question by accident. A password reset
+ignores a tenant's settings; it does **not** ignore an opt-out.
+
+Order is a product decision, not an optimisation: "email is not configured" is
+actionable, "this event is not selected for email" is baffling to someone who
+never set email up. So capability is reported first and the tenant's own choice
+last.
+
+### Preferences are a channel SELECTION, not a boolean
+
+"Email on every status change, SMS only when it is ready" is the normal shape of
+this requirement — and on a metered channel it is a cost decision too. So the
+stored unit is (scope, event, channel) → enabled.
+
+**Absence is the default, and absent is not empty.** No rows for an event means
+"no preference" and falls back to the event's declared channels — which is what
+lets this ship without changing any existing tenant's behaviour. An explicit row
+with `enabled = false` is different: the tenant turned that channel off, and
+`clearPreference()` exists precisely so you can return to unset rather than
+storing everything off.
+
+Stored **relationally, not as a JSON blob.** A blob needs a defensive parser, a
+"what if it is corrupt" policy, and a migration whenever its shape changes — and
+one hand-edited value can take down every send for that tenant.
+
+**Opt-outs are keyed on the ADDRESS, not on a customer id.** Someone who replies
+STOP or clicks unsubscribe is silencing that address, and it has to stay silenced
+on records created later. Keying on an entity means the same phone number keeps
+being texted from a different row — a bad experience, and for SMS a carrier
+violation. `scope: "global"` silences an address app-wide.
 
 ### Adding a notification
 
-1. Add the key to `NotificationEvent` in `notifications/types.ts`.
-2. Add a spec to `catalogue.ts` (audience, gate, channels).
-3. Add props + a builder, and register it in `emails/registry.server.ts`.
+1. Add the key to `NotificationEvent` (`notifications/types.ts`).
+2. Add a spec to `catalogue.ts` — audience, gate, channels.
+3. Add props and a builder, and register it in `emails/registry.server.ts`.
 
 Steps 2 and 3 are not optional: both objects are typed `Record<NotificationEvent, …>`,
-so the build fails until they exist. That matters because the failure mode being
-prevented is a **silent no-send** — with a plain lookup returning `undefined`, the
-notification simply never arrives and nothing throws.
-
-Then call it:
+so the build fails until they exist. The failure being prevented is a **silent
+no-send** — with a plain lookup returning `undefined`, the notification never
+arrives and nothing throws.
 
 ```ts
-await notify({
+const result = await notify({
   event: "admin_password_reset",
-  to: user.email,
+  to: { email: user.email },
   dedupeKey: `admin_password_reset:${hash}`,
   payload: { recipientName: user.name, resetUrl, expiresIn: "one hour" },
 });
+
+result.decisions; // every channel considered, with its verdict
 ```
+
+`decisions` is returned even for the channels that *were* sent, because "why
+didn't they get the text?" is the question this system is asked most, and a
+function that only reports what it sent cannot answer it.
 
 ### Adding a channel
 
-Add the message shape to the `Message` union, add a `Channel`, add a `REGISTRY`
-entry and a `HANDLERS` entry. `HANDLERS` is keyed `[K in Message["kind"]]`, so
-adding to the union fails the build until the handler exists. **`dispatch` itself
-never changes.**
+Add the message shape to `Message`, add a `Channel`, add a `REGISTRY` entry and a
+`HANDLERS` entry, and extend `availableChannels()`. `HANDLERS` is keyed
+`[K in Message["kind"]]`, so the build fails until the handler exists.
+**`dispatch` and the eligibility rules never change.**
 
 ### Templates are React, never HTML strings
 
 Every email composes the single `EmailLayout` plus its primitives. `renderEmail`
 produces the HTML **and** the plain-text part from the same JSX, so the two cannot
 drift and no message ships HTML-only (which essentially every spam filter
-penalises).
+penalises). The `Cta` shows the raw URL under the button: clients strip button
+backgrounds, and a button with no text URL is a dead word in the text part.
 
 **Why not SCSS here:** email clients strip `<style>` blocks and ignore external
 stylesheets and CSS custom properties — every rule has to be an inline attribute,
 so there is no stylesheet for SCSS to compile into. `emails/tokens.ts` holds the
 literal values instead, and `emails/tokens.test.ts` reads
 `app/styles/public/_tokens.scss` and **fails the build when an email colour no
-longer matches the site's**. So the two stay in step without pretending email can
-use a stylesheet.
+longer matches the site's**.
 
 ### What the log gives you
 
@@ -367,10 +434,10 @@ use a stylesheet.
 
 - **`refused` is distinct from `failed`** — "we declined to try" is not "we tried and it broke".
 - **`reasonCode` is its own column**, from a closed union, not a token prefixed onto prose. Prose gets improved; a parser over it breaks the first time someone does.
-- **`providerStatus` is separate from `status`** — ours means the API accepted it, the provider's means it believes it was delivered. Collapsing them makes "are our emails arriving?" unanswerable.
-- **The row is reserved BEFORE the send.** Writing it after means a crash in between leaves a message the recipient received with no row at all: invisible, and re-sent by the next retry.
+- **`providerStatus` is separate from `status`** — ours means the API accepted it, the provider's means it believes it was delivered.
+- **The row is reserved BEFORE the send**, so a crash in between is a visible stuck `queued` row rather than a delivered message with no record.
 - **Dedupe matches `queued` too**, so two workers cannot both notify while neither has settled.
-- **A retriable failure throws** (`RetryableNotificationError`) so a queue retries it; a permanent one returns normally. Returning a transient failure lets the job complete and the message is gone for good.
+- **A retriable failure throws** (`RetryableNotificationError`) so a queue retries it; a permanent one returns normally.
 
 ## Translations
 

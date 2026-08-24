@@ -1,4 +1,10 @@
-import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
+import {
+  sqliteTable,
+  text,
+  integer,
+  index,
+  primaryKey,
+} from "drizzle-orm/sqlite-core";
 
 /**
  * D1 schema. Regenerate migrations after every change:
@@ -175,4 +181,71 @@ export const notificationLogs = sqliteTable(
 );
 
 export type NotificationLog = typeof notificationLogs.$inferSelect;
+
+/**
+ * Which channels carry which event, per tenant.
+ *
+ * RELATIONAL, not a JSON blob. A blob needs a defensive parser, a "what if it is
+ * corrupt" policy, and a migration every time its shape changes — and a
+ * hand-edited or half-written value can take down every send for that tenant.
+ * A row per (scope, event, channel) removes that whole class of problem: the
+ * columns are typed, absence is meaningful, and a bad row affects one setting.
+ *
+ * ABSENCE IS THE DEFAULT. No rows for an event means "no preference", which
+ * falls back to the event's declared channels. That is what lets this ship
+ * without changing any existing tenant's behaviour. An explicit row with
+ * `enabled = false` is different: the tenant turned that channel off.
+ */
+export const notificationPreferences = sqliteTable(
+  "notification_preferences",
+  {
+    /**
+     * Who the preference belongs to. `"global"` is the app-wide default; a shop
+     * domain scopes it to one merchant. A plain string rather than a foreign key,
+     * so a preference can outlive the thing it is about.
+     */
+    scope: text("scope").notNull(),
+    /** A NotificationEvent — see notifications/types.ts. */
+    event: text("event").notNull(),
+    channel: text("channel").notNull(),
+    enabled: integer("enabled", { mode: "boolean" }).notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.scope, table.event, table.channel] }),
+    index("notification_preferences_scope_idx").on(table.scope),
+  ],
+);
+
+export type NotificationPreference = typeof notificationPreferences.$inferSelect;
+
+/**
+ * Recipients who asked not to be contacted on a channel.
+ *
+ * KEYED ON THE ADDRESS, not on a customer or ticket id. A person who replies
+ * STOP to a text, or clicks unsubscribe, is silencing that ADDRESS — and it must
+ * stay silenced everywhere it appears, including on records created later. Keying
+ * on an entity id means the same phone number keeps being texted from a different
+ * row, which is both a bad experience and, for SMS, a carrier violation.
+ *
+ * `scope` allows a per-tenant opt-out; `"global"` silences the address app-wide.
+ */
+export const notificationOptOuts = sqliteTable(
+  "notification_opt_outs",
+  {
+    scope: text("scope").notNull(),
+    channel: text("channel").notNull(),
+    /** Lower-cased email, or E.164 phone. Normalised on write. */
+    address: text("address").notNull(),
+    optedOutAt: integer("opted_out_at").notNull(),
+    /** How they opted out — "unsubscribe_link", "sms_stop", "staff", … */
+    source: text("source"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.scope, table.channel, table.address] }),
+    index("notification_opt_outs_address_idx").on(table.address),
+  ],
+);
+
+export type NotificationOptOut = typeof notificationOptOuts.$inferSelect;
 export type NotificationLogStatus = NotificationLog["status"];
