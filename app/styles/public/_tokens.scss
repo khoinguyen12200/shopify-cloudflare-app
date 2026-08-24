@@ -1,0 +1,168 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Design tokens for every PUBLIC page (landing, pricing, legal, support, 404…).
+//
+// Everything visual comes from here. A colour, size, or breakpoint written as a
+// literal inside a page is a bug: it will drift from every other page and it
+// cannot be themed. Add a token instead.
+//
+// Colours are CSS custom properties, not Sass variables, so light/dark can swap
+// them at runtime. Sizes and breakpoints are Sass variables, because they are
+// needed at compile time (media queries, `math` on spacing).
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Breakpoints ─────────────────────────────────────────────────────────────
+// Mobile-first: every query is `min-width`. Use the `mq()` mixin, never a raw
+// media query, so the set stays closed and consistent.
+$breakpoints: (
+  "sm": 40rem,
+  // 640px
+  "md": 48rem,
+  // 768px
+  "lg": 64rem,
+  // 1024px
+  "xl": 80rem,
+  // 1280px
+);
+
+// ── Spacing scale ───────────────────────────────────────────────────────────
+// One geometric-ish scale. Pick a step; never invent an in-between value.
+$space: (
+  "3xs": 0.25rem,
+  "2xs": 0.5rem,
+  "xs": 0.75rem,
+  "sm": 1rem,
+  "md": 1.5rem,
+  "lg": 2rem,
+  "xl": 3rem,
+  "2xl": 4rem,
+  "3xl": 6rem,
+  "4xl": 8rem,
+);
+
+// ── Layout widths ───────────────────────────────────────────────────────────
+$container-max: 72rem; // marketing / wide content
+$prose-max: 46rem; // long-form reading (legal, docs) — ~75ch
+$gutter: 1.5rem;
+
+// ── Type scale ──────────────────────────────────────────────────────────────
+$font-sans:
+  -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+  sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+$font-mono:
+  ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
+  monospace;
+
+$text: (
+  "xs": 0.75rem,
+  "sm": 0.875rem,
+  "base": 1rem,
+  "lg": 1.125rem,
+  "xl": 1.25rem,
+  "2xl": 1.5rem,
+  "3xl": 1.875rem,
+  "4xl": 2.25rem,
+  "5xl": 3rem,
+);
+
+$leading-tight: 1.15;
+$leading-snug: 1.35;
+$leading-normal: 1.6;
+
+$weight-normal: 400;
+$weight-medium: 500;
+$weight-semibold: 600;
+$weight-bold: 700;
+
+// ── Radii, borders, shadows, motion ─────────────────────────────────────────
+$radius-sm: 0.25rem;
+$radius-md: 0.5rem;
+$radius-lg: 0.75rem;
+$radius-xl: 1rem;
+$radius-full: 9999px;
+
+$border-width: 1px;
+
+$duration-fast: 120ms;
+$duration-base: 200ms;
+$easing: cubic-bezier(0.2, 0, 0.2, 1);
+
+// ── Colour tokens ───────────────────────────────────────────────────────────
+// Semantic names only. A page asks for `--color-text-muted`, never for "grey".
+// Dark mode is honoured two ways: the OS preference, and an explicit
+// `data-theme` on <html> so a toggle can override it in both directions.
+@mixin light-palette {
+  --color-bg: #ffffff;
+  --color-bg-subtle: #f7f7f8;
+  --color-bg-inset: #efeff1;
+  --color-surface: #ffffff;
+  --color-surface-raised: #ffffff;
+
+  --color-text: #18181b;
+  --color-text-muted: #5b5b66;
+  --color-text-subtle: #8a8a96;
+  --color-text-inverse: #ffffff;
+
+  --color-border: #e4e4e7;
+  --color-border-strong: #c9c9d1;
+
+  --color-accent: #4f46e5;
+  --color-accent-hover: #4338ca;
+  --color-accent-text: #ffffff;
+  --color-accent-subtle: #eef2ff;
+
+  --color-success: #15803d;
+  --color-warning: #b45309;
+  --color-warning-subtle: #fffbeb;
+  --color-danger: #b91c1c;
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 6%);
+  --shadow-md: 0 4px 12px rgb(0 0 0 / 8%);
+  --shadow-lg: 0 12px 32px rgb(0 0 0 / 10%);
+}
+
+@mixin dark-palette {
+  --color-bg: #0b0b0d;
+  --color-bg-subtle: #141417;
+  --color-bg-inset: #1c1c21;
+  --color-surface: #141417;
+  --color-surface-raised: #1c1c21;
+
+  --color-text: #ececef;
+  --color-text-muted: #a1a1ac;
+  --color-text-subtle: #71717f;
+  --color-text-inverse: #18181b;
+
+  --color-border: #29292e;
+  --color-border-strong: #3f3f46;
+
+  --color-accent: #818cf8;
+  --color-accent-hover: #a5b4fc;
+  --color-accent-text: #14141a;
+  --color-accent-subtle: #1e1b3a;
+
+  --color-success: #4ade80;
+  --color-warning: #fbbf24;
+  --color-warning-subtle: #2a1f05;
+  --color-danger: #f87171;
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 40%);
+  --shadow-md: 0 4px 12px rgb(0 0 0 / 50%);
+  --shadow-lg: 0 12px 32px rgb(0 0 0 / 60%);
+}
+
+// Light is the base, so every token has a value even with no media query and no
+// attribute. Dark is layered on twice: once for the OS preference (guarded so an
+// explicit light choice wins), once for an explicit dark choice.
+:root {
+  @include light-palette;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    @include dark-palette;
+  }
+}
+
+:root[data-theme="dark"] {
+  @include dark-palette;
+}

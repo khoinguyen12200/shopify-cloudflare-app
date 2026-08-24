@@ -42,6 +42,41 @@ The test for whether you got this right: **the core and every use case can be
 tested with no D1, no network, and no framework.** If a test needs those to
 exercise a decision, the decision is in the wrong ring.
 
+## Routes are a nested tree, never a flat list
+
+**`app/routes.ts` is explicit route config. Flat file-name routing
+(`flatRoutes`) is not used, and adding it back is a regression.**
+
+The URL structure and the file tree mirror each other:
+
+```
+/legal/privacy   →  app/routes/public/legal/privacy.tsx
+/auth/login      →  app/routes/auth/login.tsx
+/app             →  app/routes/app/_layout.tsx  +  app/routes/app/home.tsx
+```
+
+Never `routes/legal.privacy.tsx`, never `routes/webhooks.app.uninstalled.tsx`.
+A directory of dot-separated names stops being readable at about a dozen routes,
+you cannot tell a layout from a leaf, and every new file lands in the same flat
+pile.
+
+The rules:
+
+- **One folder per surface**, and every route lives under one:
+  `public/` (unauthenticated marketing, legal, support) · `app/` (embedded
+  Shopify admin) · `auth/` (OAuth) · `webhooks/`. A route that fits none of them
+  is a new surface — add a group in `routes.ts` and a folder for it.
+- **Nest to match the URL.** A path segment is a directory. `/webhooks/app/
+  uninstalled` is `webhooks/app/uninstalled.tsx`.
+- **`_layout.tsx` is the shell for its folder**, and the only thing that may
+  load that surface's stylesheet or run its shared auth check. The leading
+  underscore is what distinguishes it from a page at a glance.
+- **Route-local helpers sit beside their route**, suffixed, not hidden in a
+  sibling directory: `auth/login.tsx` + `auth/login-error.server.ts`.
+- **Never re-export a route from a barrel.** `routes.ts` is the only index.
+- Declaring a route in `routes.ts` and creating its file are one change. A file
+  with no entry is dead code; an entry with no file fails the build.
+
 ## Where files go
 
 `app/schemas/` Zod schemas (edge parsing only) · `app/components/`

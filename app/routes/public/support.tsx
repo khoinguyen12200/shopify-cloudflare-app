@@ -1,6 +1,5 @@
 import type { MetaFunction } from "react-router";
 import { APP_NAME, CONTACT_EMAIL } from "~/legal/content";
-import styles from "./legal/legal.module.css";
 
 export const meta: MetaFunction = () => [{ title: `Support · ${APP_NAME}` }];
 
@@ -15,12 +14,12 @@ export const meta: MetaFunction = () => [{ title: `Support · ${APP_NAME}` }];
  */
 export default function Support() {
   return (
-    <div className={styles.page}>
-      <main className={styles.content}>
+    <section className="section">
+      <div className="prose stack">
         <h1>Support</h1>
-        <p className={styles.updated}>Help with {APP_NAME}</p>
+        <p className="muted">Help with {APP_NAME}</p>
 
-        <p className={styles.todo}>
+        <p className="notice notice--warning">
           <strong>Placeholder.</strong> Replace with real, Shopify-specific help
           content: setup steps, common problems, and how to reach you. Reviewers
           check that this is genuine documentation, not a marketing page.
@@ -37,7 +36,7 @@ export default function Support() {
           Email <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>. TODO:
           state your support hours and response target.
         </p>
-      </main>
-    </div>
+      </div>
+    </section>
   );
 }

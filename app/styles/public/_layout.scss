@@ -1,0 +1,163 @@
+@use "tokens" as t;
+@use "mixins" as m;
+
+// Reusable layout primitives shared by every public page. A page composes these
+// instead of inventing its own container/section/grid each time.
+
+.container {
+  @include m.container;
+}
+
+/// Long-form reading width (legal, docs, changelog).
+.prose {
+  @include m.container(t.$prose-max);
+
+  > * + * {
+    margin-block-start: m.space("sm");
+  }
+
+  h2 {
+    margin-block-start: m.space("xl");
+  }
+
+  h3 {
+    margin-block-start: m.space("lg");
+  }
+
+  ul,
+  ol {
+    padding-inline-start: m.space("md");
+
+    > li + li {
+      margin-block-start: m.space("3xs");
+    }
+  }
+}
+
+/// Vertical page section. `--section-pad` lets a page tighten or loosen one
+/// instance without a new class.
+.section {
+  padding-block: var(--section-pad, #{m.space("xl")});
+
+  @include m.mq("md") {
+    padding-block: var(--section-pad-md, #{m.space("3xl")});
+  }
+}
+
+.section--subtle {
+  background: var(--color-bg-subtle);
+}
+
+.stack {
+  @include m.stack("sm");
+}
+
+.stack--lg {
+  @include m.stack("lg");
+}
+
+/// Horizontal row that wraps instead of overflowing on narrow screens.
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: m.space("2xs");
+}
+
+.grid {
+  @include m.auto-grid;
+}
+
+.card {
+  @include m.card;
+
+  padding: m.space("md");
+}
+
+.center {
+  text-align: center;
+}
+
+// ── Page shell ──────────────────────────────────────────────────────────────
+// Sticky footer without a fixed height: the main region grows to fill.
+.shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+.shell__main {
+  flex: 1;
+}
+
+.header {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 20;
+  background: color-mix(in srgb, var(--color-bg) 88%, transparent);
+  backdrop-filter: blur(8px);
+  border-block-end: t.$border-width solid var(--color-border);
+}
+
+.header__inner {
+  @include m.container;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: m.space("sm");
+  min-height: 3.5rem;
+}
+
+.header__brand {
+  font-weight: t.$weight-semibold;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.header__nav {
+  display: flex;
+  align-items: center;
+  gap: m.space("sm");
+  font-size: m.text("sm");
+}
+
+// Secondary nav links collapse on the smallest screens; the primary action and
+// brand always stay, so nothing essential is ever hidden.
+.header__nav-secondary {
+  display: none;
+
+  @include m.mq("sm") {
+    display: flex;
+    align-items: center;
+    gap: m.space("sm");
+  }
+}
+
+.footer {
+  border-block-start: t.$border-width solid var(--color-border);
+  padding-block: m.space("lg");
+  font-size: m.text("sm");
+  color: var(--color-text-muted);
+}
+
+.footer__inner {
+  @include m.container;
+
+  display: flex;
+  flex-direction: column;
+  gap: m.space("xs");
+
+  @include m.mq("sm") {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.footer__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: m.space("sm");
+}

@@ -1,0 +1,15 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// The stylesheet for every PUBLIC page — landing, pricing, legal, support, 404.
+//
+// Loaded once, by app/routes/public/_layout.tsx via `links()`, so it ships only
+// while a public route is matched and never reaches the embedded Polaris admin.
+//
+// Import order matters: tokens define the custom properties everything else
+// reads, the reset normalises, base styles bare elements, then the shared
+// layout and component classes.
+// ─────────────────────────────────────────────────────────────────────────────
+@use "tokens";
+@use "reset";
+@use "base";
+@use "layout";
+@use "components";

@@ -5,7 +5,7 @@ import { Form, useActionData, useLoaderData } from "react-router";
 
 import { createShopify } from "~/shopify.server";
 import { getEnv } from "~/request-context.server";
-import { loginErrorMessage } from "./error.server";
+import { loginErrorMessage } from "./login-error.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const env = getEnv();

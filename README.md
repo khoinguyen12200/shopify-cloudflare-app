@@ -13,9 +13,10 @@ link.)
 | Layer      | Choice                                                    |
 | ---------- | --------------------------------------------------------- |
 | Runtime    | Cloudflare Workers (workerd), via `@cloudflare/vite-plugin` |
-| Framework  | React Router 7 (SSR) + Vite 8                             |
+| Framework  | React Router 7 (SSR) + Vite 8, explicit nested route config |
 | Shopify    | `@shopify/shopify-app-react-router` v2, Admin API 2026-10  |
-| Admin UI   | Polaris **web components** + App Bridge                    |
+| Admin UI   | Polaris **web components** + App Bridge (embedded only)    |
+| Public UI  | SCSS design tokens (`app/styles/public/`), dark mode + a11y |
 | State      | D1 + Drizzle (`app/db/`, queried only in `app/models/`)   |
 | Sessions   | Workers KV (`app/session-storage.server.ts`)              |
 | Tests      | Vitest + `@cloudflare/vitest-pool-workers` (real workerd) |
@@ -137,13 +138,71 @@ a binding in one place and it is simply absent in the other.
 
 ```
 workers/app.ts                     Worker entry: fetch, and where scheduled/queue go
+app/routes.ts                      Explicit route config — the only route index
 app/request-context.server.ts      AsyncLocalStorage: getEnv() / getDb()
 app/shopify.server.ts              createShopify(env) — per-request, no module state
 app/session-storage.server.ts      KV-backed Shopify SessionStorage
 app/db/schema.ts                   Drizzle schema → ./drizzle migrations
 app/models/                        The ONLY layer that touches Drizzle; shop-scoped
-app/routes/                        flatRoutes
+app/services/                      Use cases (compliance webhook handlers live here)
+app/styles/public/                 SCSS tokens + base for every public page
 ```
+
+### Routes mirror the URL
+
+`app/routes.ts` is explicit config, not flat file-name routing. One folder per
+surface, nested to match the path:
+
+```
+app/routes/
+├── public/              unauthenticated — no Polaris, SCSS tokens
+│   ├── _layout.tsx        header, footer, skip link, loads public.scss
+│   ├── landing.tsx        /
+│   ├── pricing.tsx        /pricing
+│   ├── support.tsx        /support
+│   └── legal/
+│       ├── privacy.tsx    /legal/privacy   ← REQUIRED by the App Store listing
+│       └── terms.tsx      /legal/terms
+├── app/                 embedded Shopify admin — Polaris + App Bridge
+│   ├── _layout.tsx        /app        authenticates, provides AppProvider
+│   └── home.tsx           /app        index
+├── auth/
+│   ├── login.tsx          /auth/login
+│   └── callback.tsx       /auth/*     the library handles the rest
+└── webhooks/
+    ├── app/
+    │   ├── uninstalled.tsx      /webhooks/app/uninstalled
+    │   └── scopes-update.tsx    /webhooks/app/scopes_update
+    └── compliance.tsx           /webhooks/compliance
+```
+
+`_layout.tsx` is the shell for its folder and the only place that surface's
+stylesheet or shared auth check belongs.
+
+## Styling
+
+Two surfaces, two systems, and they must not mix:
+
+| Surface | Styled with |
+| ------- | ----------- |
+| Public pages | **SCSS** — `app/styles/public/` |
+| Embedded admin (`/app/**`) | **Polaris web components** + App Bridge |
+
+Each stylesheet is loaded by exactly one layout's `links()`, never from
+`root.tsx` — that is what stops the public CSS reset reaching the Polaris iframe.
+
+`app/styles/public/_tokens.scss` is the single source of colour, spacing, type,
+radius, shadow, breakpoint and motion. Colours are CSS custom properties (so
+light/dark swap at runtime); sizes and breakpoints are Sass maps reached through
+`m.space()`, `m.text()` and `m.mq()`, which fail the build on a typo. **A literal
+hex, spacing value, or breakpoint inside a page is a defect.**
+
+Dark mode is defined in three layers — full light palette on `:root`, the OS
+preference guarded so an explicit light choice wins, and an explicit
+`[data-theme="dark"]` override. `:focus-visible` rings, a skip link, reduced-motion
+handling, and logical properties for RTL are all in the base.
+
+Full contract: `.claude/rules/styling.md`.
 
 There is no `process.env` in workerd. Config arrives as the `env` binding, so
 routes read it with `getEnv()` and build the Shopify app with

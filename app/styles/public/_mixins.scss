@@ -1,0 +1,93 @@
+@use "sass:map";
+@use "tokens" as t;
+
+// ── Responsive ──────────────────────────────────────────────────────────────
+/// Mobile-first breakpoint. Always `min-width`, always from the closed set in
+/// _tokens.scss, so there is one ladder rather than ad-hoc pixel values.
+///   @include mq("md") { … }
+@mixin mq($name) {
+  $width: map.get(t.$breakpoints, $name);
+  @if $width == null {
+    @error "Unknown breakpoint `#{$name}`. Known: #{map.keys(t.$breakpoints)}.";
+  }
+  @media (min-width: $width) {
+    @content;
+  }
+}
+
+/// Respect a user's reduced-motion preference. Wrap every transition/animation.
+@mixin motion-safe {
+  @media (prefers-reduced-motion: no-preference) {
+    @content;
+  }
+}
+
+// ── Lookups (fail loudly on a typo instead of emitting nothing) ─────────────
+@function space($name) {
+  $v: map.get(t.$space, $name);
+  @if $v == null {
+    @error "Unknown space `#{$name}`. Known: #{map.keys(t.$space)}.";
+  }
+  @return $v;
+}
+
+@function text($name) {
+  $v: map.get(t.$text, $name);
+  @if $v == null {
+    @error "Unknown text size `#{$name}`. Known: #{map.keys(t.$text)}.";
+  }
+  @return $v;
+}
+
+// ── Layout ──────────────────────────────────────────────────────────────────
+/// Centred, gutter-padded column. `$max` lets a page opt into prose width.
+@mixin container($max: t.$container-max) {
+  width: 100%;
+  max-width: $max;
+  margin-inline: auto;
+  padding-inline: t.$gutter;
+}
+
+/// Vertical rhythm between direct children — the flow utility most pages need.
+@mixin stack($gap: "sm") {
+  display: flex;
+  flex-direction: column;
+  gap: space($gap);
+}
+
+/// Responsive grid that never needs a breakpoint: columns fit themselves.
+@mixin auto-grid($min: 16rem, $gap: "md") {
+  display: grid;
+  gap: space($gap);
+  grid-template-columns: repeat(auto-fit, minmax(min($min, 100%), 1fr));
+}
+
+// ── Accessibility ───────────────────────────────────────────────────────────
+/// Visible only to screen readers.
+@mixin visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px
+;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/// One focus treatment for the whole public site. Uses :focus-visible so a mouse
+/// click never shows a ring but a keyboard user always does.
+@mixin focus-ring($offset: 2px) {
+  outline: 2px solid var(--color-accent);
+  outline-offset: $offset;
+}
+
+// ── Surfaces ────────────────────────────────────────────────────────────────
+@mixin card {
+  background: var(--color-surface);
+  border: t.$border-width solid var(--color-border);
+  border-radius: t.$radius-lg;
+  box-shadow: var(--shadow-sm);
+}

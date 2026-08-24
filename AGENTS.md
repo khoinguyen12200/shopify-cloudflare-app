@@ -83,6 +83,16 @@ allowed children before using it** — every time you reach for one you have not
 verified this session. A component that renders is not a component used
 correctly.
 
+**Routes are a nested tree.** `app/routes.ts` is explicit config and the file
+tree mirrors the URL — `/legal/privacy` is `routes/public/legal/privacy.tsx`,
+never `routes/legal.privacy.tsx`. One folder per surface: `public/`, `app/`,
+`auth/`, `webhooks/`.
+
+**Public pages are SCSS with tokens; the embedded admin is Polaris.** Two
+surfaces, two systems, each stylesheet loaded by exactly one layout's `links()`
+so neither leaks into the other. Every colour, size and breakpoint comes from
+`app/styles/public/_tokens.scss` — @.claude/rules/styling.md.
+
 **Non-trivial design goes through `impeccable:impeccable`** — new screens,
 layout or IA decisions, empty/error/loading states, flows, dashboards,
 redesigns, "make this clearer". Polaris decides which components exist;
@@ -128,6 +138,7 @@ shops, so a module-scope cache is a cross-tenant leak.
 @.claude/rules/design-patterns.md
 @.claude/rules/code-craft.md
 @.claude/rules/data.md
+@.claude/rules/styling.md
 
 # Cloudflare — the infra invariants
 

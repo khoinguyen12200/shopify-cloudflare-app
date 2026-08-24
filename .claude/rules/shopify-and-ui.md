@@ -74,6 +74,11 @@ All merchant-facing admin UI in this app is **Polaris**. Not Tailwind, not
 hand-rolled CSS, not a component library you like better, not raw `<div>`s
 styled to look like Polaris.
 
+This applies to the **embedded admin** (`/app/**`) and to extensions. The
+**public** pages — landing, pricing, legal, support — are a different surface:
+they are not embedded, have no App Bridge, and are styled with SCSS tokens per
+`@rules/styling.md`. Do not bring Polaris there, and do not bring SCSS here.
+
 - Embedded app pages (`app/routes/**`): Polaris **web components** (`s-page`,
   `s-section`, `s-button`, …) + App Bridge, via `AppProvider` from
   `@shopify/shopify-app-react-router/react`. `@shopify/polaris-types` supplies

@@ -1,0 +1,159 @@
+@use "tokens" as t;
+@use "mixins" as m;
+
+// The handful of small components every public page needs. Anything more
+// specific belongs in that page's own module.
+
+// ── Buttons ─────────────────────────────────────────────────────────────────
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: m.space("3xs");
+  padding: m.space("2xs") m.space("sm");
+  border-radius: t.$radius-md;
+  font-size: m.text("sm");
+  font-weight: t.$weight-medium;
+  text-decoration: none;
+  border: t.$border-width solid transparent;
+  // Never smaller than the 44px touch target guidance.
+  min-height: 2.75rem;
+
+  @include m.motion-safe {
+    transition:
+      background-color t.$duration-fast t.$easing,
+      border-color t.$duration-fast t.$easing;
+  }
+
+  &:focus-visible {
+    @include m.focus-ring;
+  }
+
+  &[aria-disabled="true"],
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+}
+
+.btn--primary {
+  background: var(--color-accent);
+  color: var(--color-accent-text);
+
+  &:hover {
+    background: var(--color-accent-hover);
+    color: var(--color-accent-text);
+  }
+}
+
+.btn--secondary {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+
+  &:hover {
+    background: var(--color-bg-subtle);
+    color: var(--color-text);
+  }
+}
+
+.btn--ghost {
+  color: var(--color-text);
+
+  &:hover {
+    background: var(--color-bg-subtle);
+    color: var(--color-text);
+  }
+}
+
+// ── Form fields ─────────────────────────────────────────────────────────────
+.field {
+  @include m.stack("3xs");
+}
+
+.field__label {
+  font-size: m.text("sm");
+  font-weight: t.$weight-medium;
+}
+
+.field__input {
+  width: 100%;
+  padding: m.space("2xs") m.space("xs");
+  min-height: 2.75rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: t.$border-width solid var(--color-border-strong);
+  border-radius: t.$radius-md;
+
+  &::placeholder {
+    color: var(--color-text-subtle);
+  }
+
+  &:focus-visible {
+    @include m.focus-ring(0);
+    border-color: var(--color-accent);
+  }
+
+  &[aria-invalid="true"] {
+    border-color: var(--color-danger);
+  }
+}
+
+.field__hint {
+  font-size: m.text("xs");
+  color: var(--color-text-muted);
+}
+
+.field__error {
+  font-size: m.text("xs");
+  color: var(--color-danger);
+}
+
+// ── Notices ─────────────────────────────────────────────────────────────────
+.notice {
+  padding: m.space("xs") m.space("sm");
+  border-radius: t.$radius-md;
+  font-size: m.text("sm");
+  border-inline-start: 3px solid var(--color-border-strong);
+  background: var(--color-bg-subtle);
+}
+
+.notice--warning {
+  background: var(--color-warning-subtle);
+  border-inline-start-color: var(--color-warning);
+  color: var(--color-warning);
+}
+
+.notice--danger {
+  border-inline-start-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+// ── Misc ────────────────────────────────────────────────────────────────────
+.eyebrow {
+  font-size: m.text("xs");
+  font-weight: t.$weight-semibold;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.lead {
+  font-size: clamp(m.text("base"), 0.95rem + 0.4vw, m.text("xl"));
+  color: var(--color-text-muted);
+}
+
+.muted {
+  color: var(--color-text-muted);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem m.space("2xs");
+  border-radius: t.$radius-full;
+  font-size: m.text("xs");
+  font-weight: t.$weight-medium;
+  background: var(--color-accent-subtle);
+  color: var(--color-accent);
+}

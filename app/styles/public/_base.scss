@@ -1,0 +1,137 @@
+@use "tokens" as t;
+@use "mixins" as m;
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: t.$font-sans;
+  font-size: m.text("base");
+  line-height: t.$leading-normal;
+}
+
+// ── Headings ────────────────────────────────────────────────────────────────
+// Fluid, so a phone and a 27" monitor both read well with no breakpoints.
+h1,
+h2,
+h3,
+h4 {
+  line-height: t.$leading-tight;
+  letter-spacing: -0.02em;
+  font-weight: t.$weight-semibold;
+  text-wrap: balance;
+}
+
+h1 {
+  font-size: clamp(m.text("3xl"), 1.5rem + 2.5vw, m.text("5xl"));
+}
+
+h2 {
+  font-size: clamp(m.text("xl"), 1.1rem + 1.2vw, m.text("3xl"));
+}
+
+h3 {
+  font-size: m.text("xl");
+}
+
+h4 {
+  font-size: m.text("lg");
+}
+
+// ── Text ────────────────────────────────────────────────────────────────────
+p {
+  text-wrap: pretty;
+}
+
+a {
+  color: var(--color-accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.15em;
+  border-radius: t.$radius-sm;
+
+  @include m.motion-safe {
+    transition: color t.$duration-fast t.$easing;
+  }
+
+  &:hover {
+    color: var(--color-accent-hover);
+  }
+
+  &:focus-visible {
+    @include m.focus-ring;
+  }
+}
+
+strong,
+b {
+  font-weight: t.$weight-semibold;
+}
+
+small {
+  font-size: m.text("sm");
+}
+
+code,
+kbd,
+samp {
+  font-family: t.$font-mono;
+  font-size: 0.9em;
+  background: var(--color-bg-inset);
+  padding: 0.15em 0.35em;
+  border-radius: t.$radius-sm;
+}
+
+pre {
+  font-family: t.$font-mono;
+  font-size: m.text("sm");
+  background: var(--color-bg-inset);
+  border-radius: t.$radius-md;
+  padding: m.space("sm");
+  // Wide code scrolls itself; the page body must never scroll sideways.
+  overflow-x: auto;
+}
+
+hr {
+  border: 0;
+  border-block-start: t.$border-width solid var(--color-border);
+  margin-block: m.space("xl");
+}
+
+// ── Tables ──────────────────────────────────────────────────────────────────
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: m.text("sm");
+}
+
+th,
+td {
+  text-align: start;
+  padding: m.space("2xs") m.space("xs");
+  border-block-end: t.$border-width solid var(--color-border);
+}
+
+th {
+  font-weight: t.$weight-semibold;
+}
+
+// ── Skip link ───────────────────────────────────────────────────────────────
+// First focusable element on every public page; visible only once focused.
+.skip-link {
+  @include m.visually-hidden;
+
+  &:focus-visible {
+    position: fixed;
+    inset-block-start: m.space("2xs");
+    inset-inline-start: m.space("2xs");
+    z-index: 100;
+    width: auto;
+    height: auto;
+    clip-path: none;
+    margin: 0;
+    padding: m.space("2xs") m.space("sm");
+    background: var(--color-surface);
+    border-radius: t.$radius-md;
+    box-shadow: var(--shadow-md);
+    @include m.focus-ring;
+  }
+}

@@ -7,7 +7,6 @@ import {
   LAST_UPDATED,
   PRIVACY_SECTIONS,
 } from "~/legal/content";
-import styles from "./legal/legal.module.css";
 
 export const meta: MetaFunction = () => [
   { title: `Privacy policy · ${APP_NAME}` },
@@ -25,11 +24,12 @@ export const meta: MetaFunction = () => [
  */
 export default function PrivacyPolicy() {
   return (
-    <>
+    <section className="section">
+      <div className="prose stack">
       <h1>Privacy policy</h1>
-      <p className={styles.updated}>Last updated: {LAST_UPDATED}</p>
+      <p className="muted">Last updated: {LAST_UPDATED}</p>
 
-      <p className={styles.todo}>
+      <p className="notice notice--warning">
         <strong>This is a scaffold, not a policy.</strong> Every section below is
         a placeholder. Replace them before submitting to the App Store — shipping
         this text as-is is a false statement about how you handle personal data.
@@ -48,7 +48,7 @@ export default function PrivacyPolicy() {
         </section>
       ))}
 
-      <div className={styles.contact}>
+      <div className="card stack">
         <p>
           <strong>Contact</strong>
           <br />
@@ -59,6 +59,7 @@ export default function PrivacyPolicy() {
           <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
         </p>
       </div>
-    </>
+      </div>
+    </section>
   );
 }

@@ -6,7 +6,6 @@ import {
   LAST_UPDATED,
   TERMS_SECTIONS,
 } from "~/legal/content";
-import styles from "./legal/legal.module.css";
 
 export const meta: MetaFunction = () => [
   { title: `Terms of service · ${APP_NAME}` },
@@ -14,11 +13,12 @@ export const meta: MetaFunction = () => [
 
 export default function TermsOfService() {
   return (
-    <>
+    <section className="section">
+      <div className="prose stack">
       <h1>Terms of service</h1>
-      <p className={styles.updated}>Last updated: {LAST_UPDATED}</p>
+      <p className="muted">Last updated: {LAST_UPDATED}</p>
 
-      <p className={styles.todo}>
+      <p className="notice notice--warning">
         <strong>Placeholder.</strong> Replace every section, and have a lawyer
         review the liability, warranty, and governing-law wording.
       </p>
@@ -34,11 +34,12 @@ export default function TermsOfService() {
         </section>
       ))}
 
-      <div className={styles.contact}>
+      <div className="card stack">
         <p>
           Questions: <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
         </p>
       </div>
-    </>
+      </div>
+    </section>
   );
 }
