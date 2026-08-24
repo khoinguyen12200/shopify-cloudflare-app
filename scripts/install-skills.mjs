@@ -1,14 +1,22 @@
 #!/usr/bin/env node
 // Install every AI-agent skill this project depends on, for every agent host.
 //
-//   npm run install:skill              # install/refresh from the upstream sources
-//   npm run install:skill -- --locked  # restore the exact versions in skills-lock.json
+//   npm run install:skill                    # detaches, returns immediately
+//   npm run install:skill -- --wait          # block until done (use this in CI)
+//   npm run install:skill -- --locked        # exact versions from skills-lock.json
 //   npm run install:skill -- --agent claude-code,codex
+//   npm run install:skill -- --jobs 1        # serialize the sources
 //
 // WHY THIS EXISTS
 // `skills-lock.json` names the skill packages this repo uses. Without this
 // script you would have to find each source repo and install each skill by hand,
 // per agent host. This reads the lockfile and does all of it in one pass.
+//
+// WHY IT RUNS IN THE BACKGROUND BY DEFAULT
+// It downloads ~90 MB and takes minutes. Nothing else in the project needs it to
+// finish — skills are agent context, not a build input — so blocking a fresh
+// clone on it is pure waiting. It detaches, streams to a log, and you carry on.
+// CI must pass `--wait`, since a detached child dies with the runner.
 //
 // HOW SKILLS REACH AN AGENT
 // `.agents/skills/` is the universal store, and most hosts (Codex, opencode,
@@ -19,45 +27,81 @@
 // All of those paths are gitignored, because the store is large and fully
 // reproducible from `skills-lock.json`. That is the whole reason this command
 // exists: clone, `npm install`, `npm run install:skill`, and the skills are back.
-import { spawnSync } from "node:child_process";
-import { readFileSync, existsSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { readFileSync, writeFileSync, existsSync, openSync, closeSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const lockPath = join(repoRoot, "skills-lock.json");
+const logPath = join(repoRoot, ".skills-install.log");
+const selfPath = fileURLToPath(import.meta.url);
 
 const argv = process.argv.slice(2);
-const locked = argv.includes("--locked");
+const has = (flag) => argv.includes(flag);
+const locked = has("--locked");
+const wait = has("--wait") || has("--foreground");
 
-/** `--agent a,b` or `--agent=a,b`; defaults to every supported host. */
-function agentArg() {
-  const i = argv.findIndex((a) => a === "--agent" || a.startsWith("--agent="));
-  if (i === -1) return "*";
+/** `--x v` or `--x=v`. */
+function flagValue(name, fallback) {
+  const i = argv.findIndex((a) => a === `--${name}` || a.startsWith(`--${name}=`));
+  if (i === -1) return fallback;
   const inline = argv[i].split("=")[1];
-  return inline || argv[i + 1] || "*";
+  return inline || argv[i + 1] || fallback;
 }
 
-/** Run the project's pinned `skills` CLI. Returns the exit code. */
-function skills(args) {
-  const bin = join(repoRoot, "node_modules", ".bin", "skills");
-  if (!existsSync(bin)) {
-    console.error(
-      "The `skills` CLI is missing. Run `npm install` first — it is a devDependency.",
-    );
-    process.exit(1);
-  }
-  console.log(`\n$ skills ${args.join(" ")}`);
-  const { status } = spawnSync(bin, args, { stdio: "inherit", shell: false });
-  return status ?? 1;
+const agents = flagValue("agent", "*");
+// 0 (the default) means "one job per source" — i.e. all of them at once.
+// Math.max(1, …) here would silently force serial execution.
+const jobsRaw = Number(flagValue("jobs", "0"));
+const jobs = Number.isFinite(jobsRaw) && jobsRaw > 0 ? Math.floor(jobsRaw) : 0;
+
+const skillsBin = join(
+  repoRoot,
+  "node_modules",
+  ".bin",
+  process.platform === "win32" ? "skills.cmd" : "skills",
+);
+if (!existsSync(skillsBin)) {
+  console.error(
+    "The `skills` CLI is missing. Run `npm install` first — it is a devDependency.",
+  );
+  process.exit(1);
 }
 
+// ── Detach, unless asked to wait ────────────────────────────────────────────
+// Re-run this same script with --wait in a detached child whose output goes to
+// the log, then return control immediately.
+if (!wait) {
+  const fd = openSync(logPath, "w");
+  const child = spawn(process.execPath, [selfPath, ...argv, "--wait"], {
+    cwd: repoRoot,
+    detached: true,
+    stdio: ["ignore", fd, fd],
+  });
+  child.unref();
+  closeSync(fd);
+  const log = relative(repoRoot, logPath) || logPath;
+  console.log(`Installing AI-agent skills in the background (pid ${child.pid}).`);
+  console.log(`  Progress:  tail -f ${log}`);
+  console.log(`  Verify:    npx skills list`);
+  console.log(
+    "\nNothing else needs this to finish — carry on with `npm run dev`.\n" +
+      "In CI, pass --wait so the job does not exit before it completes.",
+  );
+  process.exit(0);
+}
+
+// ── From here on we are the worker ─────────────────────────────────────────
 if (locked) {
   // Exact versions from skills-lock.json. NOTE: this restores the universal
   // `.agents/skills/` store but does NOT create the Claude Code / Eve symlinks
-  // — the CLI has no lockfile-aware agent-linking step today. Run without
-  // --locked if you need those.
-  process.exit(skills(["experimental_install"]));
+  // — the CLI has no lockfile-aware agent-linking step today.
+  const { status } = spawnSync(skillsBin, ["experimental_install"], {
+    cwd: repoRoot,
+    stdio: "inherit",
+  });
+  process.exit(status ?? 1);
 }
 
 if (!existsSync(lockPath)) {
@@ -67,9 +111,11 @@ if (!existsSync(lockPath)) {
   process.exit(1);
 }
 
-let lock;
+const readLock = () => JSON.parse(readFileSync(lockPath, "utf8"));
+
+let snapshot;
 try {
-  lock = JSON.parse(readFileSync(lockPath, "utf8"));
+  snapshot = readLock();
 } catch (err) {
   console.error(`skills-lock.json is not valid JSON: ${err.message}`);
   process.exit(1);
@@ -79,7 +125,7 @@ try {
 // individually, but they are installed a package at a time.
 const sources = [
   ...new Set(
-    Object.values(lock.skills ?? {})
+    Object.values(snapshot.skills ?? {})
       .filter((s) => s.sourceType === "github" && s.source)
       .map((s) => s.source),
   ),
@@ -90,27 +136,85 @@ if (sources.length === 0) {
   process.exit(1);
 }
 
-const agents = agentArg();
+/**
+ * Run one `skills add`, buffering its output so parallel runs do not interleave
+ * into noise. The buffer is printed as one block when the source finishes.
+ */
+function installSource(source) {
+  return new Promise((resolve) => {
+    const args = ["add", source, "--skill", "*", "--agent", agents, "-y"];
+    const child = spawn(skillsBin, args, {
+      cwd: repoRoot,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let out = "";
+    child.stdout.on("data", (d) => (out += d));
+    child.stderr.on("data", (d) => (out += d));
+    child.on("error", (err) => resolve({ source, code: 1, out: String(err) }));
+    child.on("close", (code) => resolve({ source, code: code ?? 1, out }));
+  });
+}
+
+/** Run `tasks` with at most `limit` in flight. */
+async function withConcurrency(items, limit, run) {
+  const results = [];
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await run(items[i]);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+const limit = jobs || sources.length;
 console.log(
-  `Installing skills from ${sources.length} source(s) for agent(s) "${agents}":`,
+  `Installing skills from ${sources.length} source(s) for agent(s) "${agents}" ` +
+    `(${limit} in parallel):`,
 );
 for (const s of sources) console.log(`  • ${s}`);
 
-let failed = 0;
-for (const source of sources) {
-  // --skill '*' = every skill in the repo; -y = never prompt (this runs in CI too).
-  const code = skills(["add", source, "--skill", "*", "--agent", agents, "-y"]);
-  if (code !== 0) {
-    failed++;
-    console.error(`\n✗ ${source} failed (exit ${code})`);
+const started = Date.now();
+const results = await withConcurrency(sources, limit, async (source) => {
+  console.log(`\n─── started: ${source}`);
+  const r = await installSource(source);
+  console.log(`\n─── finished: ${source} (exit ${r.code})\n${r.out}`);
+  return r;
+});
+
+// Parallel `skills add` runs each read-modify-write skills-lock.json, so the
+// last writer can drop entries the others added. Union the pre-run snapshot back
+// in — this command only ever adds skills, so a union cannot resurrect anything
+// that was deliberately removed.
+try {
+  const after = readLock();
+  const merged = { ...after, skills: { ...(snapshot.skills ?? {}), ...(after.skills ?? {}) } };
+  const restored = Object.keys(merged.skills).length - Object.keys(after.skills ?? {}).length;
+  if (restored > 0) {
+    writeFileSync(lockPath, `${JSON.stringify(merged, null, 2)}\n`);
+    console.log(
+      `\nRe-merged ${restored} lockfile entr${restored === 1 ? "y" : "ies"} ` +
+        "dropped by concurrent writes.",
+    );
   }
+} catch (err) {
+  console.error(`\nCould not reconcile skills-lock.json: ${err.message}`);
 }
 
-if (failed > 0) {
-  console.error(`\n${failed} of ${sources.length} source(s) failed to install.`);
+const failed = results.filter((r) => r.code !== 0);
+const seconds = Math.round((Date.now() - started) / 1000);
+
+if (failed.length > 0) {
+  console.error(
+    `\n✗ ${failed.length} of ${sources.length} source(s) failed after ${seconds}s: ` +
+      failed.map((r) => r.source).join(", "),
+  );
   process.exit(1);
 }
 
 console.log(
-  "\n✓ Skills installed. Review them before use — they run with full agent permissions.",
+  `\n✓ Skills installed in ${seconds}s. Review them before use — they run with ` +
+    "full agent permissions.",
 );

@@ -29,6 +29,15 @@ api_version = "2026-10"
   topics = [ "app/scopes_update" ]
   uri = "/webhooks/app/scopes_update"
 
+  # MANDATORY for every app distributed through the Shopify App Store — all
+  # three topics, whether or not the app stores personal data. Missing or
+  # non-functioning compliance webhooks are an automatic review rejection.
+  # An invalid HMAC must return 401; app/routes/webhooks.compliance.tsx does.
+  # https://shopify.dev/docs/apps/build/compliance/privacy-law-compliance
+  [[webhooks.subscriptions]]
+  compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
+  uri = "/webhooks/compliance"
+
 [access_scopes]
 # Mirror shopify.app.toml. `shopify app config link` empties this when it links
 # a fresh app; `npm run dev` pushes it to the dev app on the next OAuth grant.

@@ -34,4 +34,20 @@ export class ShopRepo {
       .set({ uninstalledAt: now })
       .where(eq(shops.shop, shop));
   }
+
+  /**
+   * Erase everything stored for this shop, for the `shop/redact` compliance
+   * webhook. Returns how many rows went, so the handler can log a real number
+   * instead of claiming success blindly.
+   *
+   * Add a delete here for EVERY shop-scoped table you introduce. A table you
+   * forget is data you told Shopify you had erased.
+   */
+  async purge(shop: string): Promise<number> {
+    const deleted = await getDb()
+      .delete(shops)
+      .where(eq(shops.shop, shop))
+      .returning({ shop: shops.shop });
+    return deleted.length;
+  }
 }

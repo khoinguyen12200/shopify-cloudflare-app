@@ -6,6 +6,7 @@
 .agents/
 .claude/skills/
 /agent/
+.skills-install.log
 
 # Dependencies & build output
 node_modules/
