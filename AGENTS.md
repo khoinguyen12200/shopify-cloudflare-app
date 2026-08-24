@@ -78,10 +78,19 @@ your recollection, the lookup wins.
 
 **Admin UI is Polaris.** Polaris web components + App Bridge for embedded app
 pages, Polaris web components for extensions. No Tailwind, no hand-rolled CSS,
-no styled `<div>`s imitating Polaris. **Look up each element's real props and
-allowed children before using it** — every time you reach for one you have not
-verified this session. A component that renders is not a component used
-correctly.
+no styled `<div>`s imitating Polaris. **Look up each element's real props,
+allowed children, and slot names before using it** — every time you reach for one
+you have not verified this session. A component that renders is not a component
+used correctly.
+
+**An admin page is assembled from mechanisms Shopify already owns**, and each job
+has one owner: `s-page` for the frame and width, a link in `breadcrumb-actions`
+for back navigation, the **save bar** for saving, the **Resource Picker** for
+choosing products and collections, `s-section`/`s-stack`/`s-grid` for spacing and
+columns. Start from the published **template** for the screen (`Details`,
+`Index`, `Settings`, `Homepage`) rather than assembling one from components.
+Spacing is a property of the right container, never something you add.
+@.claude/rules/polaris-app-home.md
 
 **Routes are a nested tree.** `app/routes.ts` is explicit config and the file
 tree mirrors the URL — `/legal/privacy` is `routes/public/legal/privacy.tsx`,
@@ -116,6 +125,10 @@ impeccable decides hierarchy, density, flow, states, and copy. Use both.
 
 Full contract, the skill-to-task table, and the red flags:
 @.claude/rules/shopify-and-ui.md
+
+How to build an admin page — the lookup procedure, the element inventory, and
+which mechanism owns which job:
+@.claude/rules/polaris-app-home.md
 
 Findings worth recording so nobody re-derives them:
 @.claude/rules/shopify-api-invariants.md

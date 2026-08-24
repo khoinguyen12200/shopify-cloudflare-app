@@ -92,8 +92,11 @@ because it did in an older template; if the JSX type is missing, the element is
 not available to you and the skill will say what replaced it.
 
 **Before using any Polaris element, know its actual API.** Look up the
-component's real props, allowed children, and layout semantics via the skill
-first — every time you reach for one you have not verified in this session.
+component's real props, allowed children, slot names, and layout semantics via
+the skill first — every time you reach for one you have not verified in this
+session. `@rules/polaris-app-home.md` is the procedure: the three lookups, the
+element inventory for this install, the job-to-mechanism map, and the anatomy of
+a page.
 Guessing a prop name, nesting components in a combination Polaris does not
 support, or reaching for CSS because a prop "should" exist are all rule
 violations. A component that renders is not a component used correctly.
