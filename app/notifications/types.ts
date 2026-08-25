@@ -14,7 +14,12 @@
  * Add an event: add it here, add a spec to `catalogue.ts`, add a renderer. The
  * build fails until all three exist.
  */
-export type NotificationEvent = "admin_password_reset";
+export type NotificationEvent =
+  | "admin_password_reset"
+  /** A merchant opened a ticket, or replied to one → tell the staff on duty. */
+  | "support_merchant_activity"
+  /** Staff answered → tell the merchant, at the address they gave us. */
+  | "support_staff_reply";
 
 // ─── Messages ────────────────────────────────────────────────────────────────
 

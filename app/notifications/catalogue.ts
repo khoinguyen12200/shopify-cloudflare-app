@@ -52,6 +52,25 @@ export const EVENTS: Record<NotificationEvent, EventSpec> = {
     channels: ["email"],
     description: "A link to choose a new password for the internal console.",
   },
+
+  support_merchant_activity: {
+    audience: "staff",
+    // The caller decides: only staff whose `notifySupport` is on and whose
+    // account is active are asked for. Making this "preference" would put the
+    // decision in a stored per-recipient row that duplicates that column.
+    gate: "caller_gated",
+    channels: ["email"],
+    description: "A merchant opened or replied to a support ticket.",
+  },
+
+  support_staff_reply: {
+    audience: "merchant",
+    // Essential: the merchant asked us a question and this is the answer. A
+    // preference must never be able to swallow a reply they are waiting for.
+    gate: "essential",
+    channels: ["email"],
+    description: "We replied to a support ticket the merchant opened.",
+  },
 };
 
 /** Does this event have a renderer for this channel? */

@@ -7,6 +7,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 import { money, nullableMoney } from "./columns";
+import { SUPPORT_CATEGORIES } from "~/support/categories";
 
 /**
  * D1 schema. Regenerate migrations after every change:
@@ -350,9 +351,9 @@ export const supportTickets = sqliteTable(
       .$type<string[]>()
       .notNull()
       .default([]),
-    category: text("category", {
-      enum: ["bug", "feature_request", "billing", "question"],
-    }).notNull(),
+    // The one list, shared with the picker and the labels, so a new category
+    // cannot exist in the UI and be rejected by the column (or vice versa).
+    category: text("category", { enum: SUPPORT_CATEGORIES }).notNull(),
     subject: text("subject").notNull(),
     /**
      * There is deliberately NO `status` column.
@@ -396,7 +397,6 @@ export const supportTickets = sqliteTable(
 
 export type SupportTicket = typeof supportTickets.$inferSelect;
 export type NewSupportTicket = typeof supportTickets.$inferInsert;
-export type SupportCategory = SupportTicket["category"];
 
 /**
  * One message in a thread. `authorName` is a snapshot for the same reason the

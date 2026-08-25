@@ -2,6 +2,8 @@ import type { PayloadByEvent } from "~/notifications/payloads";
 import type { NotificationEvent } from "~/notifications/types";
 import type { RenderedEmail } from "./render";
 import { adminPasswordResetEmail } from "./templates/admin-password-reset";
+import { supportMerchantActivityEmail } from "./templates/support-merchant-activity";
+import { supportStaffReplyEmail } from "./templates/support-staff-reply";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EVENT → EMAIL BUILDER.
@@ -23,6 +25,8 @@ type EmailBuilder<E extends NotificationEvent> = (
 
 const BUILDERS: { [E in NotificationEvent]: EmailBuilder<E> } = {
   admin_password_reset: adminPasswordResetEmail,
+  support_merchant_activity: supportMerchantActivityEmail,
+  support_staff_reply: supportStaffReplyEmail,
 };
 
 /** Build one event's email. Each builder receives exactly ITS event's payload. */

@@ -35,6 +35,32 @@ export interface AdminPasswordResetPayload extends BasePayload {
   expiresIn: string;
 }
 
+/** Shared by both support notifications: the same thread, two audiences. */
+interface SupportPayload extends BasePayload {
+  /** The merchant's own words for what this is about. */
+  subject: string;
+  /**
+   * A short excerpt of the new message, already truncated by the caller.
+   * Renderers do not trim: where to cut is a content decision, and doing it in
+   * the template means every channel invents its own length.
+   */
+  excerpt: string;
+  /** Where to read and answer it. Built by the caller — templates never make links. */
+  threadUrl: string;
+}
+
+export interface SupportMerchantActivityPayload extends SupportPayload {
+  /** Which shop, so a staff inbox is triageable from the subject line alone. */
+  shopName: string;
+  /** Opened vs replied — the same facts, but a different thing to do about it. */
+  isNew: boolean;
+}
+
+export interface SupportStaffReplyPayload extends SupportPayload {
+  /** Who answered, so the merchant sees a person rather than an app. */
+  staffName: string;
+}
+
 /**
  * Event → payload.
  *
@@ -43,4 +69,6 @@ export interface AdminPasswordResetPayload extends BasePayload {
  */
 export interface PayloadByEvent extends Record<NotificationEvent, BasePayload> {
   admin_password_reset: AdminPasswordResetPayload;
+  support_merchant_activity: SupportMerchantActivityPayload;
+  support_staff_reply: SupportStaffReplyPayload;
 }
