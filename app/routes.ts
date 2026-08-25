@@ -78,6 +78,10 @@ export default [
   // ── Resource routes ────────────────────────────────────────────────────────
   // Action-only endpoints with no UI of their own.
   route("locale", "routes/resources/locale.tsx"),
+  // One file at a time, streamed to R2 — never through the reply form's own
+  // multipart body. See the route for why.
+  route("support/upload", "routes/resources/support-upload.tsx"),
+  route("support/file/:id", "routes/resources/support-file.tsx"),
 
   // ── Webhooks ──────────────────────────────────────────────────────────────
   // URIs must match the subscriptions in BOTH shopify.app.toml files.

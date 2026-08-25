@@ -1,4 +1,6 @@
 import { ShopRepo } from "~/models/shops.server";
+import { SupportRepo } from "~/models/support.server";
+import { getEnv } from "~/request-context.server";
 
 /**
  * The three mandatory compliance webhook topics. Every app distributed through
@@ -119,19 +121,33 @@ const customersRedact: ComplianceHandler = async ({ shop, payload }) => {
  */
 const shopRedact: ComplianceHandler = async ({ shop, payload }) => {
   const shopDomain = (payload.shop_domain as string | undefined) ?? shop;
-  const affected = await new ShopRepo().purge(shopDomain);
+
+  // Support first, because it is the one table family that also owns BLOBS.
+  // purgeShop returns the R2 keys it removed rows for; the objects have to be
+  // deleted here, while something still names them. Rows first would leave the
+  // blobs unreachable, still readable by anyone holding a key, and still billed.
+  const support = await new SupportRepo().purgeShop(shopDomain);
+  const bucket = getEnv().UPLOADS;
+  // R2 delete takes up to 1000 keys per call — one round trip, not one per file.
+  if (bucket && support.r2Keys.length > 0) await bucket.delete(support.r2Keys);
+
+  const shopRows = await new ShopRepo().purge(shopDomain);
+  const affected = shopRows + support.rows;
 
   console.log(
     JSON.stringify({
       event: "compliance.shop_redact",
       shop: shopDomain,
       erased: affected,
+      // Called out separately: "did the screenshots go too?" is the question
+      // a data-deletion request actually has to answer.
+      attachmentsDeleted: support.r2Keys.length,
     }),
   );
 
   return {
     topic: "SHOP_REDACT",
-    action: "purged all shop-scoped rows",
+    action: "purged all shop-scoped rows and attachment objects",
     affected,
     implemented: true,
   };

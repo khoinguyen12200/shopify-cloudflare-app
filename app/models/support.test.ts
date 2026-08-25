@@ -218,8 +218,10 @@ describe("SupportRepo", () => {
         at: 1000,
       });
 
-      const keys = await repo.purgeShop(SHOP);
-      expect(keys).toEqual(["support/alpha/x"]);
+      const purged = await repo.purgeShop(SHOP);
+      expect(purged.r2Keys).toEqual(["support/alpha/x"]);
+      // 1 ticket + 1 message + 1 attachment.
+      expect(purged.rows).toBe(3);
       expect(await repo.find(SHOP, mine.id)).toBeUndefined();
       // The other shop is untouched.
       expect(await repo.find(OTHER, theirs.id)).toBeDefined();

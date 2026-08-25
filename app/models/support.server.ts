@@ -288,6 +288,21 @@ export class SupportRepo {
     return result.length > 0;
   }
 
+  /**
+   * One attachment by id, for the route that streams it back.
+   *
+   * Returns the owning shop so the caller can compare it against the session
+   * rather than trusting the id — the id is in a URL a merchant could edit.
+   */
+  async findAttachment(id: string): Promise<SupportAttachment | undefined> {
+    const [row] = await getDb()
+      .select()
+      .from(supportAttachments)
+      .where(eq(supportAttachments.id, id))
+      .limit(1);
+    return row;
+  }
+
   /** Record an uploaded file against a message. */
   async attach(input: {
     shop: string;
@@ -320,17 +335,34 @@ export class SupportRepo {
    * unreachable and still billed. `shop` is on every table for exactly this —
    * no join is needed to know what belongs to whom.
    */
-  async purgeShop(shop: string): Promise<string[]> {
+  async purgeShop(shop: string): Promise<{ r2Keys: string[]; rows: number }> {
     const db = getDb();
     const keys = await db
       .select({ r2Key: supportAttachments.r2Key })
       .from(supportAttachments)
       .where(eq(supportAttachments.shop, shop));
 
-    await db.delete(supportAttachments).where(eq(supportAttachments.shop, shop));
-    await db.delete(supportMessages).where(eq(supportMessages.shop, shop));
-    await db.delete(supportTickets).where(eq(supportTickets.shop, shop));
+    // Counted, not just deleted: a data-deletion request has to be able to say
+    // HOW MUCH was erased, and `affected: 0` is indistinguishable from "we
+    // forgot this table" without it.
+    const deleted = await Promise.all([
+      db
+        .delete(supportAttachments)
+        .where(eq(supportAttachments.shop, shop))
+        .returning({ id: supportAttachments.id }),
+      db
+        .delete(supportMessages)
+        .where(eq(supportMessages.shop, shop))
+        .returning({ id: supportMessages.id }),
+      db
+        .delete(supportTickets)
+        .where(eq(supportTickets.shop, shop))
+        .returning({ id: supportTickets.id }),
+    ]);
 
-    return keys.map((row) => row.r2Key);
+    return {
+      r2Keys: keys.map((row) => row.r2Key),
+      rows: deleted.reduce((total, rows) => total + rows.length, 0),
+    };
   }
 }
