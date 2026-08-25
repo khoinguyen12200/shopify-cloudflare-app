@@ -1,22 +1,9 @@
-# DEVELOPMENT app config — a SEPARATE app in your Dev Dashboard from the one in
-# shopify.app.toml.
-#
-# Why two apps rather than one: `shopify app dev` rewrites application_url and
-# redirect_urls to the current tunnel URL on every run. Pointed at the
-# production app, that repoints live merchants at a tunnel on your laptop. Two
-# apps means dev churns its own URLs and production's stay fixed.
-#
-# Selected by the `--config dev` flag: `npm run dev`.
-# Fill client_id in with `npm run config:link:dev`.
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = ""
+client_id = "c0a58386cf12f142409e63d22589b9d9"
 name = "My App (Dev)"
-application_url = "https://shopify.dev/apps/default-app-home"
+application_url = "https://example.com"
 embedded = true
-
-[build]
-# The opposite of production: dev SHOULD track the tunnel URL automatically.
-automatically_update_urls_on_dev = true
 
 [webhooks]
 api_version = "2026-10"
@@ -29,6 +16,12 @@ api_version = "2026-10"
   topics = [ "app/scopes_update" ]
   uri = "/webhooks/app/scopes_update"
 
+  # Keeps subscription_events current — see app/routes/webhooks/app/subscriptions-update.tsx
+  # and the internal console's Subscriptions page, which reads it.
+  [[webhooks.subscriptions]]
+  topics = [ "app_subscriptions/update" ]
+  uri = "/webhooks/app/subscriptions_update"
+
   # MANDATORY for every app distributed through the Shopify App Store — all
   # three topics, whether or not the app stores personal data. Missing or
   # non-functioning compliance webhooks are an automatic review rejection.
@@ -39,9 +32,12 @@ api_version = "2026-10"
   uri = "/webhooks/compliance"
 
 [access_scopes]
-# Mirror shopify.app.toml. `shopify app config link` empties this when it links
-# a fresh app; `npm run dev` pushes it to the dev app on the next OAuth grant.
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 scopes = "write_products"
 
 [auth]
-redirect_urls = [ "https://shopify.dev/apps/default-app-home/api/auth" ]
+redirect_urls = [ "https://example.com/api/auth" ]
+
+[build]
+include_config_on_deploy = true
+automatically_update_urls_on_dev = true
