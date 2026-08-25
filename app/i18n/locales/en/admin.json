@@ -1,7 +1,8 @@
 {
   "nav": {
     "home": "Home",
-    "billing": "Billing"
+    "billing": "Billing",
+    "support": "Support"
   },
   "home": {
     "heading": "Shopify + Cloudflare scaffold",

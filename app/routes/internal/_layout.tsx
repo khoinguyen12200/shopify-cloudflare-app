@@ -13,7 +13,15 @@ import type {
   LoaderFunctionArgs,
   MetaFunction,
 } from "react-router";
-import { LayoutGrid, Users, Receipt, Store, User as UserIcon, LogOut } from "lucide-react";
+import {
+  LayoutGrid,
+  Users,
+  Receipt,
+  Store,
+  LifeBuoy,
+  User as UserIcon,
+  LogOut,
+} from "lucide-react";
 import {
   Avatar,
   AvatarFallback,
@@ -151,6 +159,7 @@ export default function InternalLayout() {
       items: [
         { title: "Dashboard", href: "/internal/dashboard", icon: LayoutGrid },
         { title: "Shops", href: "/internal/shops", icon: Store },
+        { title: "Support", href: "/internal/support", icon: LifeBuoy },
       ],
     },
     {

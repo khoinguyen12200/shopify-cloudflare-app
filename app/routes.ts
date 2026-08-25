@@ -73,6 +73,8 @@ export default [
     // must exist without JavaScript.
     route("internal/admins/:adminId/reset", "routes/internal/admins/reset.tsx"),
     route("internal/subscriptions", "routes/internal/subscriptions.tsx"),
+    route("internal/support", "routes/internal/support/index.tsx"),
+    route("internal/support/:ticketId", "routes/internal/support/detail.tsx"),
     route("internal/shops", "routes/internal/shops/index.tsx"),
     route("internal/shops/:shop", "routes/internal/shops/detail.tsx"),
     route("internal/profile", "routes/internal/profile.tsx"),

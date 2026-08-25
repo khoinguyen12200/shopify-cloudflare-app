@@ -1,7 +1,8 @@
 {
   "nav": {
     "home": "Inicio",
-    "billing": "Facturación"
+    "billing": "Facturación",
+    "support": "Soporte"
   },
   "home": {
     "heading": "Esqueleto de Shopify + Cloudflare",
