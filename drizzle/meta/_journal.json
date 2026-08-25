@@ -43,6 +43,13 @@
       "when": 1787663993097,
       "tag": "0005_gorgeous_killmonger",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1787673871251,
+      "tag": "0006_high_firedrake",
+      "breakpoints": true
     }
   ]
 }

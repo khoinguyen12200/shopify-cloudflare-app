@@ -21,6 +21,7 @@ function admin(overrides: Partial<SafeAdminUser> = {}): SafeAdminUser {
     name: "Other Person",
     role: "admin",
     status: "active",
+    notifySupport: true,
     createdAt: 1_700_000_000_000,
     updatedAt: 1_700_000_000_000,
     lastLoginAt: null,

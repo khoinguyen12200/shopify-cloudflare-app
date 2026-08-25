@@ -47,6 +47,34 @@
     }
   ],
 
+  // Support-ticket attachments — screenshots and screen recordings.
+  //
+  // WHY R2 IS NOW IN SCOPE (@rules/cloudflare.md asks for the reason in the
+  // same change): blobs finally exist. A merchant reporting "the button does
+  // nothing" is answerable in one round trip with a screen recording and
+  // unanswerable without one, and a 100 MB video is not a D1 row. Nothing else
+  // in the app stores blobs, so this bucket is scoped to that one job.
+  //
+  // Uploads are STREAMED (request.body → bucket.put) rather than buffered
+  // through request.formData(): a 100 MB multipart body would sit in a 128 MB
+  // isolate. See app/routes/resources/support-upload.tsx.
+  "r2_buckets": [
+    { "binding": "UPLOADS", "bucket_name": "app-support-uploads" }
+  ],
+
+  // Ticket creation and uploads are merchant-triggered writes that cost us
+  // database rows, storage and staff attention, so they are the two endpoints
+  // worth a limiter. Config-only binding, and it FAILS OPEN when absent — a
+  // missing limiter must never be the reason a merchant cannot report a bug.
+  "ratelimits": [
+    {
+      "name": "SUPPORT_LIMITER",
+      "namespace_id": "1001",
+      // 10 writes per minute per shop: far above real use, far below a flood.
+      "simple": { "limit": 10, "period": 60 }
+    }
+  ],
+
   // Secret NAMES, declared rather than inferred. Values never live here.
   //
   // Without this, `wrangler types` infers the secret half of `Env` from
@@ -95,6 +123,18 @@
         { "binding": "SESSION", "id": "REPLACE_ME" }
       ],
       "send_email": [{ "name": "EMAIL" }],
+      // Re-declared, not inherited. Create it with:
+      // `wrangler r2 bucket create app-support-uploads-prod`
+      "r2_buckets": [
+        { "binding": "UPLOADS", "bucket_name": "app-support-uploads-prod" }
+      ],
+      "ratelimits": [
+        {
+          "name": "SUPPORT_LIMITER",
+          "namespace_id": "1001",
+          "simple": { "limit": 10, "period": 60 }
+        }
+      ],
       "triggers": { "crons": ["30 3 * * *"] },
       "d1_databases": [
         {
