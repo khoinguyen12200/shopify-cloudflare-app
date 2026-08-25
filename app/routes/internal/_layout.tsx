@@ -13,7 +13,7 @@ import type {
   LoaderFunctionArgs,
   MetaFunction,
 } from "react-router";
-import { LayoutGrid, Users, User as UserIcon, LogOut } from "lucide-react";
+import { LayoutGrid, Users, Receipt, Store, User as UserIcon, LogOut } from "lucide-react";
 import {
   Avatar,
   AvatarFallback,
@@ -27,23 +27,22 @@ import {
   ErrorState,
   InlineStack,
   SkeletonPage,
+  Toaster,
   type NavGroupData,
   type RenderLinkArgs,
 } from "ngk-dashboard";
-import { useTranslation } from "react-i18next";
 import { requireAdminUser } from "~/services/admin-auth.server";
 import {
   INTERNAL_FONT_LINKS,
   ThemeToggle,
   THEME_INIT_SCRIPT,
+  useIsDarkTheme,
 } from "~/internal/components";
 // Tailwind v4 + ngk-dashboard styles, scoped to /internal by THIS route's
 // links(): React Router only injects it while an internal route is matched, so
 // Tailwind's Preflight never reaches the Polaris merchant app or the SCSS public
 // pages. See .claude/rules/styling.md.
 import internalStyles from "~/styles/internal/internal.tailwind.css?url";
-
-export const handle = { i18n: ["common", "internal"] };
 
 export const meta: MetaFunction = () => [
   { name: "robots", content: "noindex, nofollow" },
@@ -105,7 +104,6 @@ function NavProgress() {
 }
 
 function UserMenu({ user }: { user: { name: string; email: string } }) {
-  const { t } = useTranslation("internal");
   const initial = (user.name || "?").charAt(0).toUpperCase();
 
   return (
@@ -128,13 +126,13 @@ function UserMenu({ user }: { user: { name: string; email: string } }) {
         <DropdownMenuItem asChild>
           <Link to="/internal/profile" prefetch="intent">
             <UserIcon />
-            {t("nav.profile")}
+            Profile
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild variant="destructive">
           <Link to="/internal/logout">
             <LogOut />
-            {t("nav.signOut")}
+            Sign out
           </Link>
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -145,23 +143,27 @@ function UserMenu({ user }: { user: { name: string; email: string } }) {
 export default function InternalLayout() {
   const { user } = useLoaderData<typeof loader>();
   const { pathname } = useLocation();
-  const { t } = useTranslation("internal");
+  const dark = useIsDarkTheme();
 
   const nav: NavGroupData[] = [
     {
-      title: t("nav.overview"),
+      title: "Overview",
       items: [
-        { title: t("nav.dashboard"), href: "/internal/dashboard", icon: LayoutGrid },
+        { title: "Dashboard", href: "/internal/dashboard", icon: LayoutGrid },
+        { title: "Shops", href: "/internal/shops", icon: Store },
       ],
     },
     {
-      title: t("nav.team"),
-      items: [{ title: t("nav.admins"), href: "/internal/admins", icon: Users }],
+      title: "Team",
+      items: [
+        { title: "Admins", href: "/internal/admins", icon: Users },
+        { title: "Subscriptions", href: "/internal/subscriptions", icon: Receipt },
+      ],
     },
     {
-      title: t("nav.account"),
+      title: "Account",
       items: [
-        { title: t("nav.profile"), href: "/internal/profile", icon: UserIcon },
+        { title: "Profile", href: "/internal/profile", icon: UserIcon },
       ],
     },
   ];
@@ -170,12 +172,13 @@ export default function InternalLayout() {
     <>
       <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       <NavProgress />
+      <Toaster theme={dark ? "dark" : "light"} />
       <DashboardLayout
         nav={nav}
         logo={
           <InlineStack gap={2} className="px-1 py-2">
             <span className="truncate font-semibold group-data-[collapsible=icon]:hidden">
-              {t("brand")}
+              Internal console
             </span>
           </InlineStack>
         }

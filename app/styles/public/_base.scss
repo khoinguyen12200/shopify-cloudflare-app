@@ -114,6 +114,15 @@ th {
   font-weight: t.$weight-semibold;
 }
 
+// ── Screen-reader-only content ─────────────────────────────────────────────
+// The reusable CLASS — `m.visually-hidden` is only the mixin it wraps, and a
+// mixin is not a class: `className="visually-hidden"` with no matching
+// selector applies no styles at all, which is how the locale switcher's label
+// was rendering fully visible.
+.visually-hidden {
+  @include m.visually-hidden;
+}
+
 // ── Skip link ───────────────────────────────────────────────────────────────
 // First focusable element on every public page; visible only once focused.
 .skip-link {

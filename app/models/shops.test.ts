@@ -70,4 +70,18 @@ describe("ShopRepo", () => {
 
     expect(found?.uninstalledAt).toBe(99);
   });
+
+  it("lists every shop, newest install first", async () => {
+    const list = await inRequest(async () => {
+      const repo = new ShopRepo();
+      await repo.recordInstall("older.myshopify.com", 1);
+      await repo.recordInstall("newer.myshopify.com", 2);
+      return repo.listAll();
+    });
+
+    expect(list.map((s) => s.shop)).toEqual([
+      "newer.myshopify.com",
+      "older.myshopify.com",
+    ]);
+  });
 });

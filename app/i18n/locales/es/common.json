@@ -31,5 +31,20 @@
   },
   "placeholder": {
     "notice": "Marcador de posición: reemplázalo antes del lanzamiento."
+  },
+  "plans": {
+    "free": {
+      "features": {
+        "0": "TODO: primera ventaja del plan gratuito",
+        "1": "TODO: segunda ventaja del plan gratuito"
+      }
+    },
+    "pro": {
+      "features": {
+        "0": "TODO: primera ventaja del plan de pago",
+        "1": "TODO: segunda ventaja del plan de pago",
+        "2": "TODO: tercera ventaja del plan de pago"
+      }
+    }
   }
 }

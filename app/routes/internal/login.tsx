@@ -14,7 +14,6 @@ import type {
   MetaFunction,
 } from "react-router";
 import { Alert, AlertDescription, Button, Input, Label } from "ngk-dashboard";
-import { useTranslation } from "react-i18next";
 import {
   createAdminSession,
   getAdminUser,
@@ -29,7 +28,11 @@ import { INTERNAL_FONT_LINKS, THEME_INIT_SCRIPT } from "~/internal/components";
 // otherwise it renders completely unstyled.
 import internalStyles from "~/styles/internal/internal.tailwind.css?url";
 
-export const handle = { i18n: ["common", "internal"] };
+const LOGIN_ERRORS = {
+  invalidCredentials: "That email and password do not match an account.",
+  disabled: "This account has been disabled.",
+  missingFields: "Email and password are both required.",
+} as const;
 
 export const links: LinksFunction = () => [
   ...INTERNAL_FONT_LINKS,
@@ -78,7 +81,6 @@ export default function InternalLogin() {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const { next, showDevHint } = useLoaderData<typeof loader>();
-  const { t } = useTranslation("internal");
 
   const submitting = navigation.state !== "idle";
   const error = actionData?.error;
@@ -90,16 +92,16 @@ export default function InternalLogin() {
         <div className="w-full max-w-sm">
           <div className="mb-8 text-center">
             <h1 className="text-2xl font-semibold tracking-tight">
-              {t("login.heading")}
+              Sign in
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              {t("login.subheading")}
+              Internal console
             </p>
           </div>
 
           {error && (
             <Alert variant="destructive" className="mb-4">
-              <AlertDescription>{t(`login.${error}`)}</AlertDescription>
+              <AlertDescription>{LOGIN_ERRORS[error]}</AlertDescription>
             </Alert>
           )}
 
@@ -107,7 +109,7 @@ export default function InternalLogin() {
             <input type="hidden" name="next" value={next} />
 
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="email">{t("login.email")}</Label>
+              <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
                 name="email"
@@ -119,7 +121,7 @@ export default function InternalLogin() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="password">{t("login.password")}</Label>
+              <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
                 name="password"
@@ -130,7 +132,7 @@ export default function InternalLogin() {
             </div>
 
             <Button type="submit" disabled={submitting}>
-              {submitting ? t("login.submitting") : t("login.submit")}
+              {submitting ? "Signing in…" : "Sign in"}
             </Button>
           </Form>
 
@@ -139,13 +141,13 @@ export default function InternalLogin() {
               to="/internal/forgot-password"
               className="text-muted-foreground underline"
             >
-              {t("passwordReset.forgot.link")}
+              Forgot your password?
             </Link>
           </p>
 
           {showDevHint && (
             <p className="mt-6 text-center text-xs text-muted-foreground">
-              {t("login.devHint")}
+              Development seed: admin@localhost / admin123
             </p>
           )}
         </div>

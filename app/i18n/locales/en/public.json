@@ -19,6 +19,11 @@
         "title": "TODO: third capability",
         "body": "TODO: keep these concrete — merchants skim."
       }
+    },
+    "pricingTeaser": {
+      "heading": "Simple pricing",
+      "body": "Start free. Upgrade to Pro for {{price}}/month whenever you need more.",
+      "cta": "See full pricing"
     }
   },
   "pricing": {
@@ -30,22 +35,7 @@
     "questions": "Questions about a plan?",
     "contactSupport": "Contact support",
     "perMonth": "per month",
-    "forever": "forever",
-    "plans": {
-      "starter": {
-        "name": "TODO: Starter",
-        "price": "$0"
-      },
-      "growth": {
-        "name": "TODO: Growth",
-        "price": "$X"
-      },
-      "plus": {
-        "name": "TODO: Plus",
-        "price": "$Y"
-      }
-    },
-    "featureTodo": "TODO: what is included"
+    "forever": "forever"
   },
   "support": {
     "heading": "Support",

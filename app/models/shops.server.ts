@@ -1,4 +1,4 @@
-import { eq, isNull, sql } from "drizzle-orm";
+import { desc, eq, isNull, sql } from "drizzle-orm";
 import { getDb } from "~/request-context.server";
 import { shops, type Shop } from "~/db/schema";
 
@@ -33,6 +33,11 @@ export class ShopRepo {
       .update(shops)
       .set({ uninstalledAt: now })
       .where(eq(shops.shop, shop));
+  }
+
+  /** Every shop the app has ever seen, newest install first — the internal console's Shops list. */
+  async listAll(): Promise<Shop[]> {
+    return getDb().select().from(shops).orderBy(desc(shops.installedAt));
   }
 
   /** Shops with the app still installed — for the internal dashboard. */

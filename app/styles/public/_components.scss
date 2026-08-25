@@ -114,18 +114,18 @@
   padding: m.space("xs") m.space("sm");
   border-radius: t.$radius-md;
   font-size: m.text("sm");
-  border-inline-start: 3px solid var(--color-border-strong);
+  border: t.$border-width solid var(--color-border);
   background: var(--color-bg-subtle);
 }
 
 .notice--warning {
   background: var(--color-warning-subtle);
-  border-inline-start-color: var(--color-warning);
+  border-color: var(--color-warning);
   color: var(--color-warning);
 }
 
 .notice--danger {
-  border-inline-start-color: var(--color-danger);
+  border-color: var(--color-danger);
   color: var(--color-danger);
 }
 
@@ -156,4 +156,65 @@
   font-weight: t.$weight-medium;
   background: var(--color-accent-subtle);
   color: var(--color-accent);
+}
+
+// The large price figure on a pricing card.
+.price-amount {
+  font-size: m.text("3xl");
+  font-weight: t.$weight-bold;
+}
+
+// ── Locale switcher ─────────────────────────────────────────────────────────
+// A header-nav control, not a form field: sized and coloured to sit quietly
+// among the nav links rather than as a bordered input box (that was the
+// previous look — a `.field__input` squeezed into the header by an inline
+// style, which is exactly the kind of one-off `@rules/styling.md` bans).
+.locale-switcher {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.locale-switcher__select {
+  appearance: none;
+  width: auto;
+  min-height: 2.25rem;
+  margin: 0;
+  padding: m.space("3xs") m.space("lg") m.space("3xs") m.space("2xs");
+  background: transparent;
+  border: t.$border-width solid transparent;
+  border-radius: t.$radius-md;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: m.text("sm");
+  cursor: pointer;
+
+  @include m.motion-safe {
+    transition: color t.$duration-fast t.$easing, background t.$duration-fast t.$easing;
+  }
+
+  &:hover {
+    color: var(--color-text);
+    background: var(--color-bg-subtle);
+  }
+
+  &:focus-visible {
+    @include m.focus-ring;
+  }
+
+  // The dropdown's own options use browser-native chrome; keep them legible
+  // against the trigger's transparent background in both themes.
+  option {
+    color: var(--color-text);
+    background: var(--color-surface);
+  }
+}
+
+.locale-switcher__icon {
+  position: absolute;
+  inset-inline-end: m.space("2xs");
+  width: 0.7rem;
+  height: 0.7rem;
+  color: var(--color-text-subtle);
+  pointer-events: none;
 }

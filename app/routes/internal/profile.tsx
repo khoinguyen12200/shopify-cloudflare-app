@@ -14,7 +14,6 @@ import {
   PasswordInput,
   Text,
 } from "ngk-dashboard";
-import { useTranslation } from "react-i18next";
 import { requireAdminUser } from "~/services/admin-auth.server";
 import {
   changeOwnPassword,
@@ -22,10 +21,24 @@ import {
 } from "~/services/admin-management.server";
 import type { ProfileErrorReason } from "~/services/admin-management.server";
 import { MIN_PASSWORD_LENGTH } from "~/lib/password-policy";
-import { useLocale } from "~/i18n/useLocale";
 import { formatDateTime } from "~/i18n/format";
+import type { Locale } from "~/i18n/config";
 
-export const handle = { i18n: ["common", "internal"] };
+const LOCALE: Locale = "en";
+
+const PROFILE_ERRORS: Record<ProfileErrorReason, string> = {
+  nameRequired: "A name is required.",
+  wrongPassword: "Your current password is not correct.",
+  mismatch: "The new passwords do not match.",
+  tooShort: `The password must be at least ${MIN_PASSWORD_LENGTH} characters.`,
+  sameAsOld: "The new password must be different from the current one.",
+  notFound: "That account no longer exists.",
+};
+
+const PROFILE_SUCCESS: Record<SuccessKey, string> = {
+  detailsSaved: "Your details were saved.",
+  passwordChanged: "Your password was changed.",
+};
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   return { user: await requireAdminUser(request) };
@@ -67,27 +80,23 @@ export default function Profile() {
   const { user } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
-  const { t } = useTranslation("internal");
-  const locale = useLocale();
 
   const busy = navigation.state !== "idle";
 
   return (
-    <Page title={t("profile.heading")} narrowWidth>
+    <Page title="Profile" narrowWidth>
       <BlockStack gap={4}>
         {actionData && "error" in actionData && actionData.error && (
           <Alert variant="destructive">
             <AlertDescription>
-              {t(`profile.errors.${actionData.error}`, {
-                min: MIN_PASSWORD_LENGTH,
-              })}
+              {PROFILE_ERRORS[actionData.error]}
             </AlertDescription>
           </Alert>
         )}
         {actionData && "success" in actionData && actionData.success && (
           <Alert>
             <AlertDescription>
-              {t(`profile.success.${actionData.success}`)}
+              {PROFILE_SUCCESS[actionData.success]}
             </AlertDescription>
           </Alert>
         )}
@@ -95,7 +104,7 @@ export default function Profile() {
         <Card>
           <CardHeader>
             <Text as="h2" className="font-semibold">
-              {t("profile.details")}
+              Your details
             </Text>
           </CardHeader>
           <CardContent>
@@ -103,23 +112,23 @@ export default function Profile() {
               <input type="hidden" name="intent" value="details" />
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="name">{t("profile.name")}</Label>
+                <Label htmlFor="name">Name</Label>
                 <Input id="name" name="name" defaultValue={user.name} required />
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="email">{t("profile.email")}</Label>
+                <Label htmlFor="email">Email</Label>
                 {/* Read-only on purpose: changing your own sign-in address is an
                     account-takeover vector, so an owner does it for you. */}
                 <Input id="email" value={user.email} readOnly disabled />
                 <Text as="p" className="text-xs text-muted-foreground">
-                  {t("profile.emailHint")}
+                  Ask an owner to change your email address.
                 </Text>
               </div>
 
               <div>
                 <Button type="submit" disabled={busy}>
-                  {t("profile.saveDetails")}
+                  Save
                 </Button>
               </div>
             </Form>
@@ -129,7 +138,7 @@ export default function Profile() {
         <Card>
           <CardHeader>
             <Text as="h2" className="font-semibold">
-              {t("profile.changePassword")}
+              Change password
             </Text>
           </CardHeader>
           <CardContent>
@@ -137,9 +146,7 @@ export default function Profile() {
               <input type="hidden" name="intent" value="password" />
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="currentPassword">
-                  {t("profile.currentPassword")}
-                </Label>
+                <Label htmlFor="currentPassword">Current password</Label>
                 {/* Required even though the session proves identity: it stops a
                     hijacked session from locking the real owner out. */}
                 <PasswordInput
@@ -151,7 +158,7 @@ export default function Profile() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="newPassword">{t("profile.newPassword")}</Label>
+                <Label htmlFor="newPassword">New password</Label>
                 <PasswordInput
                   id="newPassword"
                   name="newPassword"
@@ -162,9 +169,7 @@ export default function Profile() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="confirmPassword">
-                  {t("profile.confirmPassword")}
-                </Label>
+                <Label htmlFor="confirmPassword">Confirm new password</Label>
                 <PasswordInput
                   id="confirmPassword"
                   name="confirmPassword"
@@ -176,7 +181,7 @@ export default function Profile() {
 
               <div>
                 <Button type="submit" disabled={busy}>
-                  {t("profile.savePassword")}
+                  Change password
                 </Button>
               </div>
             </Form>
@@ -185,7 +190,7 @@ export default function Profile() {
 
         {user.lastLoginAt && (
           <Text as="p" className="text-xs text-muted-foreground">
-            {formatDateTime(locale, user.lastLoginAt)}
+            {formatDateTime(LOCALE, user.lastLoginAt)}
           </Text>
         )}
       </BlockStack>

@@ -106,7 +106,8 @@ mechanism.
 | Choosing products, variants, or collections | Resource Picker — `shopify.resourcePicker(...)` |
 | Choosing records your own app owns | Picker API |
 | A dialog | `s-modal`, or the Modal API |
-| Transient confirmation after an action | Toast API |
+| Transient confirmation after an action — **mandatory on every create/update, see §5a** | Toast API (`shopify.toast.show`) |
+| Feedback that a submit control is mid-flight — **mandatory, see §5a** | `<s-button loading={busy}>`, scoped to the one control submitting |
 | Status of a record | `s-badge` |
 | Empty, loading, and error states; index tables; metric tiles | The published **compositions** |
 
@@ -256,6 +257,71 @@ decision in one place on the server.
 
 ---
 
+## 5a. Every create/update action gets a toast and a loading state — no exceptions
+
+This is a recurring miss, so it is stated here directly rather than only in the
+job-ownership table in §2: **a submission that changes something and gives the
+merchant no feedback is an incomplete implementation, not a smaller one.** Ship
+both of these with the action that needs them, not as a follow-up:
+
+1. **A toast**, fired once the result of the submission is known, confirming
+   success or reporting failure. Owned by the **Toast API**
+   (`shopify.toast.show`), reached through `useAppBridge()`:
+
+   ```tsx
+   import { useEffect } from "react";
+   import { useActionData, useNavigation } from "react-router";
+   import { useAppBridge } from "@shopify/app-bridge-react";
+
+   export default function Example() {
+     const actionData = useActionData<typeof action>();
+     const navigation = useNavigation();
+     const shopify = useAppBridge();
+     const busy = navigation.state !== "idle";
+
+     // Fires once per completed submission: actionData is a new object each
+     // time an action resolves, so this does not re-fire on every re-render.
+     useEffect(() => {
+       if (!actionData) return;
+       if ("error" in actionData) {
+         shopify.toast.show(t(`errors.${actionData.error}`), { isError: true });
+       } else if ("success" in actionData) {
+         shopify.toast.show(t(`success.${actionData.success}`));
+       }
+     }, [actionData, shopify]);
+
+     return (
+       <s-page heading={t("heading")}>
+         <s-section heading={t("details")}>
+           <s-button type="submit" variant="primary" loading={busy}>
+             {t("save")}
+           </s-button>
+         </s-section>
+       </s-page>
+     );
+   }
+   ```
+
+   The toast is an addition, not a replacement: a page that must be correct
+   without JavaScript (per §5's native-constraint gating) still renders its
+   authoritative error inline. The toast is the transient, easy-to-miss layer on
+   top — never the only place a failure is reported.
+
+2. **A loading state on the control that triggered the submission**, for every
+   second the merchant is waiting. `<s-button loading={busy}>`, scoped to the
+   specific button that was pressed — not a page-wide spinner, and prefer
+   `loading` over `disabled` for this: the docs are explicit that `loading`
+   communicates an action is in progress, where `disabled` alone does not, and
+   a disabled control still needs a visible reason if it stays that way. On a
+   row of several independent actions (an index table, a list), compute which
+   one is pending from `useNavigation().formData` — an intent and/or id — so
+   only that row's button shows `loading`, never all of them.
+
+Both are cheap once the pattern is known — a `useEffect` and one prop — which is
+exactly why skipping them is not an acceptable shortcut.
+
+---
+
 ## 6. Selecting Shopify resources
 
 ```tsx
@@ -311,6 +377,8 @@ the equivalent mechanism.
 - [ ] Each job in the table in §2 is handled by its listed owner
 - [ ] Back navigation is a link in `breadcrumb-actions`
 - [ ] Saving is the save bar; no competing save control in the page body
+- [ ] Every create/update action fires a Toast on success/failure, and its
+      submitting control shows `loading` while pending (§5a) — not later, now
 - [ ] Resource selection is a picker; no field asks for a handle or an ID
 - [ ] `inlineSize` matches the content, and supporting material is in `aside`
 - [ ] Spacing comes entirely from `s-page` / `s-section` / `s-stack` / `s-grid`

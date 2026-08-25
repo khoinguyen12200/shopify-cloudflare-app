@@ -19,6 +19,11 @@
         "title": "TODO: tercera funcionalidad",
         "body": "TODO: sé concreto: los comerciantes leen en diagonal."
       }
+    },
+    "pricingTeaser": {
+      "heading": "Precios sencillos",
+      "body": "Empieza gratis. Mejora a Pro por {{price}}/mes cuando lo necesites.",
+      "cta": "Ver todos los precios"
     }
   },
   "pricing": {
@@ -30,22 +35,7 @@
     "questions": "¿Tienes dudas sobre un plan?",
     "contactSupport": "Contacta con soporte",
     "perMonth": "al mes",
-    "forever": "para siempre",
-    "plans": {
-      "starter": {
-        "name": "TODO: Inicial",
-        "price": "0 $"
-      },
-      "growth": {
-        "name": "TODO: Crecimiento",
-        "price": "X $"
-      },
-      "plus": {
-        "name": "TODO: Plus",
-        "price": "Y $"
-      }
-    },
-    "featureTodo": "TODO: qué incluye"
+    "forever": "para siempre"
   },
   "support": {
     "heading": "Soporte",

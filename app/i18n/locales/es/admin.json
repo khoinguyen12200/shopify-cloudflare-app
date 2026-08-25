@@ -1,6 +1,7 @@
 {
   "nav": {
-    "home": "Inicio"
+    "home": "Inicio",
+    "billing": "Facturación"
   },
   "home": {
     "heading": "Esqueleto de Shopify + Cloudflare",
@@ -21,10 +22,50 @@
     "heading": "Iniciar sesión",
     "shopDomain": "Dominio de la tienda",
     "shopDomainHint": "ejemplo.myshopify.com",
-    "submit": "Iniciar sesión"
+    "submit": "Iniciar sesión",
+    "errors": {
+      "missingShop": "Introduce el dominio de tu tienda para iniciar sesión",
+      "invalidShop": "Introduce un dominio de tienda válido para iniciar sesión"
+    }
   },
   "errors": {
     "boundaryHeading": "Algo ha ido mal",
     "notFound": "Página no encontrada"
+  },
+  "billing": {
+    "heading": "Facturación",
+    "currentHeading": "Plan actual",
+    "manage": "Gestionar plan",
+    "upgrade": "Mejorar plan",
+    "testBadge": "Cobro de prueba: no es dinero real",
+    "free": {
+      "heading": "Estás en el plan gratuito"
+    },
+    "currentPlanBadge": "Plan actual",
+    "current": {
+      "renews": "Se renueva el {{date}} por {{price}}",
+      "renewsUnknownPrice": "Se renueva el {{date}}",
+      "trial": "Tu prueba gratuita termina el {{date}}. Después, se te cobrará {{price}}.",
+      "trialUnknownPrice": "Tu prueba gratuita termina el {{date}}."
+    },
+    "status": {
+      "ACTIVE": "Activo",
+      "CANCELLED": "Cancelado",
+      "PENDING": "Aprobación pendiente",
+      "DECLINED": "Rechazado",
+      "EXPIRED": "Caducado",
+      "FROZEN": "Congelado",
+      "ACCEPTED": "Aceptado"
+    },
+    "plans": {
+      "heading": "Planes",
+      "body": "Elige o cambia tu plan cuando quieras.",
+      "perMonth": "/mes",
+      "mostPopular": "Más popular",
+      "annual": "o {{price}} con facturación anual",
+      "annualSaving": "o {{price}} con facturación anual — ahorra {{percent}}%",
+      "freeForever": "Gratis para siempre",
+      "buildsOn": "Todo lo del plan {{plan}}, y además"
+    }
   }
 }

@@ -15,20 +15,24 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } =
     await createShopify(getEnv()).authenticate.admin(request);
 
-  // A read-only Admin GraphQL call, to prove the client is wired end to end.
-  const response = await admin.graphql(
-    `#graphql
-      query ScaffoldShop {
-        shop {
-          name
-          myshopifyDomain
-        }
-      }`,
-  );
+  // The Admin GraphQL call and the D1 read are independent — both need only
+  // `session.shop` — so they run concurrently instead of one full round trip
+  // waiting on the other.
+  const [response, record] = await Promise.all([
+    // A read-only Admin GraphQL call, to prove the client is wired end to end.
+    admin.graphql(
+      `#graphql
+        query ScaffoldShop {
+          shop {
+            name
+            myshopifyDomain
+          }
+        }`,
+    ),
+    // A D1 read through the models layer, to prove that half is wired too.
+    new ShopRepo().get(session.shop),
+  ]);
   const body = await response.json();
-
-  // A D1 read through the models layer, to prove that half is wired too.
-  const record = await new ShopRepo().get(session.shop);
 
   return {
     shopName: body.data?.shop?.name ?? session.shop,

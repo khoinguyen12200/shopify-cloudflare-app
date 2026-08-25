@@ -38,6 +38,7 @@ export default [
   // authenticates and provides App Bridge + Polaris web components.
   route("app", "routes/app/_layout.tsx", [
     index("routes/app/home.tsx"),
+    route("billing", "routes/app/billing.tsx"),
   ]),
 
   // ── OAuth ─────────────────────────────────────────────────────────────────
@@ -68,6 +69,9 @@ export default [
     // Resetting someone else's password is its own page, not a dialog: the field
     // must exist without JavaScript.
     route("internal/admins/:adminId/reset", "routes/internal/admins/reset.tsx"),
+    route("internal/subscriptions", "routes/internal/subscriptions.tsx"),
+    route("internal/shops", "routes/internal/shops/index.tsx"),
+    route("internal/shops/:shop", "routes/internal/shops/detail.tsx"),
     route("internal/profile", "routes/internal/profile.tsx"),
   ]),
 
@@ -80,6 +84,10 @@ export default [
   ...prefix("webhooks", [
     route("app/uninstalled", "routes/webhooks/app/uninstalled.tsx"),
     route("app/scopes_update", "routes/webhooks/app/scopes-update.tsx"),
+    route(
+      "app/subscriptions_update",
+      "routes/webhooks/app/subscriptions-update.tsx",
+    ),
     // All three mandatory compliance topics share this endpoint.
     route("compliance", "routes/webhooks/compliance.tsx"),
   ]),

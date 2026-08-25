@@ -33,22 +33,37 @@ export function LocaleSwitcher({ current }: { current: Locale }) {
       <label htmlFor="locale-switcher" className="visually-hidden">
         {t("language.change")}
       </label>
-      <select
-        id="locale-switcher"
-        name="locale"
-        defaultValue={current}
-        className="field__input"
-        style={{ minHeight: "2.25rem", width: "auto" }}
-        // Submitting on change keeps it usable without JavaScript too: the
-        // form still has a submit button for that case.
-        onChange={(event) => event.currentTarget.form?.requestSubmit()}
-      >
-        {SUPPORTED_LOCALES.map((locale) => (
-          <option key={locale} value={locale}>
-            {LOCALE_LABELS[locale]}
-          </option>
-        ))}
-      </select>
+      <div className="locale-switcher">
+        <select
+          id="locale-switcher"
+          name="locale"
+          defaultValue={current}
+          className="locale-switcher__select"
+          // Submitting on change keeps it usable without JavaScript too: the
+          // form still has a submit button for that case.
+          onChange={(event) => event.currentTarget.form?.requestSubmit()}
+        >
+          {SUPPORTED_LOCALES.map((locale) => (
+            <option key={locale} value={locale}>
+              {LOCALE_LABELS[locale]}
+            </option>
+          ))}
+        </select>
+        <svg
+          className="locale-switcher__icon"
+          viewBox="0 0 20 20"
+          fill="none"
+          aria-hidden="true"
+        >
+          <path
+            d="M5 7.5L10 12.5L15 7.5"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </div>
       <noscript>
         <button type="submit" className="btn btn--secondary">
           {t("actions.save")}

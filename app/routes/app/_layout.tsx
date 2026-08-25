@@ -41,6 +41,7 @@ export default function App() {
         <a href="/app" rel="home">
           {t("nav.home")}
         </a>
+        <a href="/app/billing">{t("nav.billing")}</a>
       </NavMenu>
       <Outlet />
     </AppProvider>

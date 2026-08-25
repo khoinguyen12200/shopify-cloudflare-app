@@ -2,6 +2,9 @@ import { Link, redirect } from "react-router";
 import type { LoaderFunctionArgs, MetaFunction } from "react-router";
 import { useTranslation } from "react-i18next";
 import { i18nServer } from "~/i18n/i18n.server";
+import { useLocale } from "~/i18n/useLocale";
+import { formatMoney } from "~/money";
+import { FEATURED_PLAN_KEY, PLANS } from "~/billing/plans";
 
 export const handle = { i18n: ["common", "public"] };
 
@@ -35,6 +38,7 @@ const FEATURE_KEYS = ["one", "two", "three"] as const;
 
 export default function Landing() {
   const { t } = useTranslation("public");
+  const locale = useLocale();
 
   return (
     <>
@@ -43,7 +47,7 @@ export default function Landing() {
           <p className="eyebrow">{t("landing.eyebrow")}</p>
           <h1>{t("landing.heading")}</h1>
           <p className="lead">{t("landing.lead")}</p>
-          <div className="row" style={{ justifyContent: "center" }}>
+          <div className="row row--center">
             <Link to="/auth/login" className="btn btn--primary">
               {t("landing.installCta")}
             </Link>
@@ -65,6 +69,20 @@ export default function Landing() {
               </article>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section className="section">
+        <div className="container stack--lg center">
+          <h2>{t("landing.pricingTeaser.heading")}</h2>
+          <p className="lead">
+            {t("landing.pricingTeaser.body", {
+              price: formatMoney(locale, PLANS[FEATURED_PLAN_KEY].priceMonthly),
+            })}
+          </p>
+          <Link to="/pricing" className="btn btn--secondary">
+            {t("landing.pricingTeaser.cta")}
+          </Link>
         </div>
       </section>
     </>

@@ -1,6 +1,7 @@
 {
   "nav": {
-    "home": "Home"
+    "home": "Home",
+    "billing": "Billing"
   },
   "home": {
     "heading": "Shopify + Cloudflare scaffold",
@@ -21,10 +22,50 @@
     "heading": "Log in",
     "shopDomain": "Shop domain",
     "shopDomainHint": "example.myshopify.com",
-    "submit": "Log in"
+    "submit": "Log in",
+    "errors": {
+      "missingShop": "Please enter your shop domain to log in",
+      "invalidShop": "Please enter a valid shop domain to log in"
+    }
   },
   "errors": {
     "boundaryHeading": "Something went wrong",
     "notFound": "Page not found"
+  },
+  "billing": {
+    "heading": "Billing",
+    "currentHeading": "Current plan",
+    "manage": "Manage plan",
+    "upgrade": "Upgrade",
+    "testBadge": "Test charge — no real money",
+    "free": {
+      "heading": "You're on the free plan"
+    },
+    "currentPlanBadge": "Current plan",
+    "current": {
+      "renews": "Renews {{date}} for {{price}}",
+      "renewsUnknownPrice": "Renews {{date}}",
+      "trial": "Your free trial ends {{date}}. After that, you'll be charged {{price}}.",
+      "trialUnknownPrice": "Your free trial ends {{date}}."
+    },
+    "status": {
+      "ACTIVE": "Active",
+      "CANCELLED": "Cancelled",
+      "PENDING": "Pending approval",
+      "DECLINED": "Declined",
+      "EXPIRED": "Expired",
+      "FROZEN": "Frozen",
+      "ACCEPTED": "Accepted"
+    },
+    "plans": {
+      "heading": "Plans",
+      "body": "Choose or change your plan any time.",
+      "perMonth": "/month",
+      "mostPopular": "Most popular",
+      "annual": "or {{price}} billed yearly",
+      "annualSaving": "or {{price}} billed yearly — save {{percent}}%",
+      "freeForever": "Free forever",
+      "buildsOn": "Everything in {{plan}}, plus"
+    }
   }
 }

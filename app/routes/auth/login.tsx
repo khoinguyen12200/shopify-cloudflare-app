@@ -6,24 +6,24 @@ import { useTranslation } from "react-i18next";
 
 import { createShopify } from "~/shopify.server";
 import { getEnv } from "~/request-context.server";
-import { loginErrorMessage } from "./login-error.server";
+import { loginErrorKey } from "./login-error.server";
 
 export const handle = { i18n: ["common", "admin"] };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const env = getEnv();
-  const errors = loginErrorMessage(await createShopify(env).login(request));
+  const errorKey = loginErrorKey(await createShopify(env).login(request));
 
   // v2's AppProvider requires apiKey (it always loads App Bridge + Polaris web
   // components), so this non-embedded page has to pass it through too.
-  return { errors, apiKey: env.SHOPIFY_API_KEY || "" };
+  return { errorKey, apiKey: env.SHOPIFY_API_KEY || "" };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const env = getEnv();
-  const errors = loginErrorMessage(await createShopify(env).login(request));
+  const errorKey = loginErrorKey(await createShopify(env).login(request));
 
-  return { errors, apiKey: env.SHOPIFY_API_KEY || "" };
+  return { errorKey, apiKey: env.SHOPIFY_API_KEY || "" };
 };
 
 export default function Auth() {
@@ -31,7 +31,8 @@ export default function Auth() {
   const actionData = useActionData<typeof action>();
   const { t } = useTranslation("admin");
   const [shop, setShop] = useState("");
-  const { errors, apiKey } = actionData || loaderData;
+  const { errorKey, apiKey } = actionData || loaderData;
+  const shopError = errorKey ? t(`login.errors.${errorKey}`) : undefined;
 
   return (
     <AppProvider apiKey={apiKey}>
@@ -45,7 +46,7 @@ export default function Auth() {
               value={shop}
               onChange={(e) => setShop(e.currentTarget.value)}
               autocomplete="on"
-              error={errors.shop}
+              error={shopError}
             ></s-text-field>
             <s-button type="submit">{t("login.submit")}</s-button>
           </s-section>

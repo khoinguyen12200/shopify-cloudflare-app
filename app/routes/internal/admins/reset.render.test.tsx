@@ -6,10 +6,6 @@ import {
   StaticRouterProvider,
   type RouteObject,
 } from "react-router";
-import { createInstance } from "i18next";
-import { I18nextProvider, initReactI18next } from "react-i18next";
-import { i18nOptions } from "~/i18n/options";
-import type { Locale } from "~/i18n/config";
 import ResetAdminPassword from "./reset";
 
 const TARGET = {
@@ -23,10 +19,7 @@ const TARGET = {
   lastLoginAt: null,
 };
 
-async function render(locale: Locale) {
-  const instance = createInstance();
-  await instance.use(initReactI18next).init({ ...i18nOptions, lng: locale });
-
+async function render() {
   const routes: RouteObject[] = [
     {
       path: "/internal/admins/:adminId/reset",
@@ -44,12 +37,10 @@ async function render(locale: Locale) {
   }
 
   const html = renderToString(
-    <I18nextProvider i18n={instance}>
-      <StaticRouterProvider
-        router={createStaticRouter(routes, context)}
-        context={context}
-      />
-    </I18nextProvider>,
+    <StaticRouterProvider
+      router={createStaticRouter(routes, context)}
+      context={context}
+    />,
   );
 
   expect(html.length, "rendered nothing — assertions would be vacuous").toBeGreaterThan(400);
@@ -58,40 +49,25 @@ async function render(locale: Locale) {
 
 describe("the reset-password page", () => {
   it("renders both password fields in a real form, with no JS required", async () => {
-    const html = await render("en");
+    const html = await render();
     expect(html).toContain('name="newPassword"');
     expect(html).toContain('name="confirmPassword"');
     expect(html).toContain('method="post"');
   });
 
   it("enforces the length policy in the markup, not only on the server", async () => {
-    const html = await render("en");
+    const html = await render();
     expect(html).toContain('minLength="12"');
     expect(html).toContain("required");
   });
 
   it("names the person whose password is being reset", async () => {
-    const html = await render("en");
+    const html = await render();
     expect(html).toContain("Target Person");
   });
 
   it("offers a way back to the table", async () => {
-    const html = await render("en");
+    const html = await render();
     expect(html).toContain("/internal/admins");
-  });
-
-  it("renders in Spanish", async () => {
-    const html = await render("es");
-    expect(html).toContain("Restablecer la contraseña");
-    expect(html).toContain("Contraseña nueva");
-    expect(html).not.toContain("New password");
-  });
-
-  it("never leaks a raw key path or an uninterpolated placeholder", async () => {
-    for (const locale of ["en", "es"] as const) {
-      const html = await render(locale);
-      expect(html, locale).not.toMatch(/\badmins\.[a-zA-Z]+\.[a-zA-Z.]+/);
-      expect(html, locale).not.toContain("{{");
-    }
   });
 });

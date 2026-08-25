@@ -7,7 +7,8 @@ import {
   useNavigation,
 } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { toast } from "ngk-dashboard";
 import {
   Alert,
   AlertDescription,
@@ -35,7 +36,6 @@ import {
   TableRow,
   Text,
 } from "ngk-dashboard";
-import { useTranslation } from "react-i18next";
 import { requireOwner } from "~/services/admin-auth.server";
 import { AdminUserRepo } from "~/models/admin-users.server";
 import {
@@ -50,11 +50,17 @@ import {
 import type { AdminErrorReason } from "~/services/admin-management.server";
 import { MIN_PASSWORD_LENGTH } from "~/lib/password-policy";
 import { paths } from "~/urls";
-import { useLocale } from "~/i18n/useLocale";
 import { formatDateTime } from "~/i18n/format";
+import type { Locale } from "~/i18n/config";
+import { useActionToast } from "~/internal/use-action-toast";
+import {
+  ADMIN_ERRORS,
+  ADMIN_ROLE_LABEL,
+  ADMIN_STATUS_LABEL,
+} from "~/internal/admin-messages";
 import type { AdminRole, SafeAdminUser } from "~/db/schema";
 
-export const handle = { i18n: ["common", "internal"] };
+const LOCALE: Locale = "en";
 
 /** id of the hidden removal form that the ConfirmDialog submits. */
 const REMOVE_FORM_ID = "remove-admin";
@@ -63,7 +69,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Owner-only. requireOwner throws 403 for a signed-in non-owner, which the
   // layout's ErrorBoundary renders.
   const actor = await requireOwner(request);
-  return { actor, admins: await new AdminUserRepo().list() };
+  const url = new URL(request.url);
+  return {
+    actor,
+    admins: await new AdminUserRepo().list(),
+    // Set by reset.tsx's redirect after a password reset — that page has
+    // nothing of its own to render success on, since it navigates away.
+    resetSuccess: url.searchParams.get("reset") === "1",
+  };
 };
 
 /**
@@ -144,6 +157,23 @@ const SUCCESS_KEY: Record<Intent, SuccessKey> = {
   resetPassword: "passwordReset",
 };
 
+function formatSuccessMessage(key: SuccessKey, name: string, role: string): string {
+  switch (key) {
+    case "created":
+      return `${name} can now sign in.`;
+    case "disabled":
+      return `${name} can no longer sign in.`;
+    case "enabled":
+      return `${name} can sign in again.`;
+    case "removed":
+      return `${name} was removed.`;
+    case "roleChanged":
+      return `${name} is now ${role}.`;
+    case "passwordReset":
+      return `Password reset for ${name}. Give them the new password directly.`;
+  }
+}
+
 export const action = async ({ request }: ActionFunctionArgs) => {
   const actor = await requireOwner(request);
   const form = await request.formData();
@@ -166,56 +196,80 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function Admins() {
-  const { actor, admins } = useLoaderData<typeof loader>();
+  const { actor, admins, resetSuccess } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
-  const { t } = useTranslation("internal");
-  const locale = useLocale();
 
   const busy = navigation.state !== "idle";
+  // Which single control is the one actually submitting, so only ITS button
+  // spins — not every button on the page.
+  const pendingIntent = navigation.formData?.get("intent");
+  const pendingId = navigation.formData?.get("id");
+  const isPending = (intent: Intent, id?: string) =>
+    busy && pendingIntent === intent && (id === undefined || pendingId === id);
+
+  const errorMessage =
+    actionData && "error" in actionData && actionData.error
+      ? ADMIN_ERRORS[actionData.error]
+      : undefined;
+  const successMessage =
+    actionData && "success" in actionData && actionData.success
+      ? formatSuccessMessage(
+          actionData.success,
+          actionData.name,
+          actionData.role ? ADMIN_ROLE_LABEL[actionData.role as AdminRole] : "",
+        )
+      : undefined;
+
+  // A toast on top of the inline Alert below, which stays the no-JS-safe,
+  // authoritative feedback.
+  useActionToast(actionData, { success: successMessage, error: errorMessage });
+
+  // reset.tsx redirects here after a password reset — a distinct arrival, not
+  // a submission on THIS page, so it can't ride the actionData-keyed hook
+  // above.
+  useEffect(() => {
+    if (resetSuccess) {
+      toast.success("Password reset. Give them the new password directly.");
+    }
+  }, [resetSuccess]);
 
   // One dialog for the whole table rather than one per row: only ever a single
   // pending confirmation, so a single piece of state describes it.
   const [confirming, setConfirming] = useState<SafeAdminUser | null>(null);
 
   return (
-    <Page title={t("admins.heading")} subtitle={t("admins.subheading")}>
+    <Page title="Admins" subtitle="Who can sign in to this console" fullWidth>
       <BlockStack gap={4}>
-        {actionData && "error" in actionData && actionData.error && (
+        {errorMessage && (
           <Alert variant="destructive">
-            <AlertDescription>
-              {t(`admins.errors.${actionData.error}`, {
-                min: MIN_PASSWORD_LENGTH,
-              })}
-            </AlertDescription>
+            <AlertDescription>{errorMessage}</AlertDescription>
           </Alert>
         )}
-        {actionData && "success" in actionData && actionData.success && (
+        {successMessage && (
+          <Alert>
+            <AlertDescription>{successMessage}</AlertDescription>
+          </Alert>
+        )}
+        {resetSuccess && (
           <Alert>
             <AlertDescription>
-              {t(`admins.success.${actionData.success}`, {
-                name: actionData.name,
-                role: actionData.role
-                  ? t(`admins.role.${actionData.role}`)
-                  : "",
-              })}
+              Password reset. Give them the new password directly.
             </AlertDescription>
           </Alert>
         )}
 
         <Card>
           <CardContent className="overflow-x-auto p-0">
-            <Table>
+            <Table className="[&_th]:h-12 [&_th]:px-4 [&_td]:px-4 [&_td]:py-3">
               <TableHeader>
                 <TableRow>
-                  <TableHead>{t("admins.table.name")}</TableHead>
-                  <TableHead>{t("admins.table.email")}</TableHead>
-                  <TableHead>{t("admins.table.role")}</TableHead>
-                  <TableHead>{t("admins.table.status")}</TableHead>
-                  <TableHead>{t("admins.table.lastLogin")}</TableHead>
-                  <TableHead className="text-right">
-                    {t("admins.table.actions")}
-                  </TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Last sign-in</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -227,7 +281,7 @@ export default function Admins() {
                         {admin.name}
                         {isSelf && (
                           <Badge variant="secondary" className="ml-2">
-                            {t("admins.you")}
+                            You
                           </Badge>
                         )}
                       </TableCell>
@@ -238,7 +292,7 @@ export default function Admins() {
                         <Badge
                           variant={admin.role === "owner" ? "default" : "secondary"}
                         >
-                          {t(`admins.role.${admin.role}`)}
+                          {ADMIN_ROLE_LABEL[admin.role]}
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -247,13 +301,13 @@ export default function Admins() {
                             admin.status === "active" ? "outline" : "destructive"
                           }
                         >
-                          {t(`admins.status.${admin.status}`)}
+                          {ADMIN_STATUS_LABEL[admin.status]}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {admin.lastLoginAt
-                          ? formatDateTime(locale, admin.lastLoginAt)
-                          : t("admins.table.never")}
+                          ? formatDateTime(LOCALE, admin.lastLoginAt)
+                          : "Never"}
                       </TableCell>
                       <TableCell className="text-right">
                         {/* Your own row has no actions: the guards would refuse
@@ -265,31 +319,33 @@ export default function Admins() {
                               intent={
                                 admin.status === "active" ? "disable" : "enable"
                               }
-                              label={t(
-                                admin.status === "active"
-                                  ? "admins.actions.disable"
-                                  : "admins.actions.enable",
-                              )}
+                              label={admin.status === "active" ? "Disable" : "Enable"}
                               busy={busy}
+                              loading={isPending(
+                                admin.status === "active" ? "disable" : "enable",
+                                admin.id,
+                              )}
                             />
                             <RowAction
                               id={admin.id}
                               intent={
                                 admin.role === "owner" ? "makeAdmin" : "makeOwner"
                               }
-                              label={t(
-                                admin.role === "owner"
-                                  ? "admins.actions.makeAdmin"
-                                  : "admins.actions.makeOwner",
-                              )}
+                              label={
+                                admin.role === "owner" ? "Make admin" : "Make owner"
+                              }
                               busy={busy}
+                              loading={isPending(
+                                admin.role === "owner" ? "makeAdmin" : "makeOwner",
+                                admin.id,
+                              )}
                             />
                             {/* Its own page, not a dialog: the field needs to
                                 exist without JavaScript, and a portal's
                                 contents only render once opened. */}
                             <Button asChild size="sm" variant="outline">
                               <Link to={paths.internal.resetAdminPassword(admin.id)}>
-                                {t("admins.reset.action")}
+                                Reset password
                               </Link>
                             </Button>
                             <Button
@@ -299,7 +355,7 @@ export default function Admins() {
                               disabled={busy}
                               onClick={() => setConfirming(admin)}
                             >
-                              {t("admins.actions.remove")}
+                              Remove
                             </Button>
                           </div>
                         )}
@@ -315,7 +371,7 @@ export default function Admins() {
         <Card>
           <CardHeader>
             <Text as="h2" className="font-semibold">
-              {t("admins.add.heading")}
+              Add an admin
             </Text>
           </CardHeader>
           <CardContent>
@@ -323,17 +379,17 @@ export default function Admins() {
               <input type="hidden" name="intent" value="create" />
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="new-name">{t("admins.add.name")}</Label>
+                <Label htmlFor="new-name">Name</Label>
                 <Input id="new-name" name="name" required />
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="new-email">{t("admins.add.email")}</Label>
+                <Label htmlFor="new-email">Email</Label>
                 <Input id="new-email" name="email" type="email" required />
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="new-password">{t("admins.add.password")}</Label>
+                <Label htmlFor="new-password">Temporary password</Label>
                 <PasswordInput
                   id="new-password"
                   name="password"
@@ -342,26 +398,27 @@ export default function Admins() {
                   required
                 />
                 <Text as="p" className="text-xs text-muted-foreground">
-                  {t("admins.add.hint", { min: MIN_PASSWORD_LENGTH })}
+                  At least {MIN_PASSWORD_LENGTH} characters. Ask them to
+                  change it after signing in.
                 </Text>
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="new-role">{t("admins.add.role")}</Label>
+                <Label htmlFor="new-role">Role</Label>
                 <Select name="role" defaultValue="admin">
                   <SelectTrigger id="new-role">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="admin">{t("admins.role.admin")}</SelectItem>
-                    <SelectItem value="owner">{t("admins.role.owner")}</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="owner">Owner</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="sm:col-span-2">
-                <Button type="submit" disabled={busy}>
-                  {t("admins.add.submit")}
+                <Button type="submit" disabled={busy} loading={isPending("create")}>
+                  Add admin
                 </Button>
               </div>
             </Form>
@@ -391,10 +448,10 @@ export default function Admins() {
           form={REMOVE_FORM_ID}
           destructive
           isLoading={busy}
-          title={t("admins.remove.title", { name: confirming?.name ?? "" })}
-          desc={t("admins.remove.desc")}
-          confirmText={t("admins.remove.confirm")}
-          cancelBtnText={t("admins.remove.cancel")}
+          title={`Remove ${confirming?.name ?? ""}?`}
+          desc="They will lose access to the console immediately. This cannot be undone."
+          confirmText="Remove"
+          cancelBtnText="Cancel"
         />
       </BlockStack>
     </Page>
@@ -407,17 +464,25 @@ function RowAction({
   intent,
   label,
   busy,
+  loading,
 }: {
   id: string;
   intent: Intent;
   label: string;
   busy: boolean;
+  loading: boolean;
 }) {
   return (
     <Form method="post">
       <input type="hidden" name="intent" value={intent} />
       <input type="hidden" name="id" value={id} />
-      <Button type="submit" size="sm" variant="outline" disabled={busy}>
+      <Button
+        type="submit"
+        size="sm"
+        variant="outline"
+        disabled={busy}
+        loading={loading}
+      >
         {label}
       </Button>
     </Form>

@@ -20,7 +20,6 @@ import {
   PasswordInput,
   Text,
 } from "ngk-dashboard";
-import { useTranslation } from "react-i18next";
 import { requireOwner } from "~/services/admin-auth.server";
 import { AdminUserRepo } from "~/models/admin-users.server";
 import {
@@ -28,8 +27,7 @@ import {
   type AdminErrorReason,
 } from "~/services/admin-management.server";
 import { MIN_PASSWORD_LENGTH } from "~/lib/password-policy";
-
-export const handle = { i18n: ["common", "internal"] };
+import { ADMIN_ERRORS } from "~/internal/admin-messages";
 
 /**
  * An owner resets another admin's password.
@@ -86,24 +84,23 @@ export default function ResetAdminPassword() {
   const { target } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
-  const { t } = useTranslation("internal");
 
   const busy = navigation.state !== "idle";
   const error = actionData?.error;
 
   return (
     <Page
-      title={t("admins.reset.title", { name: target.name })}
+      title={`Reset the password for ${target.name}?`}
       narrowWidth
-      backAction={{ label: t("admins.heading"), href: "/internal/admins" }}
+      backAction={{ label: "Admins", href: "/internal/admins" }}
     >
       <BlockStack gap={4}>
         {error && (
           <Alert variant="destructive">
             <AlertDescription>
               {error === "mismatch"
-                ? t("profile.errors.mismatch")
-                : t(`admins.errors.${error}`, { min: MIN_PASSWORD_LENGTH })}
+                ? "The new passwords do not match."
+                : ADMIN_ERRORS[error]}
             </AlertDescription>
           </Alert>
         )}
@@ -112,13 +109,12 @@ export default function ResetAdminPassword() {
           <CardContent className="pt-6">
             <Form method="post" className="flex flex-col gap-4">
               <Text as="p" className="text-muted-foreground">
-                {t("admins.reset.desc")}
+                Set a new password and give it to them directly. Their
+                current password stops working immediately.
               </Text>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="newPassword">
-                  {t("admins.reset.newPassword")}
-                </Label>
+                <Label htmlFor="newPassword">New password</Label>
                 <PasswordInput
                   id="newPassword"
                   name="newPassword"
@@ -128,14 +124,13 @@ export default function ResetAdminPassword() {
                   autoFocus
                 />
                 <Text as="p" className="text-xs text-muted-foreground">
-                  {t("admins.add.hint", { min: MIN_PASSWORD_LENGTH })}
+                  At least {MIN_PASSWORD_LENGTH} characters. Ask them to
+                  change it after signing in.
                 </Text>
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="confirmPassword">
-                  {t("profile.confirmPassword")}
-                </Label>
+                <Label htmlFor="confirmPassword">Confirm new password</Label>
                 <PasswordInput
                   id="confirmPassword"
                   name="confirmPassword"
@@ -147,10 +142,10 @@ export default function ResetAdminPassword() {
 
               <div className="flex flex-wrap gap-2">
                 <Button type="submit" disabled={busy}>
-                  {t("admins.reset.confirm")}
+                  Reset password
                 </Button>
                 <Button asChild variant="outline">
-                  <Link to="/internal/admins">{t("admins.reset.cancel")}</Link>
+                  <Link to="/internal/admins">Cancel</Link>
                 </Button>
               </div>
             </Form>

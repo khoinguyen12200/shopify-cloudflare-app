@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "border-inline-start: 3px solid var(--color-border-strong);",
+        "files": [
+          "app/styles/public/_components.scss"
+        ],
+        "createdAt": "2026-08-25T11:10:04.902Z",
+        "reason": "pre-existing .notice component from commit 94d2fbf, predates this session's edits to this file; not part of the current change"
+      }
+    ]
+  }
+}

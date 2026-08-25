@@ -2,6 +2,9 @@ import { Link } from "react-router";
 import type { LoaderFunctionArgs, MetaFunction } from "react-router";
 import { useTranslation } from "react-i18next";
 import { i18nServer } from "~/i18n/i18n.server";
+import { useLocale } from "~/i18n/useLocale";
+import { formatMoney } from "~/money";
+import { FEATURED_PLAN_KEY, PLAN_LIST } from "~/billing/plans";
 
 export const handle = { i18n: ["common", "public"] };
 
@@ -16,20 +19,20 @@ export const meta: MetaFunction<typeof loader> = ({ data }) => [
 ];
 
 /**
- * Whatever you show here MUST match what the app actually charges. Shopify's app
- * requirements expect merchants to change plan without contacting support, and a
- * listing price that disagrees with the real charge is a review failure.
+ * Whatever you show here MUST match what the app actually charges. Shopify's
+ * app requirements expect merchants to change plan without contacting
+ * support, and a listing price that disagrees with the real charge is a
+ * review failure.
  *
- * Prices live in the translation files, not here: currency symbol and decimal
- * separator differ per locale, and a Spanish merchant should see "1,50 €", not
- * "$1.50". For real amounts, use formatMoney() from ~/i18n/format so Intl does
- * it rather than a hand-built string.
+ * The plans themselves — name, price, features, and which one is featured —
+ * come from ONE place: app/billing/plans.ts. This page, the landing page's
+ * pricing teaser, and the embedded billing page all read the same catalogue,
+ * so there is exactly one edit to make when a price (or the featured plan)
+ * changes.
  */
-const PLAN_KEYS = ["starter", "growth", "plus"] as const;
-const POPULAR: (typeof PLAN_KEYS)[number] = "growth";
-
 export default function Pricing() {
-  const { t } = useTranslation("public");
+  const { t } = useTranslation(["public", "common"]);
+  const locale = useLocale();
 
   return (
     <section className="section">
@@ -42,26 +45,27 @@ export default function Pricing() {
         <p className="notice notice--warning">{t("pricing.warning")}</p>
 
         <div className="grid">
-          {PLAN_KEYS.map((key) => {
-            const popular = key === POPULAR;
+          {PLAN_LIST.map((plan) => {
+            const popular = plan.key === FEATURED_PLAN_KEY;
+            const free = plan.priceMonthly.amount === 0;
             return (
-              <article key={key} className="card stack">
+              <article key={plan.key} className="card stack">
                 <div className="row">
-                  <h3>{t(`pricing.plans.${key}.name`)}</h3>
+                  <h3>{plan.name}</h3>
                   {popular && <span className="badge">{t("pricing.popular")}</span>}
                 </div>
                 <p>
-                  <strong style={{ fontSize: "1.75rem" }}>
-                    {t(`pricing.plans.${key}.price`)}
+                  <strong className="price-amount">
+                    {formatMoney(locale, plan.priceMonthly)}
                   </strong>{" "}
                   <span className="muted">
-                    {key === "starter" ? t("pricing.forever") : t("pricing.perMonth")}
+                    {free ? t("pricing.forever") : t("pricing.perMonth")}
                   </span>
                 </p>
                 <ul role="list" className="stack">
-                  {[0, 1, 2].map((i) => (
-                    <li key={i} className="muted">
-                      {t("pricing.featureTodo")}
+                  {plan.featureKeys.map((key) => (
+                    <li key={key} className="muted">
+                      {t(`common:plans.${key}`)}
                     </li>
                   ))}
                 </ul>

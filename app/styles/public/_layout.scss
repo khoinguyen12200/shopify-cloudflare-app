@@ -64,6 +64,10 @@
   gap: m.space("2xs");
 }
 
+.row--center {
+  justify-content: center;
+}
+
 .grid {
   @include m.auto-grid;
 }
@@ -133,6 +137,27 @@
     align-items: center;
     gap: m.space("sm");
   }
+
+  // Navigation, not inline prose: no underline, and coloured only on
+  // hover/focus rather than at rest, so the header doesn't read as a
+  // paragraph of hyperlinks.
+  a {
+    color: var(--color-text-muted);
+    text-decoration: none;
+    padding: m.space("3xs") 0;
+
+    @include m.motion-safe {
+      transition: color t.$duration-fast t.$easing;
+    }
+
+    &:hover {
+      color: var(--color-text);
+    }
+
+    &:focus-visible {
+      @include m.focus-ring;
+    }
+  }
 }
 
 .footer {
@@ -160,4 +185,22 @@
   display: flex;
   flex-wrap: wrap;
   gap: m.space("sm");
+
+  // Same treatment as the header nav: these are navigation, not body copy.
+  a {
+    color: var(--color-text-muted);
+    text-decoration: none;
+
+    @include m.motion-safe {
+      transition: color t.$duration-fast t.$easing;
+    }
+
+    &:hover {
+      color: var(--color-text);
+    }
+
+    &:focus-visible {
+      @include m.focus-ring;
+    }
+  }
 }

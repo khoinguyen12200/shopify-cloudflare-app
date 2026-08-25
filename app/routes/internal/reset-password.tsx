@@ -13,7 +13,6 @@ import {
   PasswordInput,
   Text,
 } from "ngk-dashboard";
-import { useTranslation } from "react-i18next";
 import {
   checkResetToken,
   completePasswordReset,
@@ -23,7 +22,13 @@ import { MIN_PASSWORD_LENGTH } from "~/lib/password-policy";
 import { INTERNAL_FONT_LINKS, THEME_INIT_SCRIPT } from "~/internal/components";
 import internalStyles from "~/styles/internal/internal.tailwind.css?url";
 
-export const handle = { i18n: ["common", "internal"] };
+const RESET_PASSWORD_ERRORS: Record<ResetFailure, string> = {
+  invalidToken: "That reset link is not valid. Request a new one.",
+  expiredToken: "That reset link has expired. Request a new one.",
+  usedToken: "That reset link has already been used. Request a new one.",
+  tooShort: `The password must be at least ${MIN_PASSWORD_LENGTH} characters.`,
+  mismatch: "The passwords do not match.",
+};
 
 export const links: LinksFunction = () => [
   ...INTERNAL_FONT_LINKS,
@@ -70,7 +75,6 @@ export default function ResetPassword() {
   const { valid, reason } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
-  const { t } = useTranslation("internal");
 
   const submitting = navigation.state !== "idle";
   const done = actionData && "done" in actionData;
@@ -88,22 +92,18 @@ export default function ResetPassword() {
         <div className="w-full max-w-sm">
           <div className="mb-8 text-center">
             <h1 className="text-2xl font-semibold tracking-tight">
-              {t("passwordReset.reset.heading")}
+              Choose a new password
             </h1>
             {valid && !done && (
               <Text as="p" className="mt-1 text-sm text-muted-foreground">
-                {t("passwordReset.reset.lead")}
+                Pick a password you have not used here before.
               </Text>
             )}
           </div>
 
           {error && (
             <Alert variant="destructive" className="mb-4">
-              <AlertDescription>
-                {t(`passwordReset.reset.errors.${error}`, {
-                  min: MIN_PASSWORD_LENGTH,
-                })}
-              </AlertDescription>
+              <AlertDescription>{RESET_PASSWORD_ERRORS[error]}</AlertDescription>
             </Alert>
           )}
 
@@ -111,25 +111,21 @@ export default function ResetPassword() {
             <div className="flex flex-col gap-4">
               <Alert>
                 <AlertDescription>
-                  {t("passwordReset.reset.done")}
+                  Your password was changed. You can sign in now.
                 </AlertDescription>
               </Alert>
               <Button asChild>
-                <Link to="/internal/login">{t("passwordReset.reset.signIn")}</Link>
+                <Link to="/internal/login">Sign in</Link>
               </Button>
             </div>
           ) : deadToken ? (
             <Button asChild variant="outline" className="w-full">
-              <Link to="/internal/forgot-password">
-                {t("passwordReset.reset.requestAnother")}
-              </Link>
+              <Link to="/internal/forgot-password">Request a new link</Link>
             </Button>
           ) : (
             <Form method="post" className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="newPassword">
-                  {t("passwordReset.reset.newPassword")}
-                </Label>
+                <Label htmlFor="newPassword">New password</Label>
                 <PasswordInput
                   id="newPassword"
                   name="newPassword"
@@ -141,9 +137,7 @@ export default function ResetPassword() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="confirmPassword">
-                  {t("passwordReset.reset.confirmPassword")}
-                </Label>
+                <Label htmlFor="confirmPassword">Confirm new password</Label>
                 <PasswordInput
                   id="confirmPassword"
                   name="confirmPassword"
@@ -154,9 +148,7 @@ export default function ResetPassword() {
               </div>
 
               <Button type="submit" disabled={submitting}>
-                {submitting
-                  ? t("passwordReset.reset.submitting")
-                  : t("passwordReset.reset.submit")}
+                {submitting ? "Saving…" : "Set password"}
               </Button>
             </Form>
           )}

@@ -1,7 +1,6 @@
 import { useCallback, useSyncExternalStore } from "react";
 import { Moon, Sun } from "lucide-react";
 import { Button } from "ngk-dashboard";
-import { useTranslation } from "react-i18next";
 
 export const THEME_KEY = "internal-theme";
 
@@ -32,10 +31,18 @@ const isDark = () => document.documentElement.classList.contains("dark");
 /** The server has no DOM and renders the light icon; the observer corrects it. */
 const isDarkOnServer = () => false;
 
+/**
+ * The console's current theme, read from the DOM `subscribe`/`isDark` above —
+ * shared with anything else that needs to match it (the toast layer's
+ * `Toaster theme=`), so there is exactly one source of truth for "is it dark".
+ */
+export function useIsDarkTheme(): boolean {
+  return useSyncExternalStore(subscribe, isDark, isDarkOnServer);
+}
+
 /** Light/dark switch — flips `.dark` on <html> and remembers the choice. */
 export function ThemeToggle() {
-  const { t } = useTranslation("internal");
-  const dark = useSyncExternalStore(subscribe, isDark, isDarkOnServer);
+  const dark = useIsDarkTheme();
 
   const toggle = useCallback(() => {
     const next = !document.documentElement.classList.contains("dark");
@@ -52,7 +59,7 @@ export function ThemeToggle() {
       variant="ghost"
       size="icon"
       onClick={toggle}
-      aria-label={t("theme.toggle")}
+      aria-label="Toggle theme"
     >
       {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
     </Button>

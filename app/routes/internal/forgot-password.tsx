@@ -12,14 +12,15 @@ import {
   Label,
   Text,
 } from "ngk-dashboard";
-import { useTranslation } from "react-i18next";
 import { requestPasswordReset } from "~/services/password-reset.server";
 import { isProductionLike } from "~/lib/deployment";
 import { paths } from "~/urls";
 import { INTERNAL_FONT_LINKS, THEME_INIT_SCRIPT } from "~/internal/components";
 import internalStyles from "~/styles/internal/internal.tailwind.css?url";
 
-export const handle = { i18n: ["common", "internal"] };
+const FORGOT_PASSWORD_ERRORS = {
+  emailRequired: "Enter your email address.",
+} as const;
 
 export const links: LinksFunction = () => [
   ...INTERNAL_FONT_LINKS,
@@ -64,7 +65,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 export default function ForgotPassword() {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
-  const { t } = useTranslation("internal");
 
   const submitting = navigation.state !== "idle";
   const sent = actionData && "sent" in actionData;
@@ -77,17 +77,18 @@ export default function ForgotPassword() {
         <div className="w-full max-w-sm">
           <div className="mb-8 text-center">
             <h1 className="text-2xl font-semibold tracking-tight">
-              {t("passwordReset.forgot.heading")}
+              Reset your password
             </h1>
             <Text as="p" className="mt-1 text-sm text-muted-foreground">
-              {t("passwordReset.forgot.lead")}
+              Enter your email address and we will send you a link to choose a
+              new password.
             </Text>
           </div>
 
           {error && (
             <Alert variant="destructive" className="mb-4">
               <AlertDescription>
-                {t(`passwordReset.forgot.${error}`)}
+                {FORGOT_PASSWORD_ERRORS[error]}
               </AlertDescription>
             </Alert>
           )}
@@ -96,7 +97,8 @@ export default function ForgotPassword() {
             <div className="flex flex-col gap-4">
               <Alert>
                 <AlertDescription>
-                  {t("passwordReset.forgot.sent")}
+                  If an account exists for that address, a reset link is on
+                  its way. The link expires in one hour.
                 </AlertDescription>
               </Alert>
 
@@ -106,7 +108,7 @@ export default function ForgotPassword() {
               {actionData.devToken && (
                 <Alert>
                   <AlertDescription className="break-all">
-                    {t("passwordReset.forgot.devLink")}{" "}
+                    Email is not configured locally, so here is the link:{" "}
                     <Link
                       to={paths.internal.resetPassword(actionData.devToken)}
                       className="underline"
@@ -120,7 +122,7 @@ export default function ForgotPassword() {
           ) : (
             <Form method="post" className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="email">{t("passwordReset.forgot.email")}</Label>
+                <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
                   name="email"
@@ -131,16 +133,14 @@ export default function ForgotPassword() {
                 />
               </div>
               <Button type="submit" disabled={submitting}>
-                {submitting
-                  ? t("passwordReset.forgot.submitting")
-                  : t("passwordReset.forgot.submit")}
+                {submitting ? "Sending…" : "Send reset link"}
               </Button>
             </Form>
           )}
 
           <p className="mt-6 text-center text-sm">
             <Link to="/internal/login" className="text-muted-foreground underline">
-              {t("passwordReset.forgot.backToLogin")}
+              Back to sign in
             </Link>
           </p>
         </div>
