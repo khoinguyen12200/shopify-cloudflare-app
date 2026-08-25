@@ -103,3 +103,37 @@ export type ReplyInput = z.infer<typeof replySchema>;
 
 /** Editing the CC list on an existing ticket. */
 export const updateCcSchema = z.object({ ccEmails: ccEmailsSchema });
+
+/**
+ * The shop-contact GraphQL response, parsed rather than cast.
+ *
+ * `admin.graphql().json()` is untyped, so reading it with `as string` would be
+ * a claim about a network response rather than a check on one — and
+ * @rules/code-craft.md bans exactly that. Every field is optional because a
+ * partial response is a real possibility; the caller decides the fallback.
+ */
+export const shopContactSchema = z.object({
+  data: z
+    .object({
+      shop: z
+        .object({
+          name: z.string().optional(),
+          email: z.string().optional(),
+          contactEmail: z.string().optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+});
+
+/** The shop's name and best reply address, or empty strings if absent. */
+export function readShopContact(body: unknown): { name: string; email: string } {
+  const parsed = shopContactSchema.safeParse(body);
+  const shop = parsed.success ? parsed.data.data?.shop : undefined;
+  return {
+    name: shop?.name ?? "",
+    // The account owner's address first; the public contact address is the
+    // fallback. One of the two is what a merchant expects a reply at.
+    email: shop?.email ?? shop?.contactEmail ?? "",
+  };
+}

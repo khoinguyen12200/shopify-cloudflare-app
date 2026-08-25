@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  readShopContact,
   CC_MAX,
   SUBJECT_MAX,
   BODY_MAX,
@@ -139,5 +140,30 @@ describe("replySchema", () => {
 
   it("refuses a reply that is entirely empty", () => {
     expect(replySchema.safeParse({ body: "  ", uploadIds: "" }).success).toBe(false);
+  });
+});
+
+describe("readShopContact", () => {
+  it("prefers the account owner's address over the public contact one", () => {
+    const contact = readShopContact({
+      data: { shop: { name: "Alpha", email: "owner@alpha.test", contactEmail: "hi@alpha.test" } },
+    });
+    expect(contact).toEqual({ name: "Alpha", email: "owner@alpha.test" });
+  });
+
+  it("falls back to the public contact address when there is no owner email", () => {
+    const contact = readShopContact({ data: { shop: { name: "A", contactEmail: "hi@a.test" } } });
+    expect(contact.email).toBe("hi@a.test");
+  });
+
+  it("returns empty strings for a partial or unexpected response", () => {
+    // A cast would have produced `undefined` here and pushed it into the form.
+    expect(readShopContact({})).toEqual({ name: "", email: "" });
+    expect(readShopContact(null)).toEqual({ name: "", email: "" });
+    expect(readShopContact({ data: { shop: {} } })).toEqual({ name: "", email: "" });
+  });
+
+  it("ignores a response whose shape is wrong rather than throwing", () => {
+    expect(readShopContact({ data: { shop: { name: 42 } } })).toEqual({ name: "", email: "" });
   });
 });

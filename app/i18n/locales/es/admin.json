@@ -67,5 +67,80 @@
       "freeForever": "Gratis para siempre",
       "buildsOn": "Todo lo del plan {{plan}}, y además"
     }
+  },
+  "support": {
+    "heading": "Soporte",
+    "body": "Pregúntanos lo que necesites, informa de un problema o sugiere una función.",
+    "newTicket": "Nuevo ticket",
+    "empty": {
+      "heading": "Aún no hay tickets",
+      "body": "Cuando algo no funcione o quieras una función, abre un ticket y te responderemos aquí."
+    },
+    "columns": {
+      "subject": "Asunto",
+      "category": "Tipo",
+      "status": "Estado",
+      "updated": "Última actividad"
+    },
+    "status": {
+      "open": "Pendiente de nosotros",
+      "answered": "Respondido",
+      "closed": "Cerrado"
+    },
+    "category": {
+      "bug": "Algo no funciona",
+      "question": "Pregunta",
+      "feature_request": "Sugerencia de función",
+      "billing": "Facturación"
+    },
+    "unread": "Nuevo",
+    "form": {
+      "heading": "¿En qué podemos ayudarte?",
+      "category": "¿Qué tipo de problema es?",
+      "subject": "Asunto",
+      "subjectPlaceholder": "El botón de instalación no hace nada",
+      "body": "Cuéntanos qué ha pasado",
+      "bodyHelp": "Qué esperabas, qué ocurrió y dónde. Una captura o un vídeo ayuda mucho.",
+      "email": "Correo para respuestas",
+      "emailHelp": "Responderemos aquí y también en la aplicación. Déjalo vacío para recibir avisos solo en la aplicación.",
+      "cc": "Copiar también a",
+      "ccHelp": "Una dirección por línea, hasta {{max}}.",
+      "attachments": "Capturas o un vídeo",
+      "addFiles": "Añadir archivos",
+      "submit": "Enviar ticket",
+      "submitting": "Enviando…"
+    },
+    "thread": {
+      "conversation": "Conversación",
+      "you": "Tú",
+      "us": "Soporte",
+      "reply": "Tu respuesta",
+      "replyPlaceholder": "Añade cualquier detalle que pueda ayudar",
+      "send": "Enviar respuesta",
+      "sending": "Enviando…",
+      "closedNotice": "Este ticket está cerrado. Responde para reabrirlo.",
+      "close": "Cerrar ticket",
+      "details": "Detalles",
+      "created": "Abierto",
+      "attachmentCount": "{{count}} archivo adjunto",
+      "attachmentCount_plural": "{{count}} archivos adjuntos",
+      "saveCc": "Guardar",
+      "download": "Abrir archivo"
+    },
+    "errors": {
+      "rate_limited": "Has enviado muchos mensajes seguidos. Inténtalo de nuevo en un minuto.",
+      "not_found": "Ese ticket ya no existe.",
+      "empty_reply": "Escribe un mensaje o adjunta un archivo.",
+      "upload_failed": "No se pudo subir el archivo. Inténtalo de nuevo.",
+      "too_large": "El archivo es demasiado grande.",
+      "unsupported_type": "Solo se pueden adjuntar imágenes y vídeos.",
+      "invalid_cc": "Esa lista de copias no es válida. Usa una dirección por línea."
+    },
+    "success": {
+      "created": "Ticket enviado. Te responderemos aquí.",
+      "replied": "Respuesta enviada.",
+      "closed": "Ticket cerrado.",
+      "ccSaved": "Lista de copias guardada."
+    }
   }
 }

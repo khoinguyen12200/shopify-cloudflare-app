@@ -67,5 +67,80 @@
       "freeForever": "Free forever",
       "buildsOn": "Everything in {{plan}}, plus"
     }
+  },
+  "support": {
+    "heading": "Support",
+    "body": "Ask us anything, report a problem, or suggest a feature.",
+    "newTicket": "New ticket",
+    "empty": {
+      "heading": "No tickets yet",
+      "body": "When something looks wrong or you want a feature, open a ticket and we will reply here."
+    },
+    "columns": {
+      "subject": "Subject",
+      "category": "Type",
+      "status": "Status",
+      "updated": "Last activity"
+    },
+    "status": {
+      "open": "Waiting on us",
+      "answered": "Replied",
+      "closed": "Closed"
+    },
+    "category": {
+      "bug": "Something is broken",
+      "question": "Question",
+      "feature_request": "Feature request",
+      "billing": "Billing"
+    },
+    "unread": "New",
+    "form": {
+      "heading": "What can we help with?",
+      "category": "What kind of issue is this?",
+      "subject": "Subject",
+      "subjectPlaceholder": "The install button does nothing",
+      "body": "Tell us what happened",
+      "bodyHelp": "What you expected, what happened instead, and where. A screenshot or recording helps most.",
+      "email": "Email for replies",
+      "emailHelp": "We reply here as well as in the app. Clear it to only be notified in the app.",
+      "cc": "Also copy these people",
+      "ccHelp": "One address per line, up to {{max}}.",
+      "attachments": "Screenshots or a recording",
+      "addFiles": "Add files",
+      "submit": "Send ticket",
+      "submitting": "Sending…"
+    },
+    "thread": {
+      "conversation": "Conversation",
+      "you": "You",
+      "us": "Support",
+      "reply": "Your reply",
+      "replyPlaceholder": "Add anything else that might help",
+      "send": "Send reply",
+      "sending": "Sending…",
+      "closedNotice": "This ticket is closed. Reply to reopen it.",
+      "close": "Close ticket",
+      "details": "Details",
+      "created": "Opened",
+      "attachmentCount": "{{count}} attachment",
+      "attachmentCount_plural": "{{count}} attachments",
+      "saveCc": "Save",
+      "download": "Open file"
+    },
+    "errors": {
+      "rate_limited": "You have sent a lot of messages just now. Try again in a minute.",
+      "not_found": "That ticket no longer exists.",
+      "empty_reply": "Write a message or attach a file.",
+      "upload_failed": "That file could not be uploaded. Try again.",
+      "too_large": "That file is too big.",
+      "unsupported_type": "Only images and videos can be attached.",
+      "invalid_cc": "That copy list is not valid. Use one email address per line."
+    },
+    "success": {
+      "created": "Ticket sent. We will reply here.",
+      "replied": "Reply sent.",
+      "closed": "Ticket closed.",
+      "ccSaved": "Copy list saved."
+    }
   }
 }
