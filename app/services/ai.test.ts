@@ -4,7 +4,10 @@ import { runWithRequestContext } from "~/request-context.server";
 import { setupTestDatabase } from "~/test/db";
 import { AiRepo } from "~/models/ai.server";
 import { fakeTextGenerator } from "~/test/fake-ai";
-import type { AiFailureReason, AiGate } from "~/ports/ai";
+import type { AiFailureReason } from "~/ports/ai";
+import type { AiGate } from "~/ai/gate";
+import { replyTask } from "~/ai/tasks/reply";
+import { threadSummaryTask } from "~/ai/tasks/thread-summary";
 import { AiService } from "./ai.server";
 import type { ThreadForPrompt } from "~/ai/draft-prompt";
 
@@ -33,7 +36,7 @@ describe("drafting a support reply", () => {
     const generator = fakeTextGenerator({ reply: "Sorry about that — which browser?" });
     const result = await inRequest(async () => {
       await new AiRepo().addToChain({ role: "writing", modelId: "@cf/x/y", updatedBy: null, at: AT });
-      return service(generator).draftReply({ thread, caller: STAFF });
+      return service(generator).run(replyTask, { thread, currentText: "", tone: "professional" }, STAFF);
     });
 
     expect(result).toEqual({ ok: true, value: "Sorry about that — which browser?" });
@@ -45,7 +48,7 @@ describe("drafting a support reply", () => {
     const generator = fakeTextGenerator();
     await inRequest(async () => {
       await new AiRepo().addToChain({ role: "writing", modelId: "@cf/x/y", updatedBy: null, at: AT });
-      return service(generator).draftReply({ thread, caller: STAFF });
+      return service(generator).run(replyTask, { thread, currentText: "", tone: "professional" }, STAFF);
     });
 
     expect(generator.only().model).toBe("@cf/x/y");
@@ -55,7 +58,7 @@ describe("drafting a support reply", () => {
     const generator = fakeTextGenerator();
     await inRequest(async () => {
       await new AiRepo().addToChain({ role: "writing", modelId: "@cf/x/y", updatedBy: null, at: AT });
-      return service(generator).draftReply({ thread, caller: STAFF });
+      return service(generator).run(replyTask, { thread, currentText: "", tone: "professional" }, STAFF);
     });
 
     const user = generator.only().messages.at(-1)?.content ?? "";
@@ -67,7 +70,7 @@ describe("drafting a support reply", () => {
     const runs = await inRequest(async () => {
       const repo = new AiRepo();
       await repo.addToChain({ role: "writing", modelId: "@cf/x/y", updatedBy: null, at: AT });
-      await service(generator).draftReply({ thread, caller: STAFF });
+      await service(generator).run(replyTask, { thread, currentText: "", tone: "professional" }, STAFF);
       return repo.recentRuns();
     });
 
@@ -85,7 +88,7 @@ describe("drafting a support reply", () => {
   it("refuses with no_model when nobody has chosen one for the role", async () => {
     // Degrades to "no draft" — it must never block a reply being sent.
     const result = await inRequest(() =>
-      service().draftReply({ thread, caller: STAFF }),
+      service().run(replyTask, { thread, currentText: "", tone: "professional" }, STAFF),
     );
 
     expect(result).toEqual({ ok: false, reason: "no_model" });
@@ -94,7 +97,7 @@ describe("drafting a support reply", () => {
   it("still records a run when the model is missing, so the gap is visible", async () => {
     const runs = await inRequest(async () => {
       const repo = new AiRepo();
-      await service().draftReply({ thread, caller: STAFF });
+      await service().run(replyTask, { thread, currentText: "", tone: "professional" }, STAFF);
       return repo.recentRuns();
     });
 
@@ -106,7 +109,7 @@ describe("drafting a support reply", () => {
     const generator = fakeTextGenerator({ fail: "provider" });
     const result = await inRequest(async () => {
       await new AiRepo().addToChain({ role: "writing", modelId: "@cf/x/y", updatedBy: null, at: AT });
-      return service(generator).draftReply({ thread, caller: STAFF });
+      return service(generator).run(replyTask, { thread, currentText: "", tone: "professional" }, STAFF);
     });
 
     expect(result).toEqual({ ok: false, reason: "provider" });
@@ -117,7 +120,7 @@ describe("drafting a support reply", () => {
     const runs = await inRequest(async () => {
       const repo = new AiRepo();
       await repo.addToChain({ role: "writing", modelId: "@cf/x/y", updatedBy: null, at: AT });
-      await service(generator).draftReply({ thread, caller: STAFF });
+      await service(generator).run(replyTask, { thread, currentText: "", tone: "professional" }, STAFF);
       return repo.recentRuns();
     });
 
@@ -129,7 +132,7 @@ describe("drafting a support reply", () => {
     const generator = fakeTextGenerator({ reply: "   \n  " });
     const result = await inRequest(async () => {
       await new AiRepo().addToChain({ role: "writing", modelId: "@cf/x/y", updatedBy: null, at: AT });
-      return service(generator).draftReply({ thread, caller: STAFF });
+      return service(generator).run(replyTask, { thread, currentText: "", tone: "professional" }, STAFF);
     });
 
     expect(result).toEqual({ ok: false, reason: "provider" });
@@ -139,7 +142,7 @@ describe("drafting a support reply", () => {
     const generator = fakeTextGenerator({ reply: "  Hello.\n\n" });
     const result = await inRequest(async () => {
       await new AiRepo().addToChain({ role: "writing", modelId: "@cf/x/y", updatedBy: null, at: AT });
-      return service(generator).draftReply({ thread, caller: STAFF });
+      return service(generator).run(replyTask, { thread, currentText: "", tone: "professional" }, STAFF);
     });
 
     expect(result).toEqual({ ok: true, value: "Hello." });
@@ -158,7 +161,7 @@ describe("streaming a support reply", () => {
       const repo = new AiRepo();
       await repo.addToChain({ role: "writing", modelId: "@cf/x/y", updatedBy: null, at: AT });
 
-      const started = await service(generator).streamReply({ thread, currentText: "", tone: "professional", caller: STAFF });
+      const started = await service(generator).stream(replyTask, { thread, currentText: "", tone: "professional" }, STAFF);
       if (!started.ok) throw new Error(`expected a stream, got ${started.reason}`);
 
       let text = "";
@@ -176,7 +179,7 @@ describe("streaming a support reply", () => {
 
   it("refuses before opening a stream when no model is configured", async () => {
     const result = await inRequest(() =>
-      service().streamReply({ thread, currentText: "", tone: "professional", caller: STAFF }),
+      service().stream(replyTask, { thread, currentText: "", tone: "professional" }, STAFF),
     );
 
     expect(result).toEqual({ ok: false, reason: "no_model" });
@@ -188,7 +191,7 @@ describe("summarising a thread", () => {
     const generator = fakeTextGenerator({ reply: "Payment fails. Waiting on us." });
     await inRequest(async () => {
       await new AiRepo().addToChain({ role: "summary", modelId: "@cf/s/m", updatedBy: null, at: AT });
-      return service(generator).summariseThread({ thread, caller: STAFF });
+      return service(generator).run(threadSummaryTask, { thread }, STAFF);
     });
 
     expect(generator.only().model).toBe("@cf/s/m");
@@ -198,7 +201,7 @@ describe("summarising a thread", () => {
     const runs = await inRequest(async () => {
       const repo = new AiRepo();
       await repo.addToChain({ role: "summary", modelId: "@cf/s/m", updatedBy: null, at: AT });
-      await service().summariseThread({ thread, caller: STAFF });
+      await service().run(threadSummaryTask, { thread }, STAFF);
       return repo.recentRuns();
     });
 
@@ -222,7 +225,7 @@ describe("falling back down the chain", () => {
     const generator = fakeTextGenerator({ reply: "Draft." });
     await inRequest(async () => {
       await chain(["@cf/a/first", "@cf/b/second"]);
-      return service(generator).draftReply({ thread, caller: STAFF });
+      return service(generator).run(replyTask, { thread, currentText: "", tone: "professional" }, STAFF);
     });
 
     expect(generator.calls).toHaveLength(1);
@@ -237,7 +240,7 @@ describe("falling back down the chain", () => {
 
     const result = await inRequest(async () => {
       await chain(["@cf/a/first", "@cf/b/second"]);
-      return service(generator).draftReply({ thread, caller: STAFF });
+      return service(generator).run(replyTask, { thread, currentText: "", tone: "professional" }, STAFF);
     });
 
     expect(result).toEqual({ ok: true, value: "Second model's draft." });
@@ -255,7 +258,7 @@ describe("falling back down the chain", () => {
 
     const result = await inRequest(async () => {
       await chain(["@cf/a/first", "@cf/b/second", "@cf/c/third"]);
-      return service(generator).draftReply({ thread, caller: STAFF });
+      return service(generator).run(replyTask, { thread, currentText: "", tone: "professional" }, STAFF);
     });
 
     expect(generator.calls).toHaveLength(3);
@@ -270,7 +273,7 @@ describe("falling back down the chain", () => {
 
     const result = await inRequest(async () => {
       await chain(["@cf/a/first", "@cf/b/second", "@cf/c/third"]);
-      return service(generator).draftReply({ thread, caller: STAFF });
+      return service(generator).run(replyTask, { thread, currentText: "", tone: "professional" }, STAFF);
     });
 
     expect(generator.calls).toHaveLength(1);
@@ -285,7 +288,7 @@ describe("falling back down the chain", () => {
 
     const after = await inRequest(async () => {
       const repo = await chain(["@cf/a/first", "@cf/b/second"]);
-      await service(generator).draftReply({ thread, caller: STAFF });
+      await service(generator).run(replyTask, { thread, currentText: "", tone: "professional" }, STAFF);
       return repo.chainFor("writing", AT);
     });
 
@@ -300,7 +303,7 @@ describe("falling back down the chain", () => {
 
     const runs = await inRequest(async () => {
       const repo = await chain(["@cf/a/first", "@cf/b/second"]);
-      await service(generator).draftReply({ thread, caller: STAFF });
+      await service(generator).run(replyTask, { thread, currentText: "", tone: "professional" }, STAFF);
       return repo.recentRuns();
     });
 
@@ -319,7 +322,7 @@ describe("falling back down the chain", () => {
     const after = await inRequest(async () => {
       const repo = await chain(["@cf/a/first", "@cf/b/second"]);
       await repo.markHealth({ role: "writing", modelId: "@cf/a/first", healthy: false, at: AT });
-      await service(generator).draftReply({ thread, caller: STAFF });
+      await service(generator).run(replyTask, { thread, currentText: "", tone: "professional" }, STAFF);
       return repo.chainFor("writing", AT);
     });
 
@@ -335,7 +338,7 @@ describe("falling back down the chain", () => {
     const healthy = await inRequest(async () => {
       const repo = await chain(["@cf/a/only"]);
       await repo.markHealth({ role: "writing", modelId: "@cf/a/only", healthy: false, at: AT });
-      await service(generator).draftReply({ thread, caller: STAFF });
+      await service(generator).run(replyTask, { thread, currentText: "", tone: "professional" }, STAFF);
       const [row] = await repo.allModels();
       return row?.healthy;
     });
@@ -344,7 +347,7 @@ describe("falling back down the chain", () => {
   });
 
   it("refuses with no_model when the purpose has an empty chain", async () => {
-    const result = await inRequest(() => service().draftReply({ thread, caller: STAFF }));
+    const result = await inRequest(() => service().run(replyTask, { thread, currentText: "", tone: "professional" }, STAFF));
     expect(result).toEqual({ ok: false, reason: "no_model" });
   });
 });
@@ -372,7 +375,7 @@ describe("gating AI by who is asking", () => {
 
     const result = await inRequest(async () => {
       await new AiRepo().addToChain({ role: "writing", modelId: "@cf/x/y", updatedBy: null, at: AT });
-      return service.draftReply({ thread, caller: MERCHANT });
+      return service.run(replyTask, { thread, currentText: "", tone: "professional" }, MERCHANT);
     });
 
     expect(result).toEqual({ ok: false, reason: "forbidden" });
@@ -384,7 +387,7 @@ describe("gating AI by who is asking", () => {
 
     await inRequest(async () => {
       await new AiRepo().addToChain({ role: "writing", modelId: "@cf/x/y", updatedBy: null, at: AT });
-      return service.draftReply({ thread, caller: MERCHANT });
+      return service.run(replyTask, { thread, currentText: "", tone: "professional" }, MERCHANT);
     });
 
     expect(generator.calls).toEqual([]);
@@ -396,7 +399,7 @@ describe("gating AI by who is asking", () => {
     const runs = await inRequest(async () => {
       const repo = new AiRepo();
       await repo.addToChain({ role: "writing", modelId: "@cf/x/y", updatedBy: null, at: AT });
-      await service.draftReply({ thread, caller: MERCHANT });
+      await service.run(replyTask, { thread, currentText: "", tone: "professional" }, MERCHANT);
       return repo.recentRuns();
     });
 
@@ -413,7 +416,7 @@ describe("gating AI by who is asking", () => {
 
     const result = await inRequest(async () => {
       await new AiRepo().addToChain({ role: "writing", modelId: "@cf/x/y", updatedBy: null, at: AT });
-      return service.draftReply({ thread, caller: MERCHANT });
+      return service.run(replyTask, { thread, currentText: "", tone: "professional" }, MERCHANT);
     });
 
     expect(result).toEqual({ ok: true, value: "Allowed." });
@@ -424,7 +427,7 @@ describe("gating AI by who is asking", () => {
 
     const result = await inRequest(async () => {
       await new AiRepo().addToChain({ role: "writing", modelId: "@cf/x/y", updatedBy: null, at: AT });
-      return service.streamReply({ thread, currentText: "hi", tone: "professional", caller: MERCHANT });
+      return service.stream(replyTask, { thread, currentText: "hi", tone: "professional" }, MERCHANT);
     });
 
     expect(result).toEqual({ ok: false, reason: "forbidden" });
@@ -438,7 +441,7 @@ describe("gating AI by who is asking", () => {
 
     const runs = await inRequest(async () => {
       const repo = new AiRepo();
-      await service.draftReply({ thread, caller: MERCHANT });
+      await service.run(replyTask, { thread, currentText: "", tone: "professional" }, MERCHANT);
       return repo.recentRuns();
     });
 

@@ -1,72 +1,115 @@
-import type { PlanKey } from "~/billing/plans";
+import type { AiFailureReason } from "~/ports/ai";
 import type { ModelRole } from "./roles";
 
 /**
- * Who may use AI — the POLICY, as one pure function over one table.
+ * WHO MAY USE AI — the extension point, with no policy in it.
  *
- * Deliberately the smallest possible surface, because this is the part most
- * likely to change: "Max can use AI, Pro cannot" today, per-purpose limits
- * tomorrow, a token quota after that. Everything that could change lives here;
- * the callers name a SURFACE and a ROLE and never ask about plans at all.
+ * This file deliberately contains no notion of a plan, a quota or an
+ * entitlement. Those are product decisions that differ per app, and a base that
+ * guesses at one makes every app that disagrees delete code before it can start.
+ * What the base owns is the SHAPE: a surface, a refusal reason, and a way to
+ * compose policies.
  *
- * What that buys, concretely:
- *   - Changing which plans include AI is an edit to `AI_PLAN_ACCESS`.
- *   - Gating one purpose but not another is an edit to `aiRefusal`.
- *   - Turning gating off entirely is one adapter in the composition root.
- *   - Adding a usage quota is a second refusal reason, not a new call site.
+ * The default is `allowAll`. An app adds a policy by writing one function and
+ * naming it in its own composition root — nothing in `~/services/ai.server` or
+ * any AI feature changes.
  *
- * Nothing above this file knows what a plan is.
+ * Chain of responsibility, because gating is rarely one rule. Real policies
+ * arrive as a list — "AI is on for this plan", "this shop is over its monthly
+ * tokens", "AI is off entirely while we investigate" — and each is independently
+ * true or false. `composeGates` runs them in order and the FIRST refusal wins,
+ * so adding the second rule never means editing the first.
+ *
+ * @example An app that gates on plan
+ * ```ts
+ * const planGate: AiGate = {
+ *   async refuse({ caller }) {
+ *     if (caller.surface !== "merchant") return null;      // our own tooling
+ *     const plan = await planFor(caller.shop);
+ *     return plan === "max" ? null : "forbidden";
+ *   },
+ * };
+ *
+ * // wiring.server.ts — the only file that knows the policy exists
+ * export const aiGate = composeGates(killSwitchGate, planGate, quotaGate);
+ * ```
  */
 
 /**
- * Which surface is asking. NOT the same question as which shop pays — see the
- * ledger, where staff work is recorded with a null shop because it is our own
- * spend.
+ * Which surface is asking. NOT the same question as which shop pays — the ledger
+ * records staff work with a null shop because it is our own spend.
+ *
+ * A closed union, so a policy that forgets a surface fails the build rather than
+ * quietly allowing it.
  */
 export type AiSurface =
-  /** The embedded admin, acting for a merchant on their plan. */
+  /** The embedded admin, acting for a merchant. */
   | "merchant"
   /** Our own internal console. Our tooling, our bill. */
   | "staff"
   /** Cron, queues, webhooks — nobody is waiting and nobody is charged. */
   | "system";
 
+/** Who is asking, and on whose behalf. */
+export interface AiCaller {
+  readonly surface: AiSurface;
+  /** The shop the work is for. Null for our own staff or system work. */
+  readonly shop: string | null;
+}
+
 /**
- * Whether a plan includes AI at all.
+ * Decides whether one call may proceed.
  *
- * `Record<PlanKey, boolean>`, so adding a plan to the catalogue stops this
- * compiling until someone decides whether it gets AI. A plan silently
- * defaulting either way is how a paid feature leaks or a paying merchant is
- * refused.
+ * `null` to allow. A reason to refuse — `forbidden` for "you may not", or any
+ * other `AiFailureReason` a policy finds more honest.
  */
-export const AI_PLAN_ACCESS: Record<PlanKey, boolean> = {
-  free: false,
-  pro: true,
+export interface AiGate {
+  refuse(input: { caller: AiCaller; role: ModelRole }): Promise<AiFailureReason | null>;
+}
+
+/**
+ * The base default: no policy at all.
+ *
+ * Permissive on purpose. A base that refuses by default would have every app
+ * disable a gate they never asked for before their first call works, and a
+ * silent refusal is the hardest kind of nothing to debug.
+ */
+export const allowAll: AiGate = {
+  async refuse() {
+    return null;
+  },
 };
 
-/** Why AI was refused. A subset of `AiFailureReason`, kept in step by the port. */
-export type AiRefusal = "forbidden";
+/**
+ * Run policies in order; the first refusal wins.
+ *
+ * Short-circuits, so an expensive check (a database read, a quota sum) is only
+ * reached when the cheap ones have already passed — put the cheap rule first.
+ */
+export function composeGates(...gates: readonly AiGate[]): AiGate {
+  return {
+    async refuse(input) {
+      for (const gate of gates) {
+        const reason = await gate.refuse(input);
+        if (reason) return reason;
+      }
+      return null;
+    },
+  };
+}
 
 /**
- * `null` to proceed, or the reason to refuse.
+ * A gate that only ever applies to merchant traffic.
  *
- * PURE — the caller resolves the plan and hands it in, so the whole policy is
- * provable without a database. An unknown plan FAILS CLOSED: it is not a licence
- * to spend our tokens.
+ * A wrapper rather than something every policy re-implements: "our own console
+ * is not gated by a merchant's plan" is true of almost every rule an app will
+ * write, and forgetting it is how a merchant's downgrade breaks the support desk.
  */
-export function aiRefusal(input: {
-  surface: AiSurface;
-  /** The shop's plan, or null when there is no shop or it could not be read. */
-  plan: PlanKey | null;
-  /**
-   * Carried so per-purpose gating is a change to this function and nothing
-   * else, even though no such policy exists today.
-   */
-  role: ModelRole;
-}): AiRefusal | null {
-  // Our own surfaces are never gated by a merchant's plan.
-  if (input.surface === "staff" || input.surface === "system") return null;
-
-  if (input.plan === null) return "forbidden";
-  return AI_PLAN_ACCESS[input.plan] ? null : "forbidden";
+export function merchantsOnly(gate: AiGate): AiGate {
+  return {
+    async refuse(input) {
+      if (input.caller.surface !== "merchant") return null;
+      return gate.refuse(input);
+    },
+  };
 }

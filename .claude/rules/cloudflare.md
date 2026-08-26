@@ -60,6 +60,23 @@ The constraints that come with it:
   feature to "no draft"; it must never block a reply being sent
   (@rules/data.md).
 
+**The two extension points, and what they cost.** The base is deliberately
+policy-free; both seams below are where an app adds its own.
+
+- **A new AI feature is one file.** `defineAiTask` in `app/ai/task.ts` — name the
+  purpose it needs, name itself for the ledger, turn its input into messages —
+  then `new AiService().run(task, input, caller)`. It inherits the gate, the
+  fallback chain, health tracking, metering and streaming, because none of those
+  are a feature's job. `app/ai/task.test.ts` asserts exactly this: if adding a
+  task ever needs a change to the service, adapter, gate or ledger, that test
+  fails and the base has stopped being extensible.
+- **Gating is composed, not built in.** `app/ai/gate.ts` ships `allowAll` and
+  `composeGates`; the base contains no notion of a plan or a quota, because those
+  differ per app and a base that guesses makes every app delete code first. An
+  app writes one `AiGate` and names it in its composition root. `merchantsOnly`
+  wraps a policy so our own console is never gated by a merchant's plan — the
+  mistake that otherwise breaks the support desk on a downgrade.
+
 Two calls that recur and deserve a recorded answer rather than a reflex:
 
 - **Queues vs Workflows.** Queues fit enqueue-and-forget single steps.

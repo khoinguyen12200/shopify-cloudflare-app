@@ -5,6 +5,7 @@ import { SupportService } from "~/services/support.server";
 import { AiService } from "~/services/ai.server";
 import type { ThreadForPrompt } from "~/ai/draft-prompt";
 import { toReplyTone } from "~/ai/tones";
+import { replyTask } from "~/ai/tasks/reply";
 
 /**
  * Streams a REWRITE of what the staff member has already typed, token by token
@@ -46,14 +47,13 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
     })),
   };
 
-  const started = await new AiService().streamReply({
-    thread,
-    currentText,
-    tone,
-    // The staff console: never gated by a merchant's plan, and our own spend,
-    // because they did not ask for this draft.
-    caller: { surface: "staff", shop: null },
-  });
+  const started = await new AiService().stream(
+    replyTask,
+    { thread, currentText, tone },
+    // The staff console: our own tooling and our own spend, because the merchant
+    // did not ask for this draft.
+    { surface: "staff", shop: null },
+  );
 
   if (!started.ok) {
     // A plain status the composer can turn into one sentence. Never a 500: not
