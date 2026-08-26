@@ -15,13 +15,40 @@ const user = (messages: { role: string; content: string }[]) => messages.at(-1)?
 const system = (messages: { role: string; content: string }[]) => messages[0]?.content ?? "";
 
 describe("which job the model is being asked to do", () => {
-  it("is polish when the staff member has already written something", () => {
-    expect(replyMode("We are looking into it")).toBe("polish");
+  it("is generate when the staff member said what to say", () => {
+    // An instruction beats existing text: they have just told us what they
+    // want, which is more current than whatever is still in the box.
+    expect(replyMode({ currentText: "old text", instruction: "tell them Friday" })).toBe("generate");
   });
 
-  it("is suggest when the box is empty", () => {
-    expect(replyMode("")).toBe("suggest");
-    expect(replyMode("   \n ")).toBe("suggest");
+  it("is polish when there is text and no instruction", () => {
+    expect(replyMode({ currentText: "We are looking into it", instruction: "" })).toBe("polish");
+  });
+
+  it("is suggest when there is neither", () => {
+    expect(replyMode({ currentText: "", instruction: "" })).toBe("suggest");
+    expect(replyMode({ currentText: "  \n ", instruction: "   " })).toBe("suggest");
+  });
+});
+
+describe("generating from an instruction", () => {
+  const messages = buildReplyPrompt({
+    thread,
+    currentText: "",
+    instruction: "tell them the fix ships Friday and apologise for the delay",
+    tone: "professional",
+  });
+
+  it("turns the instruction into the message", () => {
+    expect(user(messages)).toContain("ships Friday");
+  });
+
+  it("asks for a complete message, not a paraphrase of the instruction", () => {
+    expect(user(messages).toLowerCase()).toMatch(/complete|well-formed|full/);
+  });
+
+  it("still carries the thread for context", () => {
+    expect(user(messages)).toContain("Payment fails at the last step.");
   });
 });
 
@@ -29,6 +56,7 @@ describe("polishing what a staff member wrote", () => {
   const messages = buildReplyPrompt({
     thread,
     currentText: "we r looking at it, prob the card thing. will update u",
+    instruction: "",
     tone: "professional",
   });
 
@@ -56,7 +84,7 @@ describe("polishing what a staff member wrote", () => {
 });
 
 describe("suggesting a reply when nothing is written yet", () => {
-  const messages = buildReplyPrompt({ thread, currentText: "", tone: "professional" });
+  const messages = buildReplyPrompt({ thread, currentText: "", instruction: "", tone: "professional" });
 
   it("asks for a fitting next reply", () => {
     expect(user(messages).toLowerCase()).toMatch(/suggest|write/);
@@ -75,15 +103,15 @@ describe("tone", () => {
   it.each(["professional", "friendly", "short"] as const)(
     "puts the %s guide in the system message",
     (tone) => {
-      const messages = buildReplyPrompt({ thread, currentText: "hi", tone });
+      const messages = buildReplyPrompt({ thread, currentText: "hi", instruction: "", tone });
       expect(system(messages)).toContain(TONE_GUIDE[tone]);
     },
   );
 
   it("changes the prompt when the tone changes", () => {
     // If it did not, the tone control would be decoration.
-    const a = buildReplyPrompt({ thread, currentText: "hi", tone: "professional" });
-    const b = buildReplyPrompt({ thread, currentText: "hi", tone: "short" });
+    const a = buildReplyPrompt({ thread, currentText: "hi", instruction: "", tone: "professional" });
+    const b = buildReplyPrompt({ thread, currentText: "hi", instruction: "", tone: "short" });
     expect(system(a)).not.toBe(system(b));
   });
 });

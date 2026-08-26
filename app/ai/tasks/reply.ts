@@ -5,14 +5,24 @@ import type { ReplyTone } from "../tones";
 
 export interface ReplyTaskInput {
   readonly thread: ThreadForPrompt;
-  /** What the staff member has already written. Empty means "suggest one". */
+  /** What is already in the reply box, for the polish case. */
   readonly currentText: string;
+  /**
+   * What the staff member typed into the AI box — their shorthand for what to
+   * say. Present means GENERATE from it; empty falls back to polishing the
+   * reply box, or suggesting one from the thread.
+   */
+  readonly instruction: string;
   readonly tone: ReplyTone;
 }
 
 /**
- * Rewrite the reply a staff member is writing, in a chosen tone — or suggest one
- * when the box is empty.
+ * Write the next reply, in a chosen tone.
+ *
+ * Three jobs behind one task, picked from what the staff member gave us: turn a
+ * note into a message, polish what they already wrote, or suggest one from the
+ * thread. One task rather than three because the prompt, the purpose and the
+ * ledger name are the same — only the instruction line differs.
  */
 export const replyTask = defineAiTask<ReplyTaskInput>({
   feature: "support.reply_draft",

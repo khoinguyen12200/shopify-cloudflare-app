@@ -30,6 +30,7 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
   // What the staff member has already written, and how they want it to sound.
   // Both come off a form, so the tone is narrowed rather than trusted.
   const currentText = String(form.get("currentText") ?? "");
+  const instruction = String(form.get("instruction") ?? "");
   const tone = toReplyTone(String(form.get("tone") ?? ""));
 
   const support = new SupportService();
@@ -49,7 +50,7 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
 
   const started = await new AiService().stream(
     replyTask,
-    { thread, currentText, tone },
+    { thread, currentText, instruction, tone },
     // The staff console: our own tooling and our own spend, because the merchant
     // did not ask for this draft.
     { surface: "staff", shop: null },

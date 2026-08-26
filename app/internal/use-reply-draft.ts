@@ -29,7 +29,7 @@ export function useReplyDraft(textareaId: string) {
   const abort = useRef<AbortController | null>(null);
 
   const draft = useCallback(
-    async (input: { ticketId: string; tone: ReplyTone }) => {
+    async (input: { ticketId: string; tone: ReplyTone; instruction: string }) => {
       const target = document.getElementById(textareaId);
       if (!(target instanceof HTMLTextAreaElement)) return;
       // Synchronous, so a second click in the same tick cannot get past it.
@@ -49,6 +49,7 @@ export function useReplyDraft(textareaId: string) {
       const body = new FormData();
       body.set("ticketId", input.ticketId);
       body.set("currentText", currentText);
+      body.set("instruction", input.instruction);
       body.set("tone", input.tone);
 
       try {

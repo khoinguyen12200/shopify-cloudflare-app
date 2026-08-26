@@ -14,11 +14,21 @@ import { TONE_GUIDE, type ReplyTone } from "./tones";
  * modes cannot drift apart.
  */
 
-export type ReplyMode = "polish" | "suggest";
+export type ReplyMode = "generate" | "polish" | "suggest";
 
-/** Which job the text in the box implies. */
-export function replyMode(currentText: string): ReplyMode {
-  return currentText.trim() === "" ? "suggest" : "polish";
+/**
+ * Which job the inputs imply.
+ *
+ * An INSTRUCTION wins over existing text: the staff member has just typed what
+ * they want said, which is more current than whatever is still sitting in the
+ * reply box.
+ */
+export function replyMode(input: {
+  currentText: string;
+  instruction: string;
+}): ReplyMode {
+  if (input.instruction.trim() !== "") return "generate";
+  return input.currentText.trim() === "" ? "suggest" : "polish";
 }
 
 function transcript(thread: ThreadForPrompt): string {
@@ -32,22 +42,34 @@ function transcript(thread: ThreadForPrompt): string {
 
 export function buildReplyPrompt(input: {
   thread: ThreadForPrompt;
+  /** What is already in the reply box. */
   currentText: string;
+  /** What the staff member told the AI to say, in their own shorthand. */
+  instruction: string;
   tone: ReplyTone;
 }): PromptMessage[] {
-  const mode = replyMode(input.currentText);
+  const mode = replyMode(input);
 
   const task =
-    mode === "polish"
+    mode === "generate"
       ? [
-          "Rewrite the draft below so it reads well.",
-          "KEEP its meaning and every specific fact it states — names, numbers, dates, promises.",
-          "Do not add anything it does not say.",
+          "Write the reply. Turn the note below into a complete, well-formed message —",
+          "it is shorthand from the person replying, not text to quote back.",
+          "Say everything it says and nothing it does not.",
           "",
-          "Draft:",
-          input.currentText.trim(),
+          "Note:",
+          input.instruction.trim(),
         ].join("\n")
-      : "Suggest a fitting next reply, based on the thread below.";
+      : mode === "polish"
+        ? [
+            "Rewrite the draft below so it reads well.",
+            "KEEP its meaning and every specific fact it states — names, numbers, dates, promises.",
+            "Do not add anything it does not say.",
+            "",
+            "Draft:",
+            input.currentText.trim(),
+          ].join("\n")
+        : "Suggest a fitting next reply, based on the thread below.";
 
   return [
     {

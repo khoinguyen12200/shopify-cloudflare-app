@@ -164,6 +164,19 @@ export default function InternalSupportThread() {
   // Targets the composer's textarea by id and rewrites what is in it.
   const draft = useReplyDraft("body");
   const [tone, setTone] = useState<ReplyTone>(DEFAULT_TONE);
+  const [instruction, setInstruction] = useState("");
+
+  /*
+   * The label names the job, so nobody has to guess what pressing it will do to
+   * text they have already written. Same three modes the prompt builder picks
+   * between — read from the same two inputs, so they cannot disagree.
+   */
+  const aiMode = instruction.trim() !== "" ? "generate" : "polish-or-suggest";
+  const aiActionLabel = aiMode === "generate" ? "Write reply" : "Improve reply";
+  const aiActionHint =
+    aiMode === "generate"
+      ? "Replaces the reply above"
+      : "Rewrites what is in the reply above, or suggests one if it is empty";
 
   return (
     <Page
@@ -215,39 +228,61 @@ export default function InternalSupportThread() {
                     placeholder="This reply is emailed to the merchant and their copy list."
                     required
                   />
+
+                  {/*
+                    The AI box is SEPARATE from the reply box on purpose. What
+                    goes here is shorthand — "fix ships friday, say sorry" — and
+                    the reply is what comes back. Typing notes into the field
+                    that gets emailed and hoping to remember to overwrite them is
+                    how a note reaches a merchant.
+
+                    Empty, it falls back to the reply box: polish what is there,
+                    or suggest one from the thread. The button says which.
+                  */}
+                  <div className="flex flex-col gap-2 rounded-md border border-dashed p-3">
+                    <Label htmlFor="ai-instruction" className="text-xs text-muted-foreground">
+                      Tell the AI what to say — it writes the reply above
+                    </Label>
+                    <Textarea
+                      id="ai-instruction"
+                      rows={2}
+                      value={instruction}
+                      onChange={(event) => setInstruction(event.currentTarget.value)}
+                      placeholder="fix ships friday, apologise for the delay"
+                      disabled={draft.state === "drafting"}
+                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Select value={tone} onValueChange={(next) => setTone(toReplyTone(next))}>
+                        <SelectTrigger className="w-40" aria-label="Tone">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {REPLY_TONES.map((option) => (
+                            <SelectItem key={option} value={option}>
+                              {TONE_LABEL[option]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={busy || draft.state === "drafting"}
+                        onClick={() =>
+                          void draft.draft({ ticketId: ticket.id, tone, instruction })
+                        }
+                      >
+                        <Sparkles className="mr-1 size-4" />
+                        {draft.state === "drafting" ? "Writing…" : aiActionLabel}
+                      </Button>
+                      <Text as="span" className="text-xs text-muted-foreground">
+                        {aiActionHint}
+                      </Text>
+                    </div>
+                  </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <Button type="submit" disabled={busy}>
                       {busy && !pendingIntent ? "Sending…" : "Send reply"}
-                    </Button>
-                    {/*
-                      Rewrites what is in the box, in the chosen tone. The staff
-                      member decides WHAT to say; the model only chooses better
-                      words for it — and a human edits and sends every one, which
-                      is what makes this the safe place to put a model.
-
-                      The label follows the box: with text it polishes, empty it
-                      suggests one from the thread.
-                    */}
-                    <Select value={tone} onValueChange={(next) => setTone(toReplyTone(next))}>
-                      <SelectTrigger className="w-40" aria-label="Tone">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {REPLY_TONES.map((option) => (
-                          <SelectItem key={option} value={option}>
-                            {TONE_LABEL[option]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={busy || draft.state === "drafting"}
-                      onClick={() => void draft.draft({ ticketId: ticket.id, tone })}
-                    >
-                      <Sparkles className="mr-1 size-4" />
-                      {draft.state === "drafting" ? "Rewriting…" : "Improve with AI"}
                     </Button>
                     {!isClosed && (
                       <Button
