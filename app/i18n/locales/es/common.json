@@ -5,7 +5,8 @@
     "save": "Guardar",
     "cancel": "Cancelar",
     "retry": "Inténtalo de nuevo",
-    "back": "Atrás"
+    "back": "Atrás",
+    "discard": "Descartar"
   },
   "nav": {
     "pricing": "Precios",

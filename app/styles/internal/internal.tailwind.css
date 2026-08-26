@@ -52,6 +52,22 @@
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
+  /*
+   * Semantic chart colours for the dashboard's merchant charts. Separate from
+   * --chart-1..5 on purpose: those are shadcn's defaults and they do not keep a
+   * hue between themes (--chart-1 is orange here and blue in .dark), so a
+   * series would change colour when the console theme is toggled. These three
+   * hold their hue and only change lightness for the surface they sit on.
+   *
+   * Chosen by running the palette validator against the real card surfaces
+   * (#ffffff light, #020919 dark), not by eye: every step clears the mode's
+   * OKLCH lightness band, the chroma floor, 3:1 contrast, and colour-vision
+   * separation. Uninstalls is burnt orange rather than red because red/green
+   * collapses to deltaE 6.2 under deuteranopia, where orange/green clears 8.4.
+   */
+  --chart-growth: #2a78d6;
+  --chart-installs: #0e8f5f;
+  --chart-uninstalls: #c2410c;
   --sidebar: var(--background);
   --sidebar-foreground: var(--foreground);
   --sidebar-primary: var(--primary);
@@ -86,6 +102,10 @@
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
+  /* Same hues, lifted into the dark band (OKLCH L 0.48-0.67) for #020919. */
+  --chart-growth: #3690e3;
+  --chart-installs: #16a56e;
+  --chart-uninstalls: #d8662a;
   --sidebar: oklch(0.208 0.042 265.755);
   --sidebar-foreground: oklch(0.984 0.003 247.858);
   --sidebar-primary: oklch(0.68 0.19 277);
@@ -124,6 +144,9 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+  --color-chart-growth: var(--chart-growth);
+  --color-chart-installs: var(--chart-installs);
+  --color-chart-uninstalls: var(--chart-uninstalls);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);

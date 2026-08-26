@@ -12,7 +12,7 @@ type LoaderData = {
   user: { name: string };
   admins: number;
   stats: { totalShops: number; paidShops: number; freeShops: number; mrrByCurrency: { amount: number; currency: string }[] };
-  trend: { month: string; count: number }[];
+  trend: { month: string; installs: number; uninstalls: number; active: number }[];
 };
 
 async function render(data: LoaderData) {
@@ -37,7 +37,7 @@ describe("the internal dashboard", () => {
       user: { name: "Jamie" },
       admins: 3,
       stats: { totalShops: 10, paidShops: 4, freeShops: 6, mrrByCurrency: [{ amount: 7600, currency: "USD" }] },
-      trend: [{ month: "Jan", count: 2 }],
+      trend: [{ month: "Jan", installs: 2, uninstalls: 0, active: 2 }],
     });
     expect(html).toContain("Jamie");
     expect(html).toContain("10");
@@ -46,12 +46,29 @@ describe("the internal dashboard", () => {
     expect(html).toContain("$76.00");
   });
 
+  it("renders the numbers WITHOUT pulling in the charts", async () => {
+    // The charts are a lazy chunk mounted only in the browser, so the server
+    // response must already carry the figures a staff member opens this page
+    // for. If this ever starts containing chart markup, the split has been
+    // undone and recharts is back on the critical path.
+    const html = await render({
+      user: { name: "Jamie" },
+      admins: 3,
+      stats: { totalShops: 10, paidShops: 4, freeShops: 6, mrrByCurrency: [] },
+      trend: [{ month: "Jan", installs: 2, uninstalls: 1, active: 9 }],
+    });
+
+    expect(html).toContain("Installed shops");
+    expect(html).not.toContain("recharts");
+    expect(html).not.toContain("Merchant growth");
+  });
+
   it("shows a zero MRR when nobody has paid yet", async () => {
     const html = await render({
       user: { name: "Jamie" },
       admins: 1,
       stats: { totalShops: 2, paidShops: 0, freeShops: 2, mrrByCurrency: [] },
-      trend: [{ month: "Jan", count: 0 }],
+      trend: [{ month: "Jan", installs: 0, uninstalls: 0, active: 0 }],
     });
     expect(html).toContain("$0.00");
   });

@@ -56,18 +56,18 @@ export default function SupportIndex() {
         {t("support.newTicket")}
       </s-button>
 
-      {tickets.length === 0 ? (
-        <s-section heading={t("support.empty.heading")}>
-          <s-stack direction="block" gap="base">
-            <s-paragraph color="subdued">{t("support.empty.body")}</s-paragraph>
-            <s-button variant="primary" href="/app/support/new">
-              {t("support.newTicket")}
-            </s-button>
-          </s-stack>
-        </s-section>
-      ) : (
-        <s-section>
-          <s-paragraph color="subdued">{t("support.body")}</s-paragraph>
+      {tickets.length === 0 ? <EmptyState /> : (
+        /*
+         * `padding="none"` so the table meets the card's edges. A table is a
+         * grid of its own, with its own header rule and row separators, and
+         * inset inside a padded card it reads as a second, smaller box floating
+         * in a bigger one. Full-bleed, the card's edge IS the table's frame.
+         *
+         * Nothing above the table: the page heading already says Support and
+         * the New ticket button already says what to do, so a line of prose
+         * repeating both only pushed the merchant's own tickets further down.
+         */
+        <s-section padding="none">
           <s-table variant="auto">
             <s-table-header-row>
               <s-table-header listSlot="primary">
@@ -114,6 +114,46 @@ export default function SupportIndex() {
         </s-section>
       )}
     </s-page>
+  );
+}
+
+/**
+ * Nothing to show yet — so the card carries the invitation instead of an
+ * apology. Centred on the empty-state composition: one mark, one heading, one
+ * sentence saying what will appear here, one action.
+ *
+ * The mark is a real drawn icon in a tinted tile rather than an illustration,
+ * because the alternative is a stock graphic hosted somewhere else that says
+ * nothing about support.
+ */
+function EmptyState() {
+  const { t } = useTranslation(["admin", "common"]);
+
+  return (
+    <s-section accessibilityLabel={t("support.empty.heading")}>
+      <s-grid gap="base" justifyItems="center" paddingBlock="large-400">
+        <s-box background="subdued" borderRadius="large" padding="base">
+          <s-icon type="chat" size="base" tone="info"></s-icon>
+        </s-box>
+
+        <s-grid justifyItems="center" maxInlineSize="420px" gap="base">
+          <s-stack direction="block" gap="small-400" alignItems="center">
+            <s-heading>{t("support.empty.heading")}</s-heading>
+            <s-paragraph color="subdued">{t("support.empty.body")}</s-paragraph>
+          </s-stack>
+
+          <s-button-group>
+            <s-button
+              slot="primary-action"
+              variant="primary"
+              href="/app/support/new"
+            >
+              {t("support.newTicket")}
+            </s-button>
+          </s-button-group>
+        </s-grid>
+      </s-grid>
+    </s-section>
   );
 }
 

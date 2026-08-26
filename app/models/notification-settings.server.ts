@@ -137,6 +137,46 @@ export class NotificationSettingsRepo {
     return [...out];
   }
 
+  /**
+   * Of these addresses, the ones that have opted out of this channel.
+   *
+   * Sibling to `optedOutChannels`, which asks the question for ONE recipient
+   * across their channels. This asks it for MANY addresses on one channel —
+   * the shape a copy list needs, and one query rather than one per address.
+   *
+   * Returns normalised addresses, so the caller compares against the same form
+   * it filters with (see ~/notifications/copy-recipients).
+   */
+  async optedOutAddresses(
+    scope: string,
+    channel: ChannelKey,
+    addresses: readonly string[],
+  ): Promise<Set<string>> {
+    const normalised = [
+      ...new Set(
+        addresses
+          .map((address) => normalizeAddress(channel, address))
+          .filter((address) => address.length > 0),
+      ),
+    ];
+    if (normalised.length === 0) return new Set();
+
+    const rows = await getDb()
+      .select({ address: notificationOptOuts.address })
+      .from(notificationOptOuts)
+      .where(
+        and(
+          // Global beats nothing and tenant beats nothing: an opt-out at either
+          // scope suppresses. Another tenant's opt-out is not in this set.
+          inArray(notificationOptOuts.scope, [GLOBAL_SCOPE, scope]),
+          eq(notificationOptOuts.channel, channel),
+          inArray(notificationOptOuts.address, normalised),
+        ),
+      );
+
+    return new Set(rows.map((row) => row.address));
+  }
+
   /** Record an opt-out. Idempotent: a second STOP is not an error. */
   async optOut(input: {
     scope: string;

@@ -1,9 +1,10 @@
+import { useState } from "react";
 import type {
   ActionFunctionArgs,
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
-import { data, redirect, useActionData, useLoaderData, useNavigation, Form } from "react-router";
+import { data, redirect, useActionData, useLoaderData, Form } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useTranslation } from "react-i18next";
 
@@ -14,12 +15,14 @@ import { SupportRepo } from "~/models/support.server";
 import {
   createTicketSchema,
   readShopContact,
-  CC_MAX,
   BODY_MAX,
   SUBJECT_MAX,
 } from "~/schemas/support";
+import { CC_MAX } from "~/support/cc-list";
 import { SUPPORT_CATEGORIES, CATEGORY_LABEL_KEY } from "~/support/categories";
 import { supportErrorKey } from "~/support/error-keys";
+import { useActionToast } from "~/admin/use-action-toast";
+import { CcEmails, ccLabels } from "~/components/support/CcEmails";
 import { AttachmentPicker, usePendingUploads } from "~/components/support/AttachmentPicker";
 
 export const handle = { i18n: ["common", "admin"] };
@@ -104,23 +107,54 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
   }
 
+  // `?created=1` is what makes the thread page toast on arrival. The
+  // confirmation belongs on the screen the merchant lands on, not on this one,
+  // which is already gone by then.
   return redirect(`/app/support/${created.value.id}?created=1`);
 };
 
 export default function NewTicket() {
   const { defaultEmail } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
-  const navigation = useNavigation();
   const { t } = useTranslation(["admin", "common"]);
   const uploads = usePendingUploads();
+  const [ccEmails, setCcEmails] = useState<string[]>([]);
 
-  const busy = navigation.state !== "idle";
   const fieldErrors =
     actionData && "fieldErrors" in actionData ? actionData.fieldErrors : undefined;
   const error = actionData && "error" in actionData ? actionData.error : undefined;
 
+  // Success is reported by the thread page we redirect to, so only failure is
+  // announced here. The inline banner below stays the authoritative report.
+  useActionToast(actionData, error ? { error: t(supportErrorKey(error)) } : undefined);
+
   return (
-    <Form method="post" encType="application/x-www-form-urlencoded">
+    /*
+     * `data-save-bar` hands saving to the admin's own save bar at the top of
+     * the frame, which is where every other screen in every Shopify app puts
+     * it. That is also why there is no Send button at the bottom of this form:
+     * two save controls on one screen is two competing conventions, and the
+     * one the merchant already knows wins.
+     *
+     * The bar owns the pending state of its own Save button, which is why this
+     * page no longer tracks `navigation.state` for one.
+     *
+     * `data-discard-confirmation` because Discard throws away a written bug
+     * report and any files already uploaded — not something to lose to a
+     * mis-click.
+     */
+    <Form
+      method="post"
+      data-save-bar
+      data-discard-confirmation
+      onReset={() => {
+        // A native reset restores the DOM inputs to their defaults, but the CC
+        // list and the staged files live in React state and in R2, so Discard
+        // has to be told about them explicitly.
+        setCcEmails([]);
+        uploads.reset();
+      }}
+    >
       <s-page heading={t("support.newTicket")}>
         <s-link slot="breadcrumb-actions" href="/app/support">
           {t("support.heading")}
@@ -175,7 +209,7 @@ export default function NewTicket() {
           </s-stack>
         </s-section>
 
-        <s-section heading={t("support.form.email")}>
+        <s-section heading={t("support.form.emailHeading")}>
           <s-stack direction="block" gap="base">
             {/* Prefilled from Shopify — the merchant should never have to type
                 their own address to get a reply. Clearable, because some
@@ -188,17 +222,15 @@ export default function NewTicket() {
               error={fieldErrors?.merchantEmail}
             ></s-email-field>
 
-            <s-text-area
-              label={t("support.form.cc")}
-              name="ccEmails"
-              details={t("support.form.ccHelp", { max: CC_MAX })}
-              rows={2}
-              error={fieldErrors?.ccEmails}
-            ></s-text-area>
+            <s-divider direction="block" />
 
-            <s-button type="submit" variant="primary" loading={busy}>
-              {busy ? t("support.form.submitting") : t("support.form.submit")}
-            </s-button>
+            <CcEmails
+              id="new-ticket-cc"
+              name="ccEmails"
+              emails={ccEmails}
+              onChange={setCcEmails}
+              labels={ccLabels(t, CC_MAX)}
+            />
           </s-stack>
         </s-section>
       </s-page>

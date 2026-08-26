@@ -35,13 +35,9 @@
   },
   "billing": {
     "heading": "Facturación",
-    "currentHeading": "Plan actual",
     "manage": "Gestionar plan",
     "upgrade": "Mejorar plan",
     "testBadge": "Cobro de prueba: no es dinero real",
-    "free": {
-      "heading": "Estás en el plan gratuito"
-    },
     "currentPlanBadge": "Plan actual",
     "current": {
       "renews": "Se renueva el {{date}} por {{price}}",
@@ -67,11 +63,17 @@
       "annualSaving": "o {{price}} con facturación anual — ahorra {{percent}}%",
       "freeForever": "Gratis para siempre",
       "buildsOn": "Todo lo del plan {{plan}}, y además"
+    },
+    "planLabel": "Tu plan",
+    "managedNote": "Los planes los gestiona Shopify. Usa el botón de arriba para ver los planes disponibles, mejorar tu plan o cambiar tu suscripción.",
+    "price": {
+      "perMonth": "{{price}}/mes",
+      "perYear": "{{price}}/año",
+      "flat": "{{price}}"
     }
   },
   "support": {
     "heading": "Soporte",
-    "body": "Pregúntanos lo que necesites, informa de un problema o sugiere una función.",
     "newTicket": "Nuevo ticket",
     "empty": {
       "heading": "Aún no hay tickets",
@@ -105,11 +107,17 @@
       "email": "Correo para respuestas",
       "emailHelp": "Responderemos aquí y también en la aplicación. Déjalo vacío para recibir avisos solo en la aplicación.",
       "cc": "Copiar también a",
-      "ccHelp": "Una dirección por línea, hasta {{max}}.",
+      "ccHelp": "Reciben todas las respuestas y pueden responder. Hasta {{max}}.",
       "attachments": "Capturas o un vídeo",
       "addFiles": "Añadir archivos",
-      "submit": "Enviar ticket",
-      "submitting": "Enviando…"
+      "emailHeading": "Respuestas",
+      "ccEmpty": "No hay nadie más en copia.",
+      "ccAdd": "Añadir correo",
+      "ccRemove": "Quitar a {{email}}",
+      "ccDialogHeading": "Poner a alguien en copia",
+      "ccField": "Correo electrónico",
+      "ccFieldPlaceholder": "colega@ejemplo.com",
+      "ccConfirm": "Añadir"
     },
     "thread": {
       "conversation": "Conversación",
@@ -120,12 +128,10 @@
       "send": "Enviar respuesta",
       "sending": "Enviando…",
       "closedNotice": "Este ticket está cerrado. Responde para reabrirlo.",
-      "close": "Cerrar ticket",
       "details": "Detalles",
       "created": "Abierto",
       "attachmentCount": "{{count}} archivo adjunto",
       "attachmentCount_plural": "{{count}} archivos adjuntos",
-      "saveCc": "Guardar",
       "download": "Abrir archivo"
     },
     "errors": {
@@ -135,12 +141,14 @@
       "upload_failed": "No se pudo subir el archivo. Inténtalo de nuevo.",
       "too_large": "El archivo es demasiado grande.",
       "unsupported_type": "Solo se pueden adjuntar imágenes y vídeos.",
-      "invalid_cc": "Esa lista de copias no es válida. Usa una dirección por línea."
+      "invalid_cc": "Esa lista de copias no es válida. Usa una dirección por línea.",
+      "invalid_cc_email": "Eso no parece un correo electrónico.",
+      "duplicate_cc_email": "Esa dirección ya está en la lista.",
+      "too_many_cc_emails": "La lista está llena. Quita a alguien para añadir a otra persona."
     },
     "success": {
       "created": "Ticket enviado. Te responderemos aquí.",
       "replied": "Respuesta enviada.",
-      "closed": "Ticket cerrado.",
       "ccSaved": "Lista de copias guardada."
     }
   }

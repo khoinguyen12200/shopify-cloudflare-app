@@ -1,5 +1,11 @@
-import { buildEmail } from "~/emails/registry.server";
+import { composeEmailMessage } from "./channels/email/compose";
 import { NotificationLogRepo } from "~/models/notification-logs.server";
+import {
+  GLOBAL_SCOPE,
+  NotificationSettingsRepo,
+} from "~/models/notification-settings.server";
+import { copyRecipients } from "./copy-recipients";
+import type { NotifyRequest } from "~/ports/notifier";
 import { dispatch, type DispatchResult } from "./dispatch.server";
 import { resolveEligibility } from "./eligibility/resolve";
 import { loadEligibilityContext } from "./eligibility/snapshot.server";
@@ -34,6 +40,12 @@ interface Composer {
     event: E,
     payload: PayloadByEvent[E],
     to: string,
+    /**
+     * Addresses to copy, already filtered. A channel with no notion of copies
+     * simply ignores it — which is why it is a parameter here rather than a
+     * field every Message kind has to carry.
+     */
+    cc: readonly string[],
   ): Promise<Message>;
 }
 
@@ -46,35 +58,8 @@ interface Composer {
  * the only thing a new channel touches is this table.
  */
 const COMPOSERS: { [K in Message["kind"]]: Composer } = {
-  email: {
-    async compose(event, payload, to) {
-      const rendered = await buildEmail(event, payload);
-      return {
-        kind: "email",
-        to,
-        subject: rendered.subject,
-        html: rendered.html,
-        text: rendered.text,
-      };
-    },
-  },
+  email: { compose: composeEmailMessage },
 };
-
-export interface NotifyInput<E extends NotificationEvent> {
-  event: E;
-  /**
-   * Where to reach the recipient, per channel. A channel with no address here is
-   * refused as `recipient_unreachable` rather than attempted.
-   */
-  to: Partial<Record<ChannelKey, string>>;
-  payload: PayloadByEvent[E];
-  /** Tenant scope for preferences and opt-outs. Defaults to app-wide. */
-  scope?: string;
-  /** Idempotency key for (event, recipient). Omit for inherently-unique sends. */
-  dedupeKey?: string;
-  /** Pre-minted log id, for when the link inside the message must contain it. */
-  logId?: string;
-}
 
 export interface NotifyResult {
   event: NotificationEvent;
@@ -91,7 +76,7 @@ export interface NotifyResult {
 }
 
 export async function notify<E extends NotificationEvent>(
-  input: NotifyInput<E>,
+  input: NotifyRequest<E>,
 ): Promise<NotifyResult> {
   const context = await loadEligibilityContext({
     event: input.event,
@@ -138,6 +123,12 @@ export async function notify<E extends NotificationEvent>(
       input.event,
       input.payload,
       to,
+      await allowedCopies({
+        cc: input.cc?.[channel] ?? [],
+        to,
+        channel,
+        scope: input.scope,
+      }),
     );
 
     dispatched.push(
@@ -155,4 +146,27 @@ export async function notify<E extends NotificationEvent>(
     dispatched,
     decisions: eligibility.decisions,
   };
+}
+
+/**
+ * The copy list for one channel, with opted-out addresses removed.
+ *
+ * The opt-out lookup is skipped entirely when nobody was copied, so the common
+ * case — every notification that has no copy list — costs no extra query.
+ */
+async function allowedCopies(input: {
+  cc: readonly string[];
+  to: string;
+  channel: ChannelKey;
+  scope?: string;
+}): Promise<readonly string[]> {
+  if (input.cc.length === 0) return [];
+
+  const optedOut = await new NotificationSettingsRepo().optedOutAddresses(
+    input.scope ?? GLOBAL_SCOPE,
+    input.channel,
+    input.cc,
+  );
+
+  return copyRecipients({ cc: input.cc, to: input.to, optedOut });
 }

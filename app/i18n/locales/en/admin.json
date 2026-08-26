@@ -35,13 +35,9 @@
   },
   "billing": {
     "heading": "Billing",
-    "currentHeading": "Current plan",
     "manage": "Manage plan",
     "upgrade": "Upgrade",
     "testBadge": "Test charge — no real money",
-    "free": {
-      "heading": "You're on the free plan"
-    },
     "currentPlanBadge": "Current plan",
     "current": {
       "renews": "Renews {{date}} for {{price}}",
@@ -67,11 +63,17 @@
       "annualSaving": "or {{price}} billed yearly — save {{percent}}%",
       "freeForever": "Free forever",
       "buildsOn": "Everything in {{plan}}, plus"
+    },
+    "planLabel": "Your plan",
+    "managedNote": "Plans are managed by Shopify. Use the button above to view available plans, upgrade, or change your subscription.",
+    "price": {
+      "perMonth": "{{price}}/mo",
+      "perYear": "{{price}}/yr",
+      "flat": "{{price}}"
     }
   },
   "support": {
     "heading": "Support",
-    "body": "Ask us anything, report a problem, or suggest a feature.",
     "newTicket": "New ticket",
     "empty": {
       "heading": "No tickets yet",
@@ -105,11 +107,17 @@
       "email": "Email for replies",
       "emailHelp": "We reply here as well as in the app. Clear it to only be notified in the app.",
       "cc": "Also copy these people",
-      "ccHelp": "One address per line, up to {{max}}.",
+      "ccHelp": "They get every reply, and can reply themselves. Up to {{max}}.",
       "attachments": "Screenshots or a recording",
       "addFiles": "Add files",
-      "submit": "Send ticket",
-      "submitting": "Sending…"
+      "emailHeading": "Replies",
+      "ccEmpty": "No one else is copied.",
+      "ccAdd": "Add email",
+      "ccRemove": "Remove {{email}}",
+      "ccDialogHeading": "Copy someone on this ticket",
+      "ccField": "Email address",
+      "ccFieldPlaceholder": "colleague@example.com",
+      "ccConfirm": "Add"
     },
     "thread": {
       "conversation": "Conversation",
@@ -120,12 +128,10 @@
       "send": "Send reply",
       "sending": "Sending…",
       "closedNotice": "This ticket is closed. Reply to reopen it.",
-      "close": "Close ticket",
       "details": "Details",
       "created": "Opened",
       "attachmentCount": "{{count}} attachment",
       "attachmentCount_plural": "{{count}} attachments",
-      "saveCc": "Save",
       "download": "Open file"
     },
     "errors": {
@@ -135,12 +141,14 @@
       "upload_failed": "That file could not be uploaded. Try again.",
       "too_large": "That file is too big.",
       "unsupported_type": "Only images and videos can be attached.",
-      "invalid_cc": "That copy list is not valid. Use one email address per line."
+      "invalid_cc": "That copy list is not valid. Use one email address per line.",
+      "invalid_cc_email": "That does not look like an email address.",
+      "duplicate_cc_email": "That address is already on the list.",
+      "too_many_cc_emails": "The list is full. Remove someone to add another."
     },
     "success": {
       "created": "Ticket sent. We will reply here.",
       "replied": "Reply sent.",
-      "closed": "Ticket closed.",
       "ccSaved": "Copy list saved."
     }
   }

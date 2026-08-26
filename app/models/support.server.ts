@@ -231,17 +231,11 @@ export class SupportRepo {
     return messageId;
   }
 
-  /** Close a merchant's own thread. False when it is not theirs. */
-  async close(shop: string, ticketId: string, at: number): Promise<boolean> {
-    const result = await getDb()
-      .update(supportTickets)
-      .set({ closedAt: at })
-      .where(and(eq(supportTickets.shop, shop), eq(supportTickets.id, ticketId)))
-      .returning({ id: supportTickets.id });
-    return result.length > 0;
-  }
-
-  /** Close from the internal console, which is not shop-scoped. */
+  /**
+   * Close a thread. Staff only, hence not shop-scoped: a merchant never closes
+   * their own ticket — they either stop replying or say it is fixed, and
+   * support decides the thread is done.
+   */
   async closeAsStaff(ticketId: string, at: number): Promise<boolean> {
     const result = await getDb()
       .update(supportTickets)

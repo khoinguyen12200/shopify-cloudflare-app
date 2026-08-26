@@ -254,3 +254,79 @@ describe("normalizeAddress", () => {
     expect(normalizeAddress("email", "  Mixed@Case.COM ")).toBe("mixed@case.com");
   });
 });
+
+describe("optedOutAddresses: which of these people have unsubscribed", () => {
+  it("returns nothing when none of them has", async () => {
+    const out = await inRequest(() =>
+      new NotificationSettingsRepo().optedOutAddresses(SHOP, "email", [
+        "dev@example.org",
+        "ops@example.org",
+      ]),
+    );
+    expect([...out]).toEqual([]);
+  });
+
+  it("returns the address that opted out at the tenant's scope", async () => {
+    const out = await inRequest(async () => {
+      const repo = new NotificationSettingsRepo();
+      await repo.optOut({ scope: SHOP, channel: "email", address: "gone@example.org", now: NOW });
+      return repo.optedOutAddresses(SHOP, "email", ["dev@example.org", "gone@example.org"]);
+    });
+    expect([...out]).toEqual(["gone@example.org"]);
+  });
+
+  it("honours a GLOBAL opt-out too, not just the tenant's", async () => {
+    // Someone who unsubscribed app-wide must not be reachable through one shop.
+    const out = await inRequest(async () => {
+      const repo = new NotificationSettingsRepo();
+      await repo.optOut({
+        scope: GLOBAL_SCOPE,
+        channel: "email",
+        address: "gone@example.org",
+        now: NOW,
+      });
+      return repo.optedOutAddresses(SHOP, "email", ["gone@example.org"]);
+    });
+    expect([...out]).toEqual(["gone@example.org"]);
+  });
+
+  it("does NOT leak another tenant's opt-out", async () => {
+    const out = await inRequest(async () => {
+      const repo = new NotificationSettingsRepo();
+      await repo.optOut({
+        scope: "other.myshopify.com",
+        channel: "email",
+        address: "gone@example.org",
+        now: NOW,
+      });
+      return repo.optedOutAddresses(SHOP, "email", ["gone@example.org"]);
+    });
+    expect([...out]).toEqual([]);
+  });
+
+  it("matches however the address was capitalised on the way in", async () => {
+    const out = await inRequest(async () => {
+      const repo = new NotificationSettingsRepo();
+      await repo.optOut({ scope: SHOP, channel: "email", address: "Gone@Example.ORG", now: NOW });
+      return repo.optedOutAddresses(SHOP, "email", ["gone@example.org"]);
+    });
+    expect([...out]).toEqual(["gone@example.org"]);
+  });
+
+  it("does not query at all for an empty list", async () => {
+    const out = await inRequest(() =>
+      new NotificationSettingsRepo().optedOutAddresses(SHOP, "email", []),
+    );
+    expect([...out]).toEqual([]);
+  });
+
+  it("ignores an opt-out recorded on a different channel", async () => {
+    const out = await inRequest(async () => {
+      const repo = new NotificationSettingsRepo();
+      await repo.optOut({ scope: SHOP, channel: "email", address: "gone@example.org", now: NOW });
+      // Same address, asked about as if another channel existed.
+      return repo.optedOutAddresses(SHOP, "email", ["other@example.org"]);
+    });
+    expect([...out]).toEqual([]);
+  });
+});

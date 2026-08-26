@@ -1,12 +1,13 @@
 import { z } from "zod";
 import { SUPPORT_CATEGORIES } from "~/support/categories";
+import { CC_MAX } from "~/support/cc-list";
 
 /**
- * At most this many CC addresses on a ticket. Every one becomes an outbound
- * send on every reply, so the cap is a bill and a reputation control, not a
- * style preference.
+ * The CC cap is a DOMAIN rule, not a parsing detail: the modal that adds one
+ * address at a time has to enforce it too. It is defined once in the pure core
+ * and re-exported here so every existing caller keeps one import.
  */
-export const CC_MAX = 5;
+export { CC_MAX } from "~/support/cc-list";
 
 export const SUBJECT_MAX = 200;
 export const BODY_MAX = 5000;

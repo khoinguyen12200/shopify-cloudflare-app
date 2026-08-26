@@ -10,12 +10,29 @@ import { formatDateTime } from "~/i18n/format";
 import { formatMoney } from "~/money";
 import { resolveBillingStatus, type BillingStatus } from "~/billing/subscription-status";
 import { currentPlanKeyFor } from "~/billing/current-plan";
+import { planPriceLine, type PriceCadence } from "~/billing/plan-price-line";
 import { annualSavingPercent } from "~/billing/annual-savings";
 import { pricingPlansUrl } from "~/billing/pricing-plans-url";
 import { FEATURED_PLAN_KEY, PLANS, PLAN_LIST, type Plan } from "~/billing/plans";
 import type { SubscriptionStatus } from "~/db/schema";
 
 type Subscribed = Extract<BillingStatus, { kind: "subscribed" }>;
+
+/**
+ * A literal map, not a template literal: `t()` is typed against the `en` files,
+ * so a cadence with no message fails the build instead of rendering a raw key
+ * to a merchant (@rules/i18n.md).
+ */
+type PriceKey =
+  | "billing.price.perMonth"
+  | "billing.price.perYear"
+  | "billing.price.flat";
+
+const PRICE_CADENCE_KEY: Record<PriceCadence, PriceKey> = {
+  monthly: "billing.price.perMonth",
+  yearly: "billing.price.perYear",
+  none: "billing.price.flat",
+};
 
 export const handle = { i18n: ["common", "admin"] };
 
@@ -58,19 +75,30 @@ export default function Billing() {
   const cycleCopy =
     status.kind === "subscribed" ? billingCycleCopy(locale, status) : null;
   const currentPlanKey = currentPlanKeyFor(status);
+  const priceLine = planPriceLine(status);
 
   return (
     <s-page heading={t("billing.heading")}>
       {/*
-        Both branches are deliberately the same shape — heading (which plan),
-        paragraph (what that means right now), action — so moving from free to
-        paid changes the words on this page and never its structure. The stack
-        gaps carry the rhythm: tight inside the identity group, a full step
-        before the action.
+        The shape is borrowed from the repair-ops console's plan card, because
+        it answers the merchant's questions in the order they ask them: which
+        plan am I on, what does it cost, how do I change it.
+
+        A quiet label, the plan name as the one heavy thing on the card, the
+        price under it, and the action on the opposite edge — top-aligned, so it
+        sits against the plan name rather than drifting down beside the
+        supporting lines. `s-grid` and not an inline `s-stack`: the left column
+        must be free to grow and wrap without ever pushing the button onto its
+        own row (@rules/polaris-app-home.md §4).
+
+        Both branches keep this structure, so moving from free to paid changes
+        the words on this page and never its layout.
       */}
-      <s-section heading={t("billing.currentHeading")}>
-        <s-stack direction="block" gap="base">
+      <s-section>
+        <s-grid gridTemplateColumns="1fr auto" gap="base" alignItems="start">
           <s-stack direction="block" gap="small-300">
+            <s-text color="subdued">{t("billing.planLabel")}</s-text>
+
             <s-stack direction="inline" gap="small" alignItems="center">
               <s-heading>
                 {status.kind === "free" ? PLANS[currentPlanKey].name : status.name}
@@ -87,19 +115,29 @@ export default function Billing() {
               )}
             </s-stack>
 
-            <s-paragraph color="subdued">
-              {status.kind === "free"
-                ? t("billing.free.heading")
-                : cycleCopy
-                  ? t(...cycleCopy)
-                  : ""}
-            </s-paragraph>
+            {/* Absent entirely when Shopify reported no amount — see
+                ~/billing/plan-price-line for why a fallback would be a lie. */}
+            {priceLine && (
+              <s-text color="subdued">
+                {t(PRICE_CADENCE_KEY[priceLine.cadence], {
+                  price: formatMoney(locale, priceLine.price),
+                })}
+              </s-text>
+            )}
+
+            {/* The renewal or trial line is real information the price alone
+                does not carry, so it survives the redesign. */}
+            {cycleCopy && <s-text color="subdued">{t(...cycleCopy)}</s-text>}
           </s-stack>
 
           <s-button variant="primary" href={pricingPlansUrl} target="_top">
             {status.kind === "free" ? t("billing.upgrade") : t("billing.manage")}
           </s-button>
-        </s-stack>
+        </s-grid>
+
+        {/* Says who owns the flow and what the button will do, so the merchant
+            is not surprised by leaving the app to change plan. */}
+        <s-paragraph color="subdued">{t("billing.managedNote")}</s-paragraph>
       </s-section>
 
       <s-section heading={t("billing.plans.heading")}>

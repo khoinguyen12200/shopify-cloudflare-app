@@ -125,7 +125,7 @@ describe("SupportRepo", () => {
     await run(async () => {
       const repo = new SupportRepo();
       const ticket = await open(repo, { at: 1000 });
-      await repo.close(SHOP, ticket.id, 2000);
+      await repo.closeAsStaff(ticket.id, 2000);
       expect(statusOf((await repo.find(SHOP, ticket.id))!.ticket)).toBe("closed");
 
       await repo.reply({
@@ -148,7 +148,7 @@ describe("SupportRepo", () => {
     await run(async () => {
       const repo = new SupportRepo();
       const ticket = await open(repo, { at: 1000 });
-      await repo.close(SHOP, ticket.id, 2000);
+      await repo.closeAsStaff(ticket.id, 2000);
 
       await repo.reply({
         shop: SHOP,
@@ -160,16 +160,6 @@ describe("SupportRepo", () => {
       });
 
       expect(statusOf((await repo.find(SHOP, ticket.id))!.ticket)).toBe("closed");
-    });
-  });
-
-  it("CANNOT close another shop's ticket", async () => {
-    await run(async () => {
-      const repo = new SupportRepo();
-      const ticket = await open(repo, { shop: SHOP });
-
-      expect(await repo.close(OTHER, ticket.id, 2000)).toBe(false);
-      expect(statusOf((await repo.find(SHOP, ticket.id))!.ticket)).toBe("open");
     });
   });
 
@@ -191,7 +181,7 @@ describe("SupportRepo", () => {
       await open(repo, { shop: SHOP, subject: "older", at: 1000 });
       await open(repo, { shop: OTHER, subject: "newer", at: 2000 });
       const closed = await open(repo, { shop: SHOP, subject: "closed", at: 1500 });
-      await repo.close(SHOP, closed.id, 1600);
+      await repo.closeAsStaff(closed.id, 1600);
 
       const queue = await repo.listOpenForStaff();
       expect(queue.map((t) => t.subject)).toEqual(["newer", "older"]);

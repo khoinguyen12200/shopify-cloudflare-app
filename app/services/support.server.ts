@@ -3,9 +3,14 @@ import { getEnv } from "~/request-context.server";
 import { AdminUserRepo } from "~/models/admin-users.server";
 import { SupportRepo, type SupportThread } from "~/models/support.server";
 import { notify } from "~/notifications/notify.server";
+import type { Notifier } from "~/ports/notifier";
 import { excerpt } from "~/support/excerpt";
 import type { SupportCategory } from "~/support/categories";
 import type { SupportTicket } from "~/db/schema";
+import {
+  ATTACHMENT_TOKEN_TTL_MS,
+  signAttachmentToken,
+} from "~/support/file-token";
 
 /**
  * Support use cases: the merchant side and the staff side of one thread.
@@ -52,6 +57,14 @@ export class SupportService {
     private readonly repo = new SupportRepo(),
     private readonly admins = new AdminUserRepo(),
     private readonly clock: Clock = systemClock,
+    /**
+     * The email seam, as a PORT (@rules/design-patterns.md). Defaulted to the
+     * real one so no call site changes, and injectable so a test can prove what
+     * was asked for — an email leaves no database state to assert against, which
+     * is precisely how this service shipped for months sending support replies
+     * with the merchant's copy list silently dropped.
+     */
+    private readonly notifier: Notifier = { send: notify },
   ) {}
 
   /** File a new ticket, then tell the staff who asked to hear about it. */
@@ -153,7 +166,7 @@ export class SupportService {
     const urls = threadUrls(getEnv().SHOPIFY_APP_URL, input.ticketId);
 
     for (const recipient of recipients) {
-      await notify({
+      await this.notifier.send({
         event: "support_merchant_activity",
         to: { email: recipient.email },
         payload: {
@@ -169,10 +182,15 @@ export class SupportService {
   }
 
   /**
-   * Email the merchant, if they left an address. Their CC list is carried on
-   * the same send rather than as extra messages — a CC is a copy of one reply,
-   * not a separate notification, and separate sends would give the same thread
-   * two different mail threads in their client.
+   * Email the merchant, if they left an address.
+   *
+   * Their copy list rides the SAME send rather than becoming extra messages: a
+   * copy is a carbon copy of one reply, not a separate notification, so this
+   * way everyone sees one thread in their mail client and the send leaves one
+   * row in `notification_logs`.
+   *
+   * `notify` filters the list before it is used — an address that has opted out
+   * is dropped, and the merchant is never also copied on their own reply.
    */
   private async notifyMerchant(
     thread: SupportThread,
@@ -182,9 +200,10 @@ export class SupportService {
     const { ticket } = thread;
     if (!ticket.merchantEmail) return;
 
-    await notify({
+    await this.notifier.send({
       event: "support_staff_reply",
       to: { email: ticket.merchantEmail },
+      cc: { email: ticket.ccEmails },
       scope: ticket.shop,
       payload: {
         recipientName: ticket.shopName,
@@ -213,10 +232,6 @@ export class SupportService {
     return this.repo.listOpenForStaff();
   }
 
-  closeAsMerchant(shop: string, ticketId: string): Promise<boolean> {
-    return this.repo.close(shop, ticketId, this.clock.now());
-  }
-
   closeAsStaff(ticketId: string): Promise<boolean> {
     return this.repo.closeAsStaff(ticketId, this.clock.now());
   }
@@ -235,5 +250,23 @@ export class SupportService {
 
   markStaffRead(ticketId: string): Promise<void> {
     return this.repo.markReadAsStaff(ticketId, this.clock.now());
+  }
+
+  /**
+   * A URL for one attachment that carries its own authorisation.
+   *
+   * Called from a loader that has ALREADY proven the caller may read this
+   * attachment. The token exists because the browser cannot re-prove it: an
+   * `<img>` in the Shopify admin iframe sends no session token and no usable
+   * cookie, so `/support/file/:id` has nothing to authenticate against
+   * (see app/support/file-token.ts).
+   */
+  async attachmentUrl(attachmentId: string): Promise<string> {
+    const token = await signAttachmentToken({
+      secret: getEnv().SHOPIFY_API_SECRET,
+      attachmentId,
+      expiresAt: this.clock.now() + ATTACHMENT_TOKEN_TTL_MS,
+    });
+    return `/support/file/${attachmentId}?token=${token}`;
   }
 }
