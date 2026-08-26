@@ -17,6 +17,11 @@
       "interface": "Interfaz:",
       "database": "Base de datos:",
       "sessions": "Sesiones:"
+    },
+    "feedback": {
+      "heading": "Somos nuevos y te escuchamos",
+      "body": "Esta app acaba de empezar y lanzamos cambios rápido según lo que nos cuentan los comerciantes. ¿Te falta algo, hay algo que no funciona o tienes una idea que te facilitaría el día? Cuéntanoslo.",
+      "action": "Enviar comentarios o pedir una función"
     }
   },
   "login": {

@@ -17,6 +17,11 @@
       "interface": "Interface:",
       "database": "Database:",
       "sessions": "Sessions:"
+    },
+    "feedback": {
+      "heading": "We're new, and we're listening",
+      "body": "This app is just getting started, and we ship fast based on what merchants tell us. Something missing, something broken, or an idea that would make your day easier? Send it our way.",
+      "action": "Share feedback or request a feature"
     }
   },
   "login": {

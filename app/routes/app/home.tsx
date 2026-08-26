@@ -95,6 +95,23 @@ export default function Index() {
           </s-link>
         </s-paragraph>
       </s-section>
+
+      {/*
+        LAST on the page, deliberately — the lesson repair-ops recorded after
+        moving its own: an ask placed above the merchant's data means every
+        visit opens with the app talking about itself on the screen someone came
+        to work on. At the end it costs nothing and still gets seen.
+
+        Not dismissible: `s-banner`'s dismiss is client-side only and nothing
+        persists it, so a Dismiss that reappears on the next load is a control
+        that lies. It is quiet and at the bottom instead.
+      */}
+      <s-banner tone="info" heading={t("home.feedback.heading")}>
+        <s-paragraph>{t("home.feedback.body")}</s-paragraph>
+        <s-button slot="secondary-actions" href="/app/support/new">
+          {t("home.feedback.action")}
+        </s-button>
+      </s-banner>
     </s-page>
   );
 }
