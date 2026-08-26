@@ -20,6 +20,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "cf-typegen": "wrangler types",
+    "ai:catalogue": "node scripts/ai-catalogue.mjs",
+    "ai:catalogue:check": "node scripts/ai-catalogue.mjs --check",
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "node scripts/migrate.mjs --local --database app-db",
     "db:migrate": "node scripts/migrate.mjs --remote --env production --database app-db-prod",
