@@ -175,8 +175,8 @@ export default function InternalSupportThread() {
   const aiActionLabel = aiMode === "generate" ? "Write reply" : "Improve reply";
   const aiActionHint =
     aiMode === "generate"
-      ? "Replaces the reply above"
-      : "Rewrites what is in the reply above, or suggests one if it is empty";
+      ? "Replaces the reply below"
+      : "Rewrites what is in the reply below, or suggests one if it is empty";
 
   return (
     <Page
@@ -217,18 +217,6 @@ export default function InternalSupportThread() {
               </CardHeader>
               <CardContent>
                 <Form method="post" className="flex flex-col gap-3">
-                  <Label htmlFor="body" className="sr-only">
-                    Reply
-                  </Label>
-                  <Textarea
-                    id="body"
-                    name="body"
-                    rows={5}
-                    maxLength={BODY_MAX}
-                    placeholder="This reply is emailed to the merchant and their copy list."
-                    required
-                  />
-
                   {/*
                     The AI box is SEPARATE from the reply box on purpose. What
                     goes here is shorthand — "fix ships friday, say sorry" — and
@@ -241,7 +229,7 @@ export default function InternalSupportThread() {
                   */}
                   <div className="flex flex-col gap-2 rounded-md border border-dashed p-3">
                     <Label htmlFor="ai-instruction" className="text-xs text-muted-foreground">
-                      Tell the AI what to say — it writes the reply above
+                      Tell the AI what to say — it writes the reply below
                     </Label>
                     <Textarea
                       id="ai-instruction"
@@ -280,6 +268,19 @@ export default function InternalSupportThread() {
                       </Text>
                     </div>
                   </div>
+
+                  <Label htmlFor="body" className="sr-only">
+                    Reply
+                  </Label>
+                  <Textarea
+                    id="body"
+                    name="body"
+                    rows={5}
+                    maxLength={BODY_MAX}
+                    placeholder="This reply is emailed to the merchant and their copy list."
+                    required
+                  />
+
                   <div className="flex flex-wrap items-center gap-2">
                     <Button type="submit" disabled={busy}>
                       {busy && !pendingIntent ? "Sending…" : "Send reply"}

@@ -1,5 +1,12 @@
-import { generateText, streamText, type LanguageModel, type ModelMessage } from "ai";
+import {
+  generateText,
+  streamText,
+  wrapLanguageModel,
+  type LanguageModel,
+  type ModelMessage,
+} from "ai";
 import { createWorkersAI } from "workers-ai-provider";
+import { dedupeTextDeltas } from "./dedupe-deltas";
 import { getEnv } from "~/request-context.server";
 import { AiError, type GenerateRequest, type GeneratedStream, type GeneratedText, type TextGenerator } from "~/ports/ai";
 import type { PromptMessage } from "~/ai/draft-prompt";
@@ -60,7 +67,13 @@ export function workersAiModelFactory(): ((id: string) => LanguageModel) | undef
     binding,
     ...(gateway ? { gateway: { id: gateway } } : {}),
   });
-  return (id: string) => workersAi(id);
+
+  // Wrapped, because `workers-ai-provider` double-emits every streamed text
+  // delta for models that return both wire shapes — see `./dedupe-deltas` for
+  // the exact bug. Applied here, at the one place a real model is built, so no
+  // caller has to know and the fake in tests is unaffected.
+  return (id: string) =>
+    wrapLanguageModel({ model: workersAi(id), middleware: dedupeTextDeltas });
 }
 
 export class WorkersAiGenerator implements TextGenerator {
