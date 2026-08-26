@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { WORKERS_AI_MODELS, findCatalogueModel, isCatalogueModel, DEFAULT_MODEL_FOR_ROLE } from "./catalogue";
-import { MODEL_ROLES } from "./roles";
+import { WORKERS_AI_MODELS, findCatalogueModel, isCatalogueModel } from "./catalogue";
 
 describe("the Workers AI catalogue", () => {
   it("is not empty, or the console offers an empty select", () => {
@@ -20,10 +19,15 @@ describe("the Workers AI catalogue", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it("gives every model a label and a usable context window", () => {
+  it("gives every model a label, a context window and a price", () => {
     for (const model of WORKERS_AI_MODELS) {
       expect(model.label.length, model.id).toBeGreaterThan(0);
       expect(model.contextWindow, model.id).toBeGreaterThan(0);
+      // Integer micro-USD, never a float — @rules/money.md applies to a rate
+      // as much as to an amount.
+      expect(Number.isInteger(model.inputMicroUsdPerMTokens), model.id).toBe(true);
+      expect(Number.isInteger(model.outputMicroUsdPerMTokens), model.id).toBe(true);
+      expect(model.outputMicroUsdPerMTokens, model.id).toBeGreaterThan(0);
     }
   });
 
@@ -42,19 +46,5 @@ describe("the Workers AI catalogue", () => {
     expect(findCatalogueModel("@cf/not/real")).toBeUndefined();
   });
 
-  it("starts every role on a model that is actually in the catalogue", () => {
-    // A default naming a retired id would ship the exact failure the catalogue
-    // exists to prevent.
-    for (const role of MODEL_ROLES) {
-      const id = DEFAULT_MODEL_FOR_ROLE[role];
-      expect(isCatalogueModel(id), `${role} -> ${id}`).toBe(true);
-    }
-  });
 
-  it("does not start the writing role on a reasoning model", () => {
-    // A visible thinking trace leaking into a drafted customer reply is the
-    // failure mode that matters for this role.
-    const writing = findCatalogueModel(DEFAULT_MODEL_FOR_ROLE.writing);
-    expect(writing?.reasoning).toBe(false);
-  });
 });

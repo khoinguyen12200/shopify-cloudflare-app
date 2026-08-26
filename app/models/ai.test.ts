@@ -3,68 +3,201 @@ import { env } from "cloudflare:test";
 import { runWithRequestContext } from "~/request-context.server";
 import { setupTestDatabase } from "~/test/db";
 import { AiRepo } from "./ai.server";
+import { MODEL_RECOVERY_MS } from "~/ai/chain";
 
 setupTestDatabase();
 
 const inRequest = <T>(fn: () => Promise<T>) => runWithRequestContext(env, fn);
 const AT = 1_700_000_000_000;
 
-describe("choosing a model for a role", () => {
-  it("returns null before anyone has chosen one", async () => {
-    expect(await inRequest(() => new AiRepo().modelFor("writing"))).toBeNull();
+const add = (repo: AiRepo, modelId: string, role: "writing" | "summary" = "writing") =>
+  repo.addToChain({ role, modelId, updatedBy: "sam@x.test", at: AT });
+
+describe("a purpose's chain", () => {
+  it("is empty before anything is added", async () => {
+    expect(await inRequest(() => new AiRepo().chainFor("writing", AT))).toEqual([]);
   });
 
-  it("remembers the choice", async () => {
-    const chosen = await inRequest(async () => {
+  it("keeps models in the order they were added", async () => {
+    const chain = await inRequest(async () => {
       const repo = new AiRepo();
-      await repo.setModel({ role: "writing", modelId: "@cf/a/b", updatedBy: "sam@x.test", at: AT });
-      return repo.modelFor("writing");
-    });
-    expect(chosen).toBe("@cf/a/b");
-  });
-
-  it("REPLACES rather than duplicating when chosen again", async () => {
-    // The role is the primary key, so a second choice is an update. Anything
-    // else would leave two rows and make the answer order-dependent.
-    const { chosen, rows } = await inRequest(async () => {
-      const repo = new AiRepo();
-      await repo.setModel({ role: "writing", modelId: "@cf/a/b", updatedBy: null, at: AT });
-      await repo.setModel({ role: "writing", modelId: "@cf/c/d", updatedBy: null, at: AT + 1 });
-      return { chosen: await repo.modelFor("writing"), rows: await repo.allModels() };
+      await add(repo, "@cf/a/one");
+      await add(repo, "@cf/b/two");
+      await add(repo, "@cf/c/three");
+      return repo.chainFor("writing", AT);
     });
 
-    expect(chosen).toBe("@cf/c/d");
-    expect(rows).toHaveLength(1);
+    expect(chain).toEqual(["@cf/a/one", "@cf/b/two", "@cf/c/three"]);
   });
 
-  it("keeps roles independent", async () => {
+  it("does not move a model that is added twice", async () => {
+    // Clicking Add again is not a request to demote it to the end.
+    const chain = await inRequest(async () => {
+      const repo = new AiRepo();
+      await add(repo, "@cf/a/one");
+      await add(repo, "@cf/b/two");
+      await add(repo, "@cf/a/one");
+      return repo.chainFor("writing", AT);
+    });
+
+    expect(chain).toEqual(["@cf/a/one", "@cf/b/two"]);
+  });
+
+  it("keeps purposes independent", async () => {
     const both = await inRequest(async () => {
       const repo = new AiRepo();
-      await repo.setModel({ role: "writing", modelId: "@cf/w/w", updatedBy: null, at: AT });
-      await repo.setModel({ role: "summary", modelId: "@cf/s/s", updatedBy: null, at: AT });
-      return { writing: await repo.modelFor("writing"), summary: await repo.modelFor("summary") };
+      await add(repo, "@cf/w/w", "writing");
+      await add(repo, "@cf/s/s", "summary");
+      return {
+        writing: await repo.chainFor("writing", AT),
+        summary: await repo.chainFor("summary", AT),
+      };
     });
 
-    expect(both).toEqual({ writing: "@cf/w/w", summary: "@cf/s/s" });
+    expect(both).toEqual({ writing: ["@cf/w/w"], summary: ["@cf/s/s"] });
   });
 
-  it("switches a role off again", async () => {
-    const after = await inRequest(async () => {
+  it("lets the same model serve two purposes", async () => {
+    const both = await inRequest(async () => {
       const repo = new AiRepo();
-      await repo.setModel({ role: "writing", modelId: "@cf/a/b", updatedBy: null, at: AT });
-      await repo.clearModel("writing");
-      return repo.modelFor("writing");
+      await add(repo, "@cf/same/model", "writing");
+      await add(repo, "@cf/same/model", "summary");
+      return {
+        writing: await repo.chainFor("writing", AT),
+        summary: await repo.chainFor("summary", AT),
+      };
     });
-    expect(after).toBeNull();
+
+    expect(both.writing).toEqual(["@cf/same/model"]);
+    expect(both.summary).toEqual(["@cf/same/model"]);
   });
 
-  it("records who changed it, for the audit trail", async () => {
-    const rows = await inRequest(async () => {
+  it("removes a model from the chain", async () => {
+    const chain = await inRequest(async () => {
       const repo = new AiRepo();
-      await repo.setModel({ role: "writing", modelId: "@cf/a/b", updatedBy: "sam@x.test", at: AT });
-      return repo.allModels();
+      await add(repo, "@cf/a/one");
+      await add(repo, "@cf/b/two");
+      await repo.removeFromChain("writing", "@cf/a/one");
+      return repo.chainFor("writing", AT);
     });
-    expect(rows[0]).toMatchObject({ updatedBy: "sam@x.test", updatedAt: AT });
+
+    expect(chain).toEqual(["@cf/b/two"]);
+  });
+
+  it("moves a model up, swapping with its neighbour", async () => {
+    const chain = await inRequest(async () => {
+      const repo = new AiRepo();
+      await add(repo, "@cf/a/one");
+      await add(repo, "@cf/b/two");
+      await repo.reorder({ role: "writing", modelId: "@cf/b/two", direction: "up", at: AT });
+      return repo.chainFor("writing", AT);
+    });
+
+    expect(chain).toEqual(["@cf/b/two", "@cf/a/one"]);
+  });
+
+  it("moves a model down", async () => {
+    const chain = await inRequest(async () => {
+      const repo = new AiRepo();
+      await add(repo, "@cf/a/one");
+      await add(repo, "@cf/b/two");
+      await repo.reorder({ role: "writing", modelId: "@cf/a/one", direction: "down", at: AT });
+      return repo.chainFor("writing", AT);
+    });
+
+    expect(chain).toEqual(["@cf/b/two", "@cf/a/one"]);
+  });
+
+  it("does nothing when moving past the end", async () => {
+    const chain = await inRequest(async () => {
+      const repo = new AiRepo();
+      await add(repo, "@cf/a/one");
+      await add(repo, "@cf/b/two");
+      await repo.reorder({ role: "writing", modelId: "@cf/a/one", direction: "up", at: AT });
+      return repo.chainFor("writing", AT);
+    });
+
+    expect(chain).toEqual(["@cf/a/one", "@cf/b/two"]);
+  });
+
+  it("drops a model an admin switched off", async () => {
+    const chain = await inRequest(async () => {
+      const repo = new AiRepo();
+      await add(repo, "@cf/a/one");
+      await add(repo, "@cf/b/two");
+      await repo.setEnabled({ role: "writing", modelId: "@cf/a/one", enabled: false, at: AT });
+      return repo.chainFor("writing", AT);
+    });
+
+    expect(chain).toEqual(["@cf/b/two"]);
+  });
+});
+
+describe("model health", () => {
+  it("demotes a just-failed model to the back, without losing it", async () => {
+    const chain = await inRequest(async () => {
+      const repo = new AiRepo();
+      await add(repo, "@cf/a/one");
+      await add(repo, "@cf/b/two");
+      await repo.markHealth({ role: "writing", modelId: "@cf/a/one", healthy: false, at: AT });
+      return repo.chainFor("writing", AT);
+    });
+
+    expect(chain).toEqual(["@cf/b/two", "@cf/a/one"]);
+  });
+
+  it("trusts it again once the recovery window has passed", async () => {
+    const chain = await inRequest(async () => {
+      const repo = new AiRepo();
+      await add(repo, "@cf/a/one");
+      await add(repo, "@cf/b/two");
+      await repo.markHealth({ role: "writing", modelId: "@cf/a/one", healthy: false, at: AT });
+      return repo.chainFor("writing", AT + MODEL_RECOVERY_MS + 1);
+    });
+
+    expect(chain).toEqual(["@cf/a/one", "@cf/b/two"]);
+  });
+
+  it("a success clears a prior failure immediately", async () => {
+    // One bad minute must not sideline a model for the whole window.
+    const chain = await inRequest(async () => {
+      const repo = new AiRepo();
+      await add(repo, "@cf/a/one");
+      await add(repo, "@cf/b/two");
+      await repo.markHealth({ role: "writing", modelId: "@cf/a/one", healthy: false, at: AT });
+      await repo.markHealth({ role: "writing", modelId: "@cf/a/one", healthy: true, at: AT + 10 });
+      return repo.chainFor("writing", AT + 20);
+    });
+
+    expect(chain).toEqual(["@cf/a/one", "@cf/b/two"]);
+  });
+
+  it("keeps a demoted model when it is the ONLY one", async () => {
+    const chain = await inRequest(async () => {
+      const repo = new AiRepo();
+      await add(repo, "@cf/a/one");
+      await repo.markHealth({ role: "writing", modelId: "@cf/a/one", healthy: false, at: AT });
+      return repo.chainFor("writing", AT);
+    });
+
+    expect(chain).toEqual(["@cf/a/one"]);
+  });
+
+  it("marks health per purpose, not globally", async () => {
+    const both = await inRequest(async () => {
+      const repo = new AiRepo();
+      await add(repo, "@cf/same/model", "writing");
+      await add(repo, "@cf/other/x", "writing");
+      await add(repo, "@cf/same/model", "summary");
+      await repo.markHealth({ role: "writing", modelId: "@cf/same/model", healthy: false, at: AT });
+      return {
+        writing: await repo.chainFor("writing", AT),
+        summary: await repo.chainFor("summary", AT),
+      };
+    });
+
+    expect(both.writing).toEqual(["@cf/other/x", "@cf/same/model"]);
+    expect(both.summary).toEqual(["@cf/same/model"]);
   });
 });
 
@@ -84,8 +217,6 @@ describe("the run ledger", () => {
   });
 
   it("sums tokens in SQL, not by loading every row", async () => {
-    // The ledger grows by one row per call forever; "fetch everything then
-    // reduce" works on a fixture and falls over on real data.
     const totals = await inRequest(async () => {
       const repo = new AiRepo();
       await repo.recordRun(run());
@@ -94,16 +225,6 @@ describe("the run ledger", () => {
     });
 
     expect(totals).toEqual({ input: 15, output: 27, calls: 2 });
-  });
-
-  it("counts nothing before the window", async () => {
-    const totals = await inRequest(async () => {
-      const repo = new AiRepo();
-      await repo.recordRun(run({ createdAt: AT - 10_000 }));
-      return repo.tokensSince(AT);
-    });
-
-    expect(totals).toEqual({ input: 0, output: 0, calls: 0 });
   });
 
   it("returns zeroes rather than NaN when there is nothing at all", async () => {

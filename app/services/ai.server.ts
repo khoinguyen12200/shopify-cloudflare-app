@@ -4,6 +4,7 @@ import { buildReplyDraftPrompt, buildThreadSummaryPrompt, type ThreadForPrompt }
 import type { ModelRole } from "~/ai/roles";
 import {
   AiError,
+  isRetriable,
   type AiFailureReason,
   type AiUsage,
   type GeneratedStream,
@@ -85,20 +86,36 @@ export class AiService {
     const role: ModelRole = "writing";
     const feature = "support.reply_draft";
 
-    const model = await this.repo.modelFor(role);
-    if (!model) {
-      await this.recordFailure({ role, feature, shop: input.shop, reason: "no_model", startedAt });
+    const chain = await this.repo.chainFor(role, this.clock.now());
+    if (chain.length === 0) {
+      await this.recordFailure({ role, feature, shop: input.shop, model: "(none)", reason: "no_model", startedAt });
       return err("no_model");
     }
 
-    let stream: GeneratedStream;
-    try {
-      stream = await this.ai.stream({ model, messages: buildReplyDraftPrompt(input.thread) });
-    } catch (cause) {
-      const reason = reasonOf(cause);
-      await this.recordFailure({ role, feature, shop: input.shop, reason, startedAt });
-      return err(reason);
+    // Falls forward through the chain the same way as a one-shot generation.
+    // A stream can only fall back BEFORE its first byte reaches the browser —
+    // once the composer has text in it, swapping models mid-draft would splice
+    // two different answers together.
+    let stream: GeneratedStream | null = null;
+    let model = "";
+    let last: AiFailureReason = "provider";
+
+    for (const candidate of chain) {
+      try {
+        stream = await this.ai.stream({
+          model: candidate,
+          messages: buildReplyDraftPrompt(input.thread),
+        });
+        model = candidate;
+        break;
+      } catch (cause) {
+        last = reasonOf(cause);
+        await this.afterFailure({ role, feature, shop: input.shop, model: candidate, reason: last, startedAt });
+        if (!isRetriable(last)) return err(last);
+      }
     }
+
+    if (!stream) return err(last);
 
     return ok({
       textStream: stream.textStream,
@@ -106,13 +123,14 @@ export class AiService {
       // reading it eagerly would meter every streamed call at zero.
       done: stream.usage
         .then((usage) =>
-          this.recordSuccess({ role, feature, shop: input.shop, model, usage, startedAt }),
+          this.afterSuccess({ role, feature, shop: input.shop, model, usage, startedAt }),
         )
         .catch(async (cause: unknown) => {
-          await this.recordFailure({
+          await this.afterFailure({
             role,
             feature,
             shop: input.shop,
+            model,
             reason: reasonOf(cause),
             startedAt,
           });
@@ -120,6 +138,17 @@ export class AiService {
     });
   }
 
+  /**
+   * Walk the purpose's chain until one model answers.
+   *
+   * The fallback that makes a chain worth having: a model that errors, times
+   * out or is rate-limited costs a retry on the NEXT candidate rather than the
+   * feature. A failure no other model can fix stops the walk immediately.
+   *
+   * Every attempt leaves its own ledger row, so a flaky model is visible as a
+   * pattern rather than as an occasional missing draft, and every attempt
+   * writes health back so the next request starts on a model that works.
+   */
   private async generateOnce(input: {
     role: ModelRole;
     feature: string;
@@ -127,37 +156,85 @@ export class AiService {
     messages: ReturnType<typeof buildReplyDraftPrompt>;
     maxTokens?: number;
   }): Promise<Result<string, AiFailureReason>> {
-    const startedAt = this.clock.now();
-
-    // The role→model decision lives HERE, in the use case, so it is reachable
-    // from a test that injects a fake generator.
-    const model = await this.repo.modelFor(input.role);
-    if (!model) {
-      await this.recordFailure({ ...input, reason: "no_model", startedAt });
+    const chain = await this.repo.chainFor(input.role, this.clock.now());
+    if (chain.length === 0) {
+      await this.recordFailure({ ...input, model: "(none)", reason: "no_model", startedAt: this.clock.now() });
       return err("no_model");
     }
 
-    try {
-      const result = await this.ai.generate({
-        model,
-        messages: input.messages,
-        ...(input.maxTokens === undefined ? {} : { maxTokens: input.maxTokens }),
-      });
+    let last: AiFailureReason = "provider";
 
-      const text = result.text.trim();
-      if (text === "") {
-        // Whitespace is a failed draft, not a draft. Reported as `provider`
-        // because that is who produced it.
-        await this.recordFailure({ ...input, reason: "provider", startedAt });
-        return err("provider");
+    for (const model of chain) {
+      const startedAt = this.clock.now();
+
+      try {
+        const result = await this.ai.generate({
+          model,
+          messages: input.messages,
+          ...(input.maxTokens === undefined ? {} : { maxTokens: input.maxTokens }),
+        });
+
+        const text = result.text.trim();
+        if (text === "") {
+          // Whitespace is a failed draft, not a draft — and another model may
+          // well produce words, so it is worth the retry.
+          last = "provider";
+          await this.afterFailure({ ...input, model, reason: last, startedAt });
+          continue;
+        }
+
+        await this.afterSuccess({ ...input, model, usage: result.usage, startedAt });
+        return ok(text);
+      } catch (cause) {
+        last = reasonOf(cause);
+        await this.afterFailure({ ...input, model, reason: last, startedAt });
+        // Nothing another model can do about it.
+        if (!isRetriable(last)) return err(last);
       }
+    }
 
-      await this.recordSuccess({ ...input, model, usage: result.usage, startedAt });
-      return ok(text);
-    } catch (cause) {
-      const reason = reasonOf(cause);
-      await this.recordFailure({ ...input, reason, startedAt });
-      return err(reason);
+    // Chain exhausted: the caller hears about the last thing that went wrong.
+    return err(last);
+  }
+
+  /** Ledger row plus health, after one successful attempt. */
+  private async afterSuccess(input: {
+    role: ModelRole;
+    feature: string;
+    shop: string | null;
+    model: string;
+    usage: AiUsage;
+    startedAt: number;
+  }): Promise<void> {
+    await this.recordSuccess(input);
+    // Clears a prior failure, so one bad minute does not sideline a model for
+    // the whole recovery window.
+    await this.repo.markHealth({
+      role: input.role,
+      modelId: input.model,
+      healthy: true,
+      at: this.clock.now(),
+    });
+  }
+
+  /** Ledger row plus health, after one failed attempt. */
+  private async afterFailure(input: {
+    role: ModelRole;
+    feature: string;
+    shop: string | null;
+    model: string;
+    reason: AiFailureReason;
+    startedAt: number;
+  }): Promise<void> {
+    await this.recordFailure(input);
+    // Only the model is demoted, and only for a failure it could be blamed for.
+    if (isRetriable(input.reason)) {
+      await this.repo.markHealth({
+        role: input.role,
+        modelId: input.model,
+        healthy: false,
+        at: this.clock.now(),
+      });
     }
   }
 
@@ -188,16 +265,14 @@ export class AiService {
     role: ModelRole;
     feature: string;
     shop: string | null;
+    /** What was tried. `(none)` when the purpose had no chain at all. */
+    model: string;
     reason: AiFailureReason;
     startedAt: number;
   }): Promise<void> {
-    // The model may be unknown — that IS the `no_model` failure — so the run is
-    // recorded against a placeholder rather than skipped.
-    const modelId = (await this.repo.modelFor(input.role)) ?? "(none)";
-
     await this.repo.recordRun({
       role: input.role,
-      modelId,
+      modelId: input.model,
       feature: input.feature,
       shop: input.shop,
       status: "error",

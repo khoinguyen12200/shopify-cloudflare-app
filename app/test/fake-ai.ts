@@ -27,6 +27,11 @@ export function fakeTextGenerator(options: {
   chunks?: readonly string[];
   /** Make every call fail this way instead. */
   fail?: AiFailureReason;
+  /**
+   * Fail only for these model ids, so a test can drive the FALLBACK chain:
+   * the first model fails, the next succeeds.
+   */
+  failFor?: Readonly<Record<string, AiFailureReason>>;
   inputTokens?: number;
   outputTokens?: number;
 } = {}): FakeTextGenerator {
@@ -38,7 +43,9 @@ export function fakeTextGenerator(options: {
     outputTokens: options.outputTokens ?? 20,
   };
 
-  const refuse = () => {
+  const refuse = (model: string) => {
+    const perModel = options.failFor?.[model];
+    if (perModel) throw new AiError(perModel, `fake failure for ${model}: ${perModel}`);
     if (options.fail) throw new AiError(options.fail, `fake failure: ${options.fail}`);
   };
 
@@ -54,18 +61,18 @@ export function fakeTextGenerator(options: {
     },
     async generate(request): Promise<GeneratedText> {
       calls.push(request);
-      refuse();
-      return { text: reply, usage };
+      refuse(request.model);
+      return { text: reply, usage: { ...usage, model: request.model } };
     },
     async stream(request): Promise<GeneratedStream> {
       calls.push(request);
-      refuse();
+      refuse(request.model);
       const chunks = options.chunks ?? [reply];
       return {
         textStream: (async function* () {
           for (const chunk of chunks) yield chunk;
         })(),
-        usage: Promise.resolve(usage),
+        usage: Promise.resolve({ ...usage, model: request.model }),
       };
     },
   };

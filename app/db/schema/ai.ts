@@ -1,29 +1,57 @@
-import { sqliteTable, text, integer, index, uniqueIndex } from "drizzle-orm/sqlite-core";
+import {
+  sqliteTable,
+  text,
+  integer,
+  index,
+  primaryKey,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 import { MODEL_ROLES } from "~/ai/roles";
 
 /**
- * Which model serves which PURPOSE. One row per role, chosen in the console.
+ * Which models serve which PURPOSE, in the order to try them.
  *
- * A settings table rather than a constant because @rules/cloudflare.md forbids a
- * feature hardcoding a model id: models are retired, and a pinned id fails at
- * call time as a broken feature rather than as a bad setting. The id is checked
- * against the catalogue on the way in, which is why the console offers a select.
+ * A CHAIN rather than one row per purpose, because one model per purpose has
+ * two failure modes and no answer to either: it leaves the feature dead when
+ * that model misbehaves, and it forces one choice to be simultaneously the
+ * cheapest thing that can restate a number and the most capable thing that can
+ * hold a conversation. `priority` ascending is the order; 0 is tried first.
  *
- * NOT shop-scoped, deliberately, and one of only two tables that are not: the
- * model behind a role is OUR operational choice, the same for every merchant,
- * and paid for by us. Do not treat this as a precedent (@rules/architecture.md).
+ * `healthy` / `lastFailedAt` are written by the runtime, not by an admin. A
+ * model that just failed is DEMOTED to the back of its own chain for a recovery
+ * window, never dropped — dropping could empty a purpose entirely, and a
+ * degraded answer beats no answer.
+ *
+ * The model id is checked against the catalogue on the way in, which is why the
+ * console offers a select. NOT shop-scoped, deliberately, and one of only two
+ * tables that are not: which model serves a purpose is OUR operational choice,
+ * the same for every merchant and paid for by us. Not a precedent
+ * (@rules/architecture.md).
  */
 export const aiModels = sqliteTable(
   "ai_models",
   {
-    /** The purpose. One row each — see app/ai/roles.ts. */
-    role: text("role", { enum: MODEL_ROLES }).primaryKey(),
+    /** The purpose — see app/ai/roles.ts. */
+    role: text("role", { enum: MODEL_ROLES }).notNull(),
     /** A Workers AI identifier, e.g. "@cf/openai/gpt-oss-120b". */
     modelId: text("model_id").notNull(),
+    /** Ascending. 0 is tried first. */
+    priority: integer("priority").notNull().default(0),
+    /** An admin can park a model without losing its place in the order. */
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    /** Runtime health. Cleared by a failed call, restored by a successful one. */
+    healthy: integer("healthy", { mode: "boolean" }).notNull().default(true),
+    lastFailedAt: integer("last_failed_at"),
     updatedAt: integer("updated_at").notNull(),
     /** Who last changed it, for the audit trail the console needs. */
     updatedBy: text("updated_by"),
   },
+  (table) => [
+    // One row per (purpose, model): the same model may serve two purposes, but
+    // never twice within one chain.
+    primaryKey({ columns: [table.role, table.modelId] }),
+    index("ai_models_role_priority_idx").on(table.role, table.priority),
+  ],
 );
 
 export type AiModel = typeof aiModels.$inferSelect;

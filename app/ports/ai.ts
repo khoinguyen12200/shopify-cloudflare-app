@@ -29,6 +29,18 @@ export type AiFailureReason =
   | "timeout"
   | "rate_limited";
 
+/**
+ * Whether trying the NEXT model in the chain could plausibly help.
+ *
+ * `not_configured` cannot: no Workers AI binding is a fact about the
+ * environment, not about the model, so walking three candidates would waste
+ * three round trips to reach the same answer. A provider error, a timeout or a
+ * rate limit are all specific to the model that produced them.
+ */
+export function isRetriable(reason: AiFailureReason): boolean {
+  return reason === "provider" || reason === "timeout" || reason === "rate_limited";
+}
+
 export interface AiUsage {
   readonly model: string;
   readonly inputTokens: number | null;
