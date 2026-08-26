@@ -9,15 +9,17 @@
 import enCommon from "./locales/en/common.json";
 import enPublic from "./locales/en/public.json";
 import enAdmin from "./locales/en/admin.json";
+import enEmail from "./locales/en/email.json";
 import esCommon from "./locales/es/common.json";
 import esPublic from "./locales/es/public.json";
 import esAdmin from "./locales/es/admin.json";
+import esEmail from "./locales/es/email.json";
 
 import type { Locale, Namespace } from "./config";
 
 export const resources: Record<Locale, Record<Namespace, object>> = {
-  en: { common: enCommon, public: enPublic, admin: enAdmin },
-  es: { common: esCommon, public: esPublic, admin: esAdmin },
+  en: { common: enCommon, public: enPublic, admin: enAdmin, email: enEmail },
+  es: { common: esCommon, public: esPublic, admin: esAdmin, email: esEmail },
 };
 
 /** `en` is the key source: every other locale is type-checked against it. */
@@ -25,4 +27,5 @@ export type Resources = {
   common: typeof enCommon;
   public: typeof enPublic;
   admin: typeof enAdmin;
+  email: typeof enEmail;
 };

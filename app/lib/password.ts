@@ -88,12 +88,15 @@ function parse(stored: string): ParsedHash | null {
   if (parts.length !== 5) return null;
   const [algorithm, digest, iterationsRaw, saltRaw, hashRaw] = parts;
   if (algorithm !== ALGORITHM || digest !== DIGEST) return null;
+  // Narrowed explicitly rather than asserted: `parts.length === 5` above tells
+  // the reader these exist, but not the compiler.
+  if (saltRaw === undefined || hashRaw === undefined) return null;
 
   const iterations = Number(iterationsRaw);
   if (!Number.isInteger(iterations) || iterations < 1) return null;
 
   try {
-    return { iterations, salt: fromBase64(saltRaw!), hash: fromBase64(hashRaw!) };
+    return { iterations, salt: fromBase64(saltRaw), hash: fromBase64(hashRaw) };
   } catch {
     return null;
   }
@@ -103,7 +106,9 @@ function parse(stored: string): ParsedHash | null {
 function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) return false;
   let diff = 0;
-  for (let i = 0; i < a.length; i += 1) diff |= a[i]! ^ b[i]!;
+  // `?? 0` rather than a non-null assertion; the index is in range by the
+  // loop bound, and a missing byte would compare as a difference anyway.
+  for (let i = 0; i < a.length; i += 1) diff |= (a[i] ?? 0) ^ (b[i] ?? 0);
   return diff === 0;
 }
 

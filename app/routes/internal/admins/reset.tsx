@@ -73,7 +73,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   });
 
   if (!result.ok) {
-    return data({ error: result.reason as AdminErrorReason }, { status: 400 });
+    const reason: AdminErrorReason = result.reason;
+    return data({ error: reason }, { status: 400 });
   }
 
   // Back to the table, which shows the success message.

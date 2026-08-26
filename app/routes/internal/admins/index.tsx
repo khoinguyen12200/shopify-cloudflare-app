@@ -38,13 +38,6 @@ import {
 } from "ngk-dashboard";
 import { requireOwner } from "~/services/admin-auth.server";
 import { AdminUserRepo } from "~/models/admin-users.server";
-import {
-  createAdmin,
-  removeAdmin,
-  resetAdminPassword,
-  setAdminRole,
-  setAdminStatus,
-} from "~/services/admin-management.server";
 // Type-only: erased at build, so it does not pull the server module into the
 // client bundle.
 import type { AdminErrorReason } from "~/services/admin-management.server";
@@ -58,7 +51,9 @@ import {
   ADMIN_ROLE_LABEL,
   ADMIN_STATUS_LABEL,
 } from "~/internal/admin-messages";
-import type { AdminRole, SafeAdminUser } from "~/db/schema";
+import type { SafeAdminUser } from "~/db/schema";
+import { INTENTS, SUCCESS_KEY, readIntent, type Intent } from "./intents.server";
+import { formatSuccessMessage } from "./success-message";
 
 const LOCALE: Locale = "en";
 
@@ -79,111 +74,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   };
 };
 
-/**
- * Command dispatch on `intent`, per @rules/design-patterns.md: the action is a
- * thin lookup, and each intent's logic lives in the service.
- */
-const INTENTS = {
-  async create(form: FormData) {
-    return createAdmin({
-      name: String(form.get("name") ?? ""),
-      email: String(form.get("email") ?? ""),
-      password: String(form.get("password") ?? ""),
-      role: (form.get("role") === "owner" ? "owner" : "admin") as AdminRole,
-    });
-  },
-  async disable(form: FormData, actorId: string) {
-    return setAdminStatus({
-      actorId,
-      targetId: String(form.get("id") ?? ""),
-      status: "disabled",
-    });
-  },
-  async enable(form: FormData, actorId: string) {
-    return setAdminStatus({
-      actorId,
-      targetId: String(form.get("id") ?? ""),
-      status: "active",
-    });
-  },
-  async makeOwner(form: FormData, actorId: string) {
-    return setAdminRole({
-      actorId,
-      targetId: String(form.get("id") ?? ""),
-      role: "owner",
-    });
-  },
-  async makeAdmin(form: FormData, actorId: string) {
-    return setAdminRole({
-      actorId,
-      targetId: String(form.get("id") ?? ""),
-      role: "admin",
-    });
-  },
-  async remove(form: FormData, actorId: string) {
-    return removeAdmin({ actorId, targetId: String(form.get("id") ?? "") });
-  },
-  async resetPassword(form: FormData, actorId: string) {
-    const result = await resetAdminPassword({
-      actorId,
-      targetId: String(form.get("id") ?? ""),
-      newPassword: String(form.get("newPassword") ?? ""),
-    });
-    // Normalise to the same { name, role } shape the other intents return, so
-    // the action stays a thin dispatch.
-    return result.ok
-      ? ({ ok: true, value: result.value.user } as const)
-      : result;
-  },
-} as const;
-
-type Intent = keyof typeof INTENTS;
-
-type SuccessKey =
-  | "created"
-  | "disabled"
-  | "enabled"
-  | "removed"
-  | "roleChanged"
-  | "passwordReset";
-
-const SUCCESS_KEY: Record<Intent, SuccessKey> = {
-  create: "created",
-  disable: "disabled",
-  enable: "enabled",
-  makeOwner: "roleChanged",
-  makeAdmin: "roleChanged",
-  remove: "removed",
-  resetPassword: "passwordReset",
-};
-
-function formatSuccessMessage(key: SuccessKey, name: string, role: string): string {
-  switch (key) {
-    case "created":
-      return `${name} can now sign in.`;
-    case "disabled":
-      return `${name} can no longer sign in.`;
-    case "enabled":
-      return `${name} can sign in again.`;
-    case "removed":
-      return `${name} was removed.`;
-    case "roleChanged":
-      return `${name} is now ${role}.`;
-    case "passwordReset":
-      return `Password reset for ${name}. Give them the new password directly.`;
-  }
-}
-
 export const action = async ({ request }: ActionFunctionArgs) => {
   const actor = await requireOwner(request);
   const form = await request.formData();
-  const intent = String(form.get("intent") ?? "") as Intent;
+  const intent = readIntent(form);
+
+  // Unknown intent: a bad request, not a crash.
+  if (!intent) {
+    const notFound: AdminErrorReason = "notFound";
+    return data({ error: notFound }, { status: 400 });
+  }
 
   const handler = INTENTS[intent];
-  // Unknown intent: a bad request, not a crash.
-  if (!handler) {
-    return data({ error: "notFound" as AdminErrorReason }, { status: 400 });
-  }
 
   const result = await handler(form, actor.id);
   if (!result.ok) return data({ error: result.reason }, { status: 400 });
@@ -194,6 +96,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     role: result.value?.role ?? "",
   });
 };
+
+/** The role label, looked up by comparison rather than asserted with `as`. */
+function roleLabel(role: string): string {
+  return role === "owner" || role === "admin" ? ADMIN_ROLE_LABEL[role] : "";
+}
 
 export default function Admins() {
   const { actor, admins, resetSuccess } = useLoaderData<typeof loader>();
@@ -217,7 +124,7 @@ export default function Admins() {
       ? formatSuccessMessage(
           actionData.success,
           actionData.name,
-          actionData.role ? ADMIN_ROLE_LABEL[actionData.role as AdminRole] : "",
+          roleLabel(actionData.role),
         )
       : undefined;
 

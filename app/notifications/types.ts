@@ -27,6 +27,23 @@ export type NotificationEvent =
 export type ChannelKey = "email";
 
 /**
+ * Keyed by `ChannelKey`, so adding a transport to the union stops this
+ * compiling until it is listed — the same guarantee the event catalogue gives.
+ */
+const CHANNEL_KEYS: Record<ChannelKey, true> = { email: true };
+
+/**
+ * Narrow an untrusted string — a stored row, a form field — to a channel.
+ *
+ * A real type guard rather than `as ChannelKey`: stored values outlive the code
+ * that wrote them, and a cast would keep claiming a retired channel is valid
+ * (@rules/code-craft.md).
+ */
+export function isChannelKey(value: string): value is ChannelKey {
+  return Object.prototype.hasOwnProperty.call(CHANNEL_KEYS, value);
+}
+
+/**
  * A message is a DISCRIMINATED UNION, never "an email with optional fields".
  *
  * The tempting shortcut is one interface with `subject`, `html`, `body`, `to`…

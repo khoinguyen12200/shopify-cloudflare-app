@@ -10,6 +10,7 @@ import { useTranslation } from "react-i18next";
 
 import { createShopify } from "~/shopify.server";
 import { getEnv } from "~/request-context.server";
+import { getLocale } from "~/i18n/i18n.server";
 import { SupportService } from "~/services/support.server";
 import { SupportRepo } from "~/models/support.server";
 import {
@@ -76,6 +77,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const created = await service.openTicket({
     shop: session.shop,
     shopName,
+    // Shopify puts the merchant's chosen admin language on every embedded
+    // request, and this is the only moment we have it: staff answer later from
+    // the internal console, which knows nothing about them (@rules/i18n.md).
+    locale: await getLocale(request),
     merchantEmail: parsed.data.merchantEmail,
     ccEmails: parsed.data.ccEmails,
     category: parsed.data.category,

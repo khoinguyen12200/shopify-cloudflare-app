@@ -23,7 +23,7 @@ export const DEFAULT_LOCALE: Locale = "en";
  * The staff console at /internal has no i18n — it is hardcoded English, per
  * a standing project decision — so it carries no namespace here.
  */
-export const NAMESPACES = ["common", "public", "admin"] as const;
+export const NAMESPACES = ["common", "public", "admin", "email"] as const;
 
 export type Namespace = (typeof NAMESPACES)[number];
 

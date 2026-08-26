@@ -480,6 +480,36 @@ describe("what the service asks the notifier to send", () => {
     expect(notifier.onlyFor("support_staff_reply").cc).toEqual({ email: [] });
   });
 
+  it("answers the merchant in the language they wrote in", async () => {
+    // The staff member replies from the internal console, whose request knows
+    // nothing about the merchant — so the locale has to come off the ticket.
+    const shop = newShop();
+    const notifier = await inRequest(async () => {
+      const { notifier, service } = withFake();
+      const created = await openTicket(service, shop, { locale: "es" });
+      await service.replyAsStaff({ ticketId: created.id, staffName: "Sam", body: "Arreglado." });
+      return notifier;
+    });
+
+    expect(notifier.onlyFor("support_staff_reply").payload).toMatchObject({
+      locale: "es",
+    });
+  });
+
+  it("leaves the locale unset for a ticket opened before we recorded one", async () => {
+    // Null, not "en": the sender falls back to the default rather than this
+    // claiming we know the merchant reads English.
+    const shop = newShop();
+    const notifier = await inRequest(async () => {
+      const { notifier, service } = withFake();
+      const created = await openTicket(service, shop);
+      await service.replyAsStaff({ ticketId: created.id, staffName: "Sam", body: "Fixed." });
+      return notifier;
+    });
+
+    expect(notifier.onlyFor("support_staff_reply").payload.locale).toBeUndefined();
+  });
+
   it("names the staff member who answered, so the merchant sees a person", async () => {
     const shop = newShop();
     const notifier = await inRequest(async () => {

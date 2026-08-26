@@ -1,0 +1,11 @@
+{
+  "support": {
+    "reply": {
+      "subject": "Re: {{subject}}",
+      "greeting": "Hola {{name}}:",
+      "intro": "{{staffName}} ha respondido a tu ticket de soporte:",
+      "cta": "Leer y responder",
+      "footer": "Responder en la app mantiene toda la conversación en un mismo sitio, para que quien la retome después tenga el historial."
+    }
+  }
+}

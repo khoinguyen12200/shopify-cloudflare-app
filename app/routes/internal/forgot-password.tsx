@@ -14,6 +14,7 @@ import {
 } from "ngk-dashboard";
 import { requestPasswordReset } from "~/services/password-reset.server";
 import { isProductionLike } from "~/lib/deployment";
+import { getEnv } from "~/request-context.server";
 import { paths } from "~/urls";
 import { INTERNAL_FONT_LINKS, THEME_INIT_SCRIPT } from "~/internal/components";
 import internalStyles from "~/styles/internal/internal.tailwind.css?url";
@@ -55,7 +56,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   // be walked through without a mail server. Both conditions are required —
   // surfacing it on a real deployment would let anyone who can POST this form
   // obtain a reset link for any account.
-  const showLink = !result.emailSent && !isProductionLike();
+  const showLink = !result.emailSent && !isProductionLike(getEnv().SHOPIFY_APP_URL ?? "");
   return data({
     sent: true as const,
     devToken: showLink ? result.token : undefined,

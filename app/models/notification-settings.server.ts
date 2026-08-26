@@ -1,7 +1,8 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { notificationOptOuts, notificationPreferences } from "~/db/schema";
 import { getDb } from "~/request-context.server";
-import type { ChannelKey, NotificationEvent } from "~/notifications/types";
+import { isChannelKey, type ChannelKey, type NotificationEvent } from "~/notifications/types";
+import { isNotificationEvent } from "~/notifications/catalogue";
 
 /** `"global"` is the app-wide scope; anything else is a tenant (a shop domain). */
 export const GLOBAL_SCOPE = "global";
@@ -51,11 +52,16 @@ export class NotificationSettingsRepo {
 
     const selection: Partial<Record<NotificationEvent, ChannelKey[]>> = {};
     for (const { event, channel, enabled } of merged.values()) {
-      const key = event as NotificationEvent;
+      // Stored values outlive the code that wrote them, so a row naming a
+      // retired event or channel is narrowed rather than cast — `as` would let
+      // a stale row through typed as something it is not
+      // (@rules/code-craft.md).
+      if (!isNotificationEvent(event) || !isChannelKey(channel)) continue;
+
       // Every event with any row gets an array — including an EMPTY one, which is
       // the explicit "none" the eligibility rules must be able to see.
-      selection[key] ??= [];
-      if (enabled) selection[key]!.push(channel as ChannelKey);
+      const channels = (selection[event] ??= []);
+      if (enabled) channels.push(channel);
     }
     return selection;
   }

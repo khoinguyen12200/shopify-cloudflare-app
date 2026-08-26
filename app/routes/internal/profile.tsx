@@ -52,16 +52,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const intent = String(form.get("intent") ?? "");
 
   if (intent === "details") {
+    const detailsSaved: SuccessKey = "detailsSaved";
     const result = await updateOwnProfile({
       userId: user.id,
       name: String(form.get("name") ?? ""),
     });
     return result.ok
-      ? data({ success: "detailsSaved" as SuccessKey })
+      ? data({ success: detailsSaved })
       : data({ error: result.reason }, { status: 400 });
   }
 
   if (intent === "password") {
+    const passwordChanged: SuccessKey = "passwordChanged";
     const result = await changeOwnPassword({
       userId: user.id,
       currentPassword: String(form.get("currentPassword") ?? ""),
@@ -69,11 +71,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       confirmPassword: String(form.get("confirmPassword") ?? ""),
     });
     return result.ok
-      ? data({ success: "passwordChanged" as SuccessKey })
+      ? data({ success: passwordChanged })
       : data({ error: result.reason }, { status: 400 });
   }
 
-  return data({ error: "notFound" as ProfileErrorReason }, { status: 400 });
+  const notFound: ProfileErrorReason = "notFound";
+  return data({ error: notFound }, { status: 400 });
 };
 
 export default function Profile() {

@@ -1,0 +1,11 @@
+{
+  "support": {
+    "reply": {
+      "subject": "Re: {{subject}}",
+      "greeting": "Hello {{name}},",
+      "intro": "{{staffName}} replied to your support ticket:",
+      "cta": "Read and reply",
+      "footer": "Replying in the app keeps the whole conversation in one place, so whoever picks it up next has the history."
+    }
+  }
+}

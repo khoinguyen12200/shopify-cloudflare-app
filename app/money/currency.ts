@@ -23,14 +23,16 @@ const decimalsCache = new Map<string, number>();
  * simply uses it as the symbol, so `"ZZZ"` passes and a typo'd currency reaches
  * the database looking valid. `Intl.supportedValuesOf` is the real list.
  *
- * Computed once, lazily — it is a sizeable array and most requests never need it.
+ * Built once when the module loads, as a `const`. It used to be a lazily-filled
+ * module-level `let`, which @rules/architecture.md bans outright — a Workers
+ * isolate is reused across shops, so module-scope mutable state is the shape a
+ * cross-tenant leak takes. This particular value could not leak anything (it is
+ * the same 159 ISO codes for everyone), but "safe because of what it happens to
+ * hold" is exactly the reasoning that stops being true after an edit.
  */
-let knownCurrencies: Set<string> | undefined;
-
-function known(): Set<string> {
-  knownCurrencies ??= new Set(Intl.supportedValuesOf("currency"));
-  return knownCurrencies;
-}
+const KNOWN_CURRENCIES: ReadonlySet<string> = new Set(
+  Intl.supportedValuesOf("currency"),
+);
 
 /**
  * Validate a currency code.
@@ -44,7 +46,7 @@ export function toCurrency(code: string): Result<CurrencyCode, MoneyError> {
   if (!/^[A-Z]{3}$/.test(upper)) {
     return err("unknown_currency", `"${code}" is not a three-letter code`);
   }
-  if (!known().has(upper)) {
+  if (!KNOWN_CURRENCIES.has(upper)) {
     return err("unknown_currency", `"${upper}" is not a known ISO 4217 currency`);
   }
   return ok(upper as CurrencyCode);

@@ -26,6 +26,7 @@ async function storedAttachment(): Promise<string> {
     subject: "Broken",
     body: "Look at this",
     authorName: "Store",
+    locale: null,
     at: 1_000,
   });
 

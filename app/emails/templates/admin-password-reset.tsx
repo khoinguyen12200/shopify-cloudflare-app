@@ -9,6 +9,8 @@ import { renderEmail, type RenderedEmail } from "../render";
  * Pure apart from rendering — no `getEnv()`, no database, no clock. Everything it
  * needs arrives on the payload, which is what makes it renderable in a test with
  * no request context.
+ * STAFF-FACING, so deliberately English — see @rules/i18n.md. Only the one
+ * merchant-facing template (support-staff-reply) is translated.
  */
 export function adminPasswordResetEmail(
   p: AdminPasswordResetPayload,

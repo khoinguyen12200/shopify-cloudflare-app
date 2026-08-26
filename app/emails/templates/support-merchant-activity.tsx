@@ -8,6 +8,8 @@ import { renderEmail, type RenderedEmail } from "../render";
  * The shop name goes in the SUBJECT line, because this lands in a shared inbox
  * where the only triage signal is that line — "Support: Alpha Store — checkout
  * is broken" is actionable in a list, "New support ticket" is not.
+ * STAFF-FACING, so deliberately English — see @rules/i18n.md. Only the one
+ * merchant-facing template (support-staff-reply) is translated.
  */
 export function supportMerchantActivityEmail(
   p: SupportMerchantActivityPayload,

@@ -27,6 +27,7 @@ function open(
     subject: over.subject ?? "Button missing",
     body: "It vanished.",
     authorName: "Alpha Store",
+    locale: null,
     at,
   });
 }

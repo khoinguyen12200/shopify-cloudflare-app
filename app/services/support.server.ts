@@ -76,6 +76,12 @@ export class SupportService {
     category: SupportCategory;
     subject: string;
     body: string;
+    /**
+     * The merchant's language, from the request that opened the ticket. Stored
+     * because staff answer from the internal console, whose request knows
+     * nothing about the merchant.
+     */
+    locale?: string | null;
   }): Promise<Result<{ id: string; messageId: string }, OpenTicketFailure>> {
     if (!(await withinRateLimit(input.shop))) return err("rate_limited");
 
@@ -83,6 +89,7 @@ export class SupportService {
       ...input,
       // The shop is the author of its own first message.
       authorName: input.shopName,
+      locale: input.locale ?? null,
       at: this.clock.now(),
     });
 
@@ -207,6 +214,9 @@ export class SupportService {
       scope: ticket.shop,
       payload: {
         recipientName: ticket.shopName,
+        // Answer them in the language they asked in. `undefined` rather than
+        // null so the email falls back to the app default.
+        locale: ticket.locale ?? undefined,
         staffName,
         subject: ticket.subject,
         excerpt: excerpt(body),

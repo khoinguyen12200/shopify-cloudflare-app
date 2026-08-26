@@ -73,7 +73,9 @@ export function fromDecimalString(
   }
 
   const [, sign, wholeRaw, fractionRaw = ""] = match;
-  const whole = wholeRaw === "" ? "0" : wholeRaw!;
+  // `?? ""` rather than `!`: the regex guarantees a match here, but
+  // @rules/code-craft.md has no exception for "guaranteed by a regex".
+  const whole = wholeRaw === undefined || wholeRaw === "" ? "0" : wholeRaw;
   const decimals = currencyDecimals(currency);
 
   let fraction = fractionRaw;

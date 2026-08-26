@@ -1,5 +1,3 @@
-import { getEnv } from "~/request-context.server";
-
 /**
  * Is this a real deployment?
  *
@@ -7,7 +5,12 @@ import { getEnv } from "~/request-context.server";
  * not populate that, so a NODE_ENV check silently reports "development" in
  * production, which is the worst possible direction for a gate that unlocks
  * development conveniences.
+ *
+ * PURE: the URL is a parameter, never read from `getEnv()` here. Ring 1 imports
+ * nothing with I/O (@rules/architecture.md), and reading the environment inside
+ * made this untestable — calling it outside a request context simply threw. The
+ * caller is in ring 5, which is where `getEnv()` belongs.
  */
-export function isProductionLike(): boolean {
-  return (getEnv().SHOPIFY_APP_URL ?? "").startsWith("https://");
+export function isProductionLike(appUrl: string): boolean {
+  return appUrl.startsWith("https://");
 }

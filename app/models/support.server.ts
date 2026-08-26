@@ -43,6 +43,8 @@ export class SupportRepo {
     subject: string;
     body: string;
     authorName: string;
+    /** The merchant's language when they opened it. Null if we never knew. */
+    locale: string | null;
     at: number;
   }): Promise<{ id: string; messageId: string }> {
     const id = crypto.randomUUID();
@@ -59,6 +61,7 @@ export class SupportRepo {
       subject: input.subject,
       lastAuthor: "merchant",
       lastMessageAt: input.at,
+      locale: input.locale,
       createdAt: input.at,
     });
 
