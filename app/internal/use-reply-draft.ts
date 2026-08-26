@@ -9,16 +9,13 @@ import type { ReplyTone } from "~/ai/tones";
  * choosing better words for the same thing. Appending would leave them holding
  * both versions and deleting one.
  *
- * Two details that matter, and both were bugs:
- *
- * The box is written by ASSIGNMENT from a locally accumulated string, never
- * `+=` on the live value. Two readers appending into one textarea interleave
- * word by word — "ItIt seems seems like like" — and assignment makes each
- * stream self-consistent whatever else is running.
+ * The box is written by ASSIGNMENT from a locally accumulated string rather than
+ * `+=` on the live value, so the field always holds exactly what arrived and
+ * nothing can interleave into it.
  *
  * A second run cannot start while one is in flight. The guard is a ref, not
  * state, so it is set synchronously on the click rather than on the next
- * render, which is exactly the window a double-fire slips through.
+ * render, which is the window a double-fire would otherwise slip through.
  */
 export type DraftState = "idle" | "drafting" | "error";
 

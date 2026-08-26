@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { MockLanguageModelV4, simulateReadableStream } from "ai/test";
-import type { LanguageModelV4StreamPart } from "@ai-sdk/provider";
+import { MockLanguageModelV4 } from "ai/test";
 import { WorkersAiGenerator } from "./workers-ai.server";
 import { AiError } from "~/ports/ai";
 import type { PromptMessage } from "~/ai/draft-prompt";
@@ -94,64 +93,38 @@ describe("generating text", () => {
 });
 
 describe("streaming text", () => {
-  it("yields the chunks in order", async () => {
-    const parts: LanguageModelV4StreamPart[] = [
-      { type: "stream-start", warnings: [] },
-      { type: "text-start", id: "0" },
-      { type: "text-delta", id: "0", delta: "Sorry " },
-      { type: "text-delta", id: "0", delta: "about " },
-      { type: "text-delta", id: "0", delta: "that." },
-      { type: "text-end", id: "0" },
-      {
-        type: "finish",
-        finishReason: { unified: "stop", raw: "stop" },
-        usage: {
-          inputTokens: { total: 5, noCache: 5, cacheRead: 0, cacheWrite: 0 },
-          outputTokens: { total: 3, text: 3, reasoning: 0 },
-        },
-      },
-    ];
-    const generator = new WorkersAiGenerator({
-      languageModel: () =>
-        new MockLanguageModelV4({
-          doStream: async () => ({
-            stream: simulateReadableStream({ chunks: parts }),
-          }),
-        }),
-    });
-
-    const stream = await generator.stream({ model: "@cf/test/model", messages });
-
-    const chunks: string[] = [];
-    for await (const chunk of stream.textStream) chunks.push(chunk);
-
-    expect(chunks.join("")).toBe("Sorry about that.");
-  });
-
-  it("resolves usage only AFTER the stream is drained", async () => {
-    const parts: LanguageModelV4StreamPart[] = [
-      { type: "stream-start", warnings: [] },
-      { type: "text-start", id: "0" },
-      { type: "text-delta", id: "0", delta: "hi" },
-      { type: "text-end", id: "0" },
-      {
-        type: "finish",
+  const generating = (text: string, onStream?: () => void) =>
+    new MockLanguageModelV4({
+      doGenerate: async () => ({
         finishReason: { unified: "stop", raw: "stop" },
         usage: {
           inputTokens: { total: 7, noCache: 7, cacheRead: 0, cacheWrite: 0 },
           outputTokens: { total: 2, text: 2, reasoning: 0 },
         },
+        content: [{ type: "text", text }],
+        warnings: [],
+      }),
+      doStream: async () => {
+        onStream?.();
+        throw new Error("doStream should not be reached");
       },
-    ];
-    // The whole reason `usage` is a promise: a metered surface that read it
-    // eagerly would record zero tokens for every streamed call.
+    });
+
+  it("yields the generated text", async () => {
     const generator = new WorkersAiGenerator({
-      languageModel: () =>
-        new MockLanguageModelV4({
-          doStream: async () => ({
-            stream: simulateReadableStream({ chunks: parts }),
-          }),
-        }),
+      languageModel: () => generating("Sorry about that."),
+    });
+
+    const stream = await generator.stream({ model: "@cf/test/model", messages });
+
+    let text = "";
+    for await (const chunk of stream.textStream) text += chunk;
+    expect(text).toBe("Sorry about that.");
+  });
+
+  it("reports the usage it spent", async () => {
+    const generator = new WorkersAiGenerator({
+      languageModel: () => generating("ok"),
     });
 
     const stream = await generator.stream({ model: "@cf/test/model", messages });
@@ -164,4 +137,42 @@ describe("streaming text", () => {
     });
   });
 
+  it("does NOT use the provider's stream path", async () => {
+    /*
+     * The pin. `workers-ai-provider` reads two wire shapes in one pass with no
+     * `else`, so a model returning both has every delta emitted twice and the
+     * reader sees "I'veI've already already". Its non-streaming path takes a
+     * single value and is correct.
+     *
+     * If someone switches this back to `streamText` because it looks more
+     * natural, this test fails and says why. Delete it when the provider is
+     * fixed, not before.
+     */
+    let streamed = false;
+    const generator = new WorkersAiGenerator({
+      languageModel: () => generating("clean text", () => { streamed = true; }),
+    });
+
+    const stream = await generator.stream({ model: "@cf/test/model", messages });
+    let text = "";
+    for await (const chunk of stream.textStream) text += chunk;
+
+    expect(streamed).toBe(false);
+    expect(text).toBe("clean text");
+  });
+
+  it("turns a failure into a typed AiError, before any text is yielded", async () => {
+    const generator = new WorkersAiGenerator({
+      languageModel: () =>
+        new MockLanguageModelV4({
+          doGenerate: async () => {
+            throw new Error("upstream exploded");
+          },
+        }),
+    });
+
+    await expect(generator.stream({ model: "@cf/test/model", messages })).rejects.toMatchObject({
+      reason: "provider",
+    });
+  });
 });

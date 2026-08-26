@@ -1,12 +1,5 @@
-import {
-  generateText,
-  streamText,
-  wrapLanguageModel,
-  type LanguageModel,
-  type ModelMessage,
-} from "ai";
+import { generateText, type LanguageModel, type ModelMessage } from "ai";
 import { createWorkersAI } from "workers-ai-provider";
-import { dedupeTextDeltas } from "./dedupe-deltas";
 import { getEnv } from "~/request-context.server";
 import { AiError, type GenerateRequest, type GeneratedStream, type GeneratedText, type TextGenerator } from "~/ports/ai";
 import type { PromptMessage } from "~/ai/draft-prompt";
@@ -68,12 +61,7 @@ export function workersAiModelFactory(): ((id: string) => LanguageModel) | undef
     ...(gateway ? { gateway: { id: gateway } } : {}),
   });
 
-  // Wrapped, because `workers-ai-provider` double-emits every streamed text
-  // delta for models that return both wire shapes — see `./dedupe-deltas` for
-  // the exact bug. Applied here, at the one place a real model is built, so no
-  // caller has to know and the fake in tests is unaffected.
-  return (id: string) =>
-    wrapLanguageModel({ model: workersAi(id), middleware: dedupeTextDeltas });
+  return (id: string) => workersAi(id);
 }
 
 export class WorkersAiGenerator implements TextGenerator {
@@ -115,30 +103,41 @@ export class WorkersAiGenerator implements TextGenerator {
     }
   }
 
+  /**
+   * Stream a generation.
+   *
+   * Deliberately built on `generate`, NOT on the SDK's `streamText`, and this is
+   * the one place in the app that needs explaining.
+   *
+   * `workers-ai-provider`'s stream transform reads two wire shapes in the same
+   * pass with no `else` between them — `chunk.response` (Workers AI native) and
+   * `chunk.choices[0].delta.content` (OpenAI-compatible). A model that returns
+   * BOTH fields, as several of the newer Workers AI ones do, therefore has every
+   * delta emitted twice, and it reaches the reader as "I'veI've already
+   * already". Its non-streaming path has no such problem: it calls
+   * `extractContent` once and takes a single value.
+   *
+   * So the text comes from the path that is correct by construction, and is then
+   * handed to the caller over the streaming interface. The honest consequence:
+   * today the answer arrives complete rather than token by token. That is a
+   * slower first word in exchange for a correct one, which for a support draft a
+   * human edits is not a close call.
+   *
+   * Nothing above this method knows. When the provider is fixed, this becomes
+   * `streamText(...)` again and the port, the service, the route and the client
+   * are all untouched — which is exactly why the seam is here and not in a
+   * filter over someone else's broken output.
+   */
   async stream(request: GenerateRequest): Promise<GeneratedStream> {
-    const model = this.model(request.model);
-    const id = request.model;
-    const { system, prompt } = split(request.messages);
-
-    const result = streamText({
-      model,
-      system,
-      messages: prompt,
-      maxOutputTokens: request.maxTokens ?? DEFAULT_MAX_TOKENS,
-      abortSignal: AbortSignal.timeout(this.opts.timeoutMs ?? TIMEOUT_MS),
-    });
+    const generated = await this.generate(request);
 
     return {
-      textStream: result.textStream,
-      // Only known once the stream finishes — see the port's note on why this
-      // is a promise rather than a field.
-      // `Promise.resolve` because the SDK hands back a PromiseLike, and the port
-      // promises a real Promise to anyone who wants to `.catch` it.
-      usage: Promise.resolve(result.usage).then((usage) => ({
-        model: id,
-        inputTokens: usage.inputTokens ?? null,
-        outputTokens: usage.outputTokens ?? null,
-      })),
+      textStream: (async function* () {
+        yield generated.text;
+      })(),
+      // Already known, because the generation has finished. The port keeps this
+      // a promise for a provider that genuinely streams.
+      usage: Promise.resolve(generated.usage),
     };
   }
 }
