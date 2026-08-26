@@ -1,3 +1,4 @@
+import type { z } from "zod";
 import type { PromptMessage } from "./draft-prompt";
 import type { ModelRole } from "./roles";
 
@@ -61,5 +62,38 @@ export interface AiTask<Input> {
  * pass the wrong shape.
  */
 export function defineAiTask<Input>(task: AiTask<Input>): AiTask<Input> {
+  return task;
+}
+
+/**
+ * A task that wants a VALUE of a known shape rather than prose.
+ *
+ * Its own type rather than an optional field on `AiTask`, so the two cannot be
+ * confused: a text task returns `string` and an object task returns its schema's
+ * type, and the service method you call says which you get. This is what makes
+ * the `extraction` and `classification` purposes mechanically real rather than
+ * just configurable.
+ */
+export interface AiObjectTask<Input, Output> {
+  readonly feature: string;
+  readonly role: ModelRole;
+  readonly maxTokens?: number;
+  /**
+   * The shape, as Zod.
+   *
+   * Sent to the model as JSON Schema so it constrains decoding, AND used to
+   * validate what comes back — the provider claiming it matched is not the same
+   * as it having matched. A model that returns the wrong shape is treated like a
+   * failed call: the next model in the chain gets a turn, because re-asking the
+   * SAME model the same question yields the same bad answer and bills for it
+   * twice.
+   */
+  readonly schema: z.ZodType<Output>;
+  buildMessages(input: Input): PromptMessage[];
+}
+
+export function defineAiObjectTask<Input, Output>(
+  task: AiObjectTask<Input, Output>,
+): AiObjectTask<Input, Output> {
   return task;
 }

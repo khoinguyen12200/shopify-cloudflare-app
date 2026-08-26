@@ -77,9 +77,39 @@ export interface GeneratedStream {
   readonly usage: Promise<AiUsage>;
 }
 
+/**
+ * A request for a value of a known SHAPE rather than prose.
+ *
+ * The schema is JSON Schema because that is what a provider speaks. The task
+ * holds the Zod schema and the service converts, so a task author never writes
+ * JSON Schema by hand and the validated value stays typed.
+ */
+export interface GenerateObjectRequest extends GenerateRequest {
+  readonly schema: Record<string, unknown>;
+}
+
+export interface GeneratedObject {
+  /**
+   * Unvalidated on purpose: the provider says it matched the schema, and the
+   * service checks that claim against the task's Zod type before any caller
+   * sees it. A provider's word about its own output is not a guarantee.
+   */
+  readonly value: unknown;
+  readonly usage: AiUsage;
+}
+
 export interface TextGenerator {
   generate(request: GenerateRequest): Promise<GeneratedText>;
   stream(request: GenerateRequest): Promise<GeneratedStream>;
+  /**
+   * Ask for a value of a known shape.
+   *
+   * Separate from `generate` because the provider call is genuinely different —
+   * the schema is sent to the model and constrains decoding — not because the
+   * result is parsed afterwards. `extraction` and `classification` exist as
+   * purposes precisely so a task can ask for this.
+   */
+  generateObject(request: GenerateObjectRequest): Promise<GeneratedObject>;
 }
 
 /** Thrown by an adapter; the service turns it into a `Result` for the caller. */

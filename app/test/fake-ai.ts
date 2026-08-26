@@ -1,5 +1,6 @@
 import type {
   GenerateRequest,
+  GeneratedObject,
   GeneratedStream,
   GeneratedText,
   TextGenerator,
@@ -23,6 +24,8 @@ export interface FakeTextGenerator extends TextGenerator {
 export function fakeTextGenerator(options: {
   /** What every call returns. */
   reply?: string;
+  /** What `generateObject` returns. Unvalidated, so a test can return a WRONG shape. */
+  object?: unknown;
   /** Chunks for `stream`. Defaults to the whole reply as one chunk. */
   chunks?: readonly string[];
   /** Make every call fail this way instead. */
@@ -63,6 +66,14 @@ export function fakeTextGenerator(options: {
       calls.push(request);
       refuse(request.model);
       return { text: reply, usage: { ...usage, model: request.model } };
+    },
+    async generateObject(request): Promise<GeneratedObject> {
+      calls.push(request);
+      refuse(request.model);
+      return {
+        value: options.object,
+        usage: { ...usage, model: request.model },
+      };
     },
     async stream(request): Promise<GeneratedStream> {
       calls.push(request);

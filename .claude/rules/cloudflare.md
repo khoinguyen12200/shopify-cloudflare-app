@@ -63,13 +63,20 @@ The constraints that come with it:
 **The two extension points, and what they cost.** The base is deliberately
 policy-free; both seams below are where an app adds its own.
 
-- **A new AI feature is one file.** `defineAiTask` in `app/ai/task.ts` — name the
+- **A new AI feature is one file.** `defineAiTask` for prose or
+  `defineAiObjectTask` for a value of a known shape (`app/ai/task.ts`) — name the
   purpose it needs, name itself for the ledger, turn its input into messages —
-  then `new AiService().run(task, input, caller)`. It inherits the gate, the
+  then `run` / `runObject` / `stream` on `AiService`. It inherits the gate, the
   fallback chain, health tracking, metering and streaming, because none of those
-  are a feature's job. `app/ai/task.test.ts` asserts exactly this: if adding a
-  task ever needs a change to the service, adapter, gate or ledger, that test
-  fails and the base has stopped being extensible.
+  are a feature's job. An object task's Zod schema is sent to the model as JSON
+  Schema AND validated on the way back, and a wrong shape falls through to the
+  next model rather than reaching the caller. `app/ai/task.test.ts` asserts all
+  of this: if adding a task ever needs a change to the service, adapter, gate or
+  ledger, that test fails and the base has stopped being extensible.
+- **Ports are bound in `app/wiring.server.ts`, nowhere else.** A use case
+  declares a port and receives an implementation; it must never import an
+  adapter (@rules/architecture.md). Swapping the provider, or the gating policy,
+  is a line in that file.
 - **Gating is composed, not built in.** `app/ai/gate.ts` ships `allowAll` and
   `composeGates`; the base contains no notion of a plan or a quota, because those
   differ per app and a base that guesses makes every app delete code first. An

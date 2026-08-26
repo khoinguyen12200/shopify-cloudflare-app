@@ -1,7 +1,9 @@
 import { err, ok, type Result } from "~/lib/result";
 import { AiRepo } from "~/models/ai.server";
-import type { AiTask } from "~/ai/task";
-import { allowAll, type AiCaller, type AiGate } from "~/ai/gate";
+import { z } from "zod";
+import type { AiObjectTask, AiTask } from "~/ai/task";
+import type { AiCaller, AiGate } from "~/ai/gate";
+import { aiGate, aiGenerator } from "~/wiring.server";
 import type { ModelRole } from "~/ai/roles";
 import {
   AiError,
@@ -11,7 +13,6 @@ import {
   type GeneratedStream,
   type TextGenerator,
 } from "~/ports/ai";
-import { WorkersAiGenerator, workersAiModelFactory } from "~/adapters/workers-ai.server";
 
 /**
  * RUN AN AI TASK. One method for every feature, and two for streaming.
@@ -49,26 +50,22 @@ export interface AiStream {
   readonly done: Promise<void>;
 }
 
-/** Built per request, not at module load: the binding comes from the request env. */
-function defaultGenerator(): TextGenerator {
-  return new WorkersAiGenerator({ languageModel: workersAiModelFactory() });
-}
-
 export class AiService {
   constructor(
     private readonly repo = new AiRepo(),
     private readonly generator?: TextGenerator,
     private readonly clock: Clock = systemClock,
     /**
-     * Who may use AI. `allowAll` in the base — the policy is an app's own
-     * decision, plugged in here or composed with `composeGates`. See
-     * `~/ai/gate`; nothing in this file knows what a plan is.
+     * Who may use AI. Bound in the composition root, never named here — this
+     * file knows nothing about providers or plans (@rules/architecture.md).
      */
-    private readonly gate: AiGate = allowAll,
+    private readonly gate: AiGate = aiGate(),
   ) {}
 
   private get ai(): TextGenerator {
-    return this.generator ?? defaultGenerator();
+    // Resolved lazily so a caller that only ever hits the gate or an empty chain
+    // never builds a provider it does not use.
+    return this.generator ?? aiGenerator();
   }
 
   /** Run a task to completion. */
@@ -119,6 +116,63 @@ export class AiService {
     }
 
     // Chain exhausted: the caller hears about the last thing that went wrong.
+    return err(last);
+  }
+
+  /**
+   * Run a task that wants a VALUE of a known shape.
+   *
+   * Identical machinery to `run` — gate, chain, fallback, metering, health —
+   * with one extra step: the provider's answer is validated against the task's
+   * own schema before any caller sees it. A shape mismatch is treated as a
+   * failed attempt, so the NEXT model gets a turn; re-asking the same model the
+   * same question returns the same bad answer and bills for it twice.
+   */
+  async runObject<Input, Output>(
+    task: AiObjectTask<Input, Output>,
+    input: Input,
+    caller: AiCaller,
+  ): Promise<Result<Output, AiFailureReason>> {
+    const refusal = await this.refused(task, caller);
+    if (refusal) return err(refusal);
+
+    const messages = task.buildMessages(input);
+    const schema = z.toJSONSchema(task.schema);
+    const chain = await this.repo.chainFor(task.role, this.clock.now());
+    if (chain.length === 0) {
+      await this.record({ task, caller, model: "(none)", reason: "no_model", startedAt: this.clock.now() });
+      return err("no_model");
+    }
+
+    let last: AiFailureReason = "provider";
+
+    for (const model of chain) {
+      const startedAt = this.clock.now();
+
+      try {
+        const result = await this.ai.generateObject({
+          model,
+          messages,
+          schema,
+          ...(task.maxTokens === undefined ? {} : { maxTokens: task.maxTokens }),
+        });
+
+        const parsed = task.schema.safeParse(result.value);
+        if (!parsed.success) {
+          last = "provider";
+          await this.afterFailure({ task, caller, model, reason: last, startedAt });
+          continue;
+        }
+
+        await this.afterSuccess({ task, caller, model, usage: result.usage, startedAt });
+        return ok(parsed.data);
+      } catch (cause) {
+        last = reasonOf(cause);
+        await this.afterFailure({ task, caller, model, reason: last, startedAt });
+        if (!isRetriable(last)) return err(last);
+      }
+    }
+
     return err(last);
   }
 
@@ -187,8 +241,8 @@ export class AiService {
    * not a gate. It still leaves a ledger row, so "why did nothing happen" has
    * an answer.
    */
-  private async refused<Input>(
-    task: AiTask<Input>,
+  private async refused(
+    task: { feature: string; role: ModelRole },
     caller: AiCaller,
   ): Promise<AiFailureReason | null> {
     const reason = await this.gate.refuse({ caller, role: task.role });
@@ -198,8 +252,8 @@ export class AiService {
     return reason;
   }
 
-  private async afterSuccess<Input>(input: {
-    task: AiTask<Input>;
+  private async afterSuccess(input: {
+    task: { feature: string; role: ModelRole };
     caller: AiCaller;
     model: string;
     usage: AiUsage;
@@ -228,8 +282,8 @@ export class AiService {
     });
   }
 
-  private async afterFailure<Input>(input: {
-    task: AiTask<Input>;
+  private async afterFailure(input: {
+    task: { feature: string; role: ModelRole };
     caller: AiCaller;
     model: string;
     reason: AiFailureReason;
@@ -248,8 +302,8 @@ export class AiService {
     }
   }
 
-  private record<Input>(input: {
-    task: AiTask<Input>;
+  private record(input: {
+    task: { feature: string; role: ModelRole };
     caller: AiCaller;
     model: string;
     reason: AiFailureReason;

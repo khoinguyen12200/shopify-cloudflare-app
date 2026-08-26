@@ -1,7 +1,21 @@
-import { generateText, type LanguageModel, type ModelMessage } from "ai";
+import {
+  generateObject,
+  generateText,
+  jsonSchema,
+  type LanguageModel,
+  type ModelMessage,
+} from "ai";
 import { createWorkersAI } from "workers-ai-provider";
 import { getEnv } from "~/request-context.server";
-import { AiError, type GenerateRequest, type GeneratedStream, type GeneratedText, type TextGenerator } from "~/ports/ai";
+import {
+  AiError,
+  type GenerateObjectRequest,
+  type GenerateRequest,
+  type GeneratedObject,
+  type GeneratedStream,
+  type GeneratedText,
+  type TextGenerator,
+} from "~/ports/ai";
 import type { PromptMessage } from "~/ai/draft-prompt";
 
 /**
@@ -94,6 +108,36 @@ export class WorkersAiGenerator implements TextGenerator {
         text: result.text,
         usage: {
           model: id,
+          inputTokens: result.usage.inputTokens ?? null,
+          outputTokens: result.usage.outputTokens ?? null,
+        },
+      };
+    } catch (cause) {
+      throw asAiError(cause);
+    }
+  }
+
+  /** Ask for a value of a known shape. */
+  async generateObject(request: GenerateObjectRequest): Promise<GeneratedObject> {
+    const model = this.model(request.model);
+    const { system, prompt } = split(request.messages);
+
+    try {
+      const result = await generateObject({
+        model,
+        system,
+        messages: prompt,
+        // `jsonSchema` wraps a plain JSON Schema for the SDK, so the adapter
+        // never needs to know Zod.
+        schema: jsonSchema(request.schema),
+        maxOutputTokens: request.maxTokens ?? DEFAULT_MAX_TOKENS,
+        abortSignal: AbortSignal.timeout(this.opts.timeoutMs ?? TIMEOUT_MS),
+      });
+
+      return {
+        value: result.object,
+        usage: {
+          model: request.model,
           inputTokens: result.usage.inputTokens ?? null,
           outputTokens: result.usage.outputTokens ?? null,
         },

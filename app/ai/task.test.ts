@@ -5,8 +5,10 @@ import { setupTestDatabase } from "~/test/db";
 import { AiRepo } from "~/models/ai.server";
 import { AiService } from "~/services/ai.server";
 import { fakeTextGenerator } from "~/test/fake-ai";
-import { defineAiTask } from "./task";
+import { z } from "zod";
+import { defineAiObjectTask, defineAiTask } from "./task";
 import type { AiCaller } from "./gate";
+import type { ModelRole } from "./roles";
 
 setupTestDatabase();
 
@@ -35,7 +37,7 @@ const inventedTask = defineAiTask<{ productTitle: string; audience: string }>({
 const service = (generator = fakeTextGenerator()) =>
   new AiService(new AiRepo(), generator, { now: () => AT });
 
-async function chain(role: "writing" | "summary", models: string[]) {
+async function chain(role: ModelRole, models: string[]) {
   const repo = new AiRepo();
   for (const modelId of models) {
     await repo.addToChain({ role, modelId, updatedBy: null, at: AT });
@@ -153,5 +155,100 @@ describe("adding a new AI feature", () => {
     });
 
     expect(generator.only().model).toBe("@cf/summary/model");
+  });
+});
+
+/**
+ * The structured path — what makes `extraction` and `classification` real
+ * purposes rather than settings with nothing behind them.
+ */
+describe("a task that wants a shape, not prose", () => {
+  const triageTask = defineAiObjectTask<{ subject: string }, { category: string; urgent: boolean }>({
+    feature: "test.triage",
+    role: "classification",
+    schema: z.object({ category: z.string(), urgent: z.boolean() }),
+    buildMessages: ({ subject }) => [
+      { role: "system", content: "Classify the ticket." },
+      { role: "user", content: subject },
+    ],
+  });
+
+  it("returns the validated value, typed", async () => {
+    const generator = fakeTextGenerator({ object: { category: "bug", urgent: true } });
+
+    const result = await inRequest(async () => {
+      await chain("classification", ["@cf/a/one"]);
+      return service(generator).runObject(triageTask, { subject: "checkout broken" }, STAFF);
+    });
+
+    expect(result).toEqual({ ok: true, value: { category: "bug", urgent: true } });
+  });
+
+  it("sends the schema to the model, so decoding is constrained", async () => {
+    const generator = fakeTextGenerator({ object: { category: "bug", urgent: false } });
+
+    await inRequest(async () => {
+      await chain("classification", ["@cf/a/one"]);
+      return service(generator).runObject(triageTask, { subject: "x" }, STAFF);
+    });
+
+    const call = generator.only();
+    expect(call).toHaveProperty("schema");
+  });
+
+  it("REJECTS a value that does not match, rather than handing it on", async () => {
+    // The provider saying it matched the schema is not the same as it matching.
+    const generator = fakeTextGenerator({ object: { category: "bug", urgent: "yes" } });
+
+    const result = await inRequest(async () => {
+      await chain("classification", ["@cf/a/one"]);
+      return service(generator).runObject(triageTask, { subject: "x" }, STAFF);
+    });
+
+    expect(result).toEqual({ ok: false, reason: "provider" });
+  });
+
+  it("falls through to the NEXT model when the shape is wrong", async () => {
+    // Re-asking the same model the same question returns the same bad answer
+    // and bills for it twice, so the retry has to be a different model.
+    const generator = {
+      calls: [] as { model: string }[],
+      async generate() { throw new Error("unused"); },
+      async stream() { throw new Error("unused"); },
+      async generateObject(request: { model: string }) {
+        generator.calls.push(request);
+        return {
+          value:
+            request.model === "@cf/a/one"
+              ? { category: "bug", urgent: "not-a-boolean" }
+              : { category: "bug", urgent: true },
+          usage: { model: request.model, inputTokens: 1, outputTokens: 1 },
+        };
+      },
+    };
+
+    const result = await inRequest(async () => {
+      await chain("classification", ["@cf/a/one", "@cf/b/two"]);
+      return new AiService(new AiRepo(), generator, { now: () => AT }).runObject(
+        triageTask,
+        { subject: "x" },
+        STAFF,
+      );
+    });
+
+    expect(generator.calls.map((call) => call.model)).toEqual(["@cf/a/one", "@cf/b/two"]);
+    expect(result).toEqual({ ok: true, value: { category: "bug", urgent: true } });
+  });
+
+  it("meters and gates exactly like a text task", async () => {
+    const generator = fakeTextGenerator({ object: { category: "bug", urgent: false } });
+
+    const runs = await inRequest(async () => {
+      const repo = await chain("classification", ["@cf/a/one"]);
+      await service(generator).runObject(triageTask, { subject: "x" }, STAFF);
+      return repo.recentRuns();
+    });
+
+    expect(runs[0]).toMatchObject({ feature: "test.triage", role: "classification", status: "ok" });
   });
 });
