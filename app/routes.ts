@@ -73,6 +73,7 @@ export default [
     // must exist without JavaScript.
     route("internal/admins/:adminId/reset", "routes/internal/admins/reset.tsx"),
     route("internal/subscriptions", "routes/internal/subscriptions.tsx"),
+    route("internal/ai", "routes/internal/ai.tsx"),
     route("internal/support", "routes/internal/support/index.tsx"),
     route("internal/support/:ticketId", "routes/internal/support/detail.tsx"),
     route("internal/shops", "routes/internal/shops/index.tsx"),
@@ -87,6 +88,8 @@ export default [
   // multipart body. See the route for why.
   route("support/upload", "routes/resources/support-upload.tsx"),
   route("support/file/:id", "routes/resources/support-file.tsx"),
+  // Streams a drafted reply into the staff console's composer.
+  route("internal/ai/draft", "routes/resources/ai-draft.tsx"),
 
   // ── Webhooks ──────────────────────────────────────────────────────────────
   // URIs must match the subscriptions in BOTH shopify.app.toml files.

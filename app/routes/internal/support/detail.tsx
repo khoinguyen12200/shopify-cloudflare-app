@@ -25,6 +25,8 @@ import { formatDateTime } from "~/i18n/format";
 import { storedEventPrice } from "~/billing/subscription-event";
 import { formatMoney } from "~/money";
 import type { Locale } from "~/i18n/config";
+import { Sparkles } from "lucide-react";
+import { useReplyDraft } from "~/internal/use-reply-draft";
 
 /** The internal console is staff-only and English-only — no i18n here. */
 const LOCALE: Locale = "en";
@@ -146,6 +148,8 @@ export default function InternalSupportThread() {
   const busy = navigation.state !== "idle";
   const pendingIntent = navigation.formData?.get("intent");
   const isClosed = ticket.status === "closed";
+  // Targets the composer's textarea by id and appends into it.
+  const draft = useReplyDraft("body");
 
   return (
     <Page
@@ -201,6 +205,21 @@ export default function InternalSupportThread() {
                     <Button type="submit" disabled={busy}>
                       {busy && !pendingIntent ? "Sending…" : "Send reply"}
                     </Button>
+                    {/*
+                      A draft, not an answer. It APPENDS into the box above so a
+                      half-written reply survives, and a human edits and sends
+                      every word — which is what makes this the safe place to
+                      put a model.
+                    */}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={busy || draft.state === "drafting"}
+                      onClick={() => void draft.draft(ticket.id)}
+                    >
+                      <Sparkles className="mr-1 size-4" />
+                      {draft.state === "drafting" ? "Drafting…" : "Draft with AI"}
+                    </Button>
                     {!isClosed && (
                       <Button
                         type="submit"
@@ -213,6 +232,12 @@ export default function InternalSupportThread() {
                       </Button>
                     )}
                   </div>
+
+                  {draft.error && (
+                    <Text as="p" className="text-sm text-destructive">
+                      {draft.error}
+                    </Text>
+                  )}
                 </Form>
               </CardContent>
             </Card>
