@@ -1,4 +1,6 @@
 import type { PromptMessage } from "~/ai/draft-prompt";
+import type { AiSurface } from "~/ai/gate";
+import type { ModelRole } from "~/ai/roles";
 
 /**
  * The port a use case depends on to generate text.
@@ -27,7 +29,12 @@ export type AiFailureReason =
   /** The provider refused or errored. */
   | "provider"
   | "timeout"
-  | "rate_limited";
+  | "rate_limited"
+  /**
+   * The caller may not use AI at all — a plan that does not include it. NOT a
+   * failure of the model, and never retriable: no other model fixes it.
+   */
+  | "forbidden";
 
 /**
  * Whether trying the NEXT model in the chain could plausibly help.
@@ -69,6 +76,32 @@ export interface GeneratedText {
 export interface GeneratedStream {
   readonly textStream: AsyncIterable<string>;
   readonly usage: Promise<AiUsage>;
+}
+
+/**
+ * Who is asking, and on whose behalf.
+ *
+ * The pair a use case carries instead of a bare `shop`, because the two
+ * questions it answers are different: which POLICY applies (the surface), and
+ * whose SPEND this is (the shop, null when it is ours).
+ */
+export interface AiCaller {
+  readonly surface: AiSurface;
+  /** The shop the work is for. Null for our own staff or system work. */
+  readonly shop: string | null;
+}
+
+/**
+ * Decides whether a caller may use AI.
+ *
+ * A PORT, so the policy is swappable without touching a use case: the shipped
+ * adapter reads the shop's plan, a test hands back a fixed answer, and turning
+ * gating off entirely is one line in the composition root. The rules themselves
+ * live in `~/ai/gate` and are pure.
+ */
+export interface AiGate {
+  /** `null` to proceed, or the reason to refuse. */
+  refuse(input: { caller: AiCaller; role: ModelRole }): Promise<AiFailureReason | null>;
 }
 
 export interface TextGenerator {

@@ -1,7 +1,11 @@
 import { err, ok, type Result } from "~/lib/result";
 import { AiRepo } from "~/models/ai.server";
 import { buildReplyDraftPrompt, buildThreadSummaryPrompt, type ThreadForPrompt } from "~/ai/draft-prompt";
+import { buildReplyPrompt } from "~/ai/reply-prompt";
+import type { ReplyTone } from "~/ai/tones";
 import type { ModelRole } from "~/ai/roles";
+import type { AiCaller, AiGate } from "~/ports/ai";
+import { PlanAiGate } from "~/adapters/plan-ai-gate.server";
 import {
   AiError,
   isRetriable,
@@ -50,45 +54,96 @@ export class AiService {
     private readonly repo = new AiRepo(),
     private readonly generator?: TextGenerator,
     private readonly clock: Clock = systemClock,
+    /**
+     * Who may use AI. A PORT with the policy behind it, so changing "which
+     * plans include AI" — or removing gating entirely — is a change to
+     * `~/ai/gate` or to what is injected here, and no use case moves.
+     */
+    private readonly gate: AiGate = new PlanAiGate(),
   ) {}
+
+  /**
+   * The gate, checked ONCE per call and before any model is resolved.
+   *
+   * Ahead of the chain deliberately: a merchant whose plan does not include AI
+   * must not cost us a token, and a refusal that arrives after the spend is not
+   * a gate. It still leaves a ledger row, so "why did nothing happen" has an
+   * answer.
+   */
+  private async refused(input: {
+    caller: AiCaller;
+    role: ModelRole;
+    feature: string;
+  }): Promise<AiFailureReason | null> {
+    const reason = await this.gate.refuse({ caller: input.caller, role: input.role });
+    if (!reason) return null;
+
+    await this.recordFailure({
+      role: input.role,
+      feature: input.feature,
+      shop: input.caller.shop,
+      model: "(gated)",
+      reason,
+      startedAt: this.clock.now(),
+    });
+    return reason;
+  }
 
   private get ai(): TextGenerator {
     return this.generator ?? defaultGenerator();
   }
 
   /** Draft the next reply on a support thread. */
-  draftReply(input: { thread: ThreadForPrompt; shop: string | null }): Promise<Result<string, AiFailureReason>> {
+  draftReply(input: {
+    thread: ThreadForPrompt;
+    caller: AiCaller;
+  }): Promise<Result<string, AiFailureReason>> {
     return this.generateOnce({
       role: "writing",
       feature: "support.reply_draft",
-      shop: input.shop,
+      caller: input.caller,
       messages: buildReplyDraftPrompt(input.thread),
     });
   }
 
   /** A two-sentence summary of a thread, for triage. */
-  summariseThread(input: { thread: ThreadForPrompt; shop: string | null }): Promise<Result<string, AiFailureReason>> {
+  summariseThread(input: {
+    thread: ThreadForPrompt;
+    caller: AiCaller;
+  }): Promise<Result<string, AiFailureReason>> {
     return this.generateOnce({
       role: "summary",
       feature: "support.thread_summary",
-      shop: input.shop,
+      caller: input.caller,
       messages: buildThreadSummaryPrompt(input.thread),
       maxTokens: 200,
     });
   }
 
-  /** The same draft, streamed. Refuses BEFORE opening a stream when it cannot run. */
-  async streamDraftReply(input: {
+  /**
+   * Rewrite what a staff member has already typed, in a chosen tone — or
+   * suggest one when the box is empty. Streamed.
+   *
+   * Refuses BEFORE opening a stream when it cannot run, so "no model" is an
+   * answer the composer can show rather than a stream that yields nothing.
+   */
+  async streamReply(input: {
     thread: ThreadForPrompt;
-    shop: string | null;
+    currentText: string;
+    tone: ReplyTone;
+    caller: AiCaller;
   }): Promise<Result<DraftStream, AiFailureReason>> {
     const startedAt = this.clock.now();
     const role: ModelRole = "writing";
     const feature = "support.reply_draft";
+    const shop = input.caller.shop;
+
+    const gated = await this.refused({ caller: input.caller, role, feature });
+    if (gated) return err(gated);
 
     const chain = await this.repo.chainFor(role, this.clock.now());
     if (chain.length === 0) {
-      await this.recordFailure({ role, feature, shop: input.shop, model: "(none)", reason: "no_model", startedAt });
+      await this.recordFailure({ role, feature, shop, model: "(none)", reason: "no_model", startedAt });
       return err("no_model");
     }
 
@@ -104,13 +159,17 @@ export class AiService {
       try {
         stream = await this.ai.stream({
           model: candidate,
-          messages: buildReplyDraftPrompt(input.thread),
+          messages: buildReplyPrompt({
+            thread: input.thread,
+            currentText: input.currentText,
+            tone: input.tone,
+          }),
         });
         model = candidate;
         break;
       } catch (cause) {
         last = reasonOf(cause);
-        await this.afterFailure({ role, feature, shop: input.shop, model: candidate, reason: last, startedAt });
+        await this.afterFailure({ role, feature, shop, model: candidate, reason: last, startedAt });
         if (!isRetriable(last)) return err(last);
       }
     }
@@ -123,13 +182,13 @@ export class AiService {
       // reading it eagerly would meter every streamed call at zero.
       done: stream.usage
         .then((usage) =>
-          this.afterSuccess({ role, feature, shop: input.shop, model, usage, startedAt }),
+          this.afterSuccess({ role, feature, shop, model, usage, startedAt }),
         )
         .catch(async (cause: unknown) => {
           await this.afterFailure({
             role,
             feature,
-            shop: input.shop,
+            shop,
             model,
             reason: reasonOf(cause),
             startedAt,
@@ -152,13 +211,17 @@ export class AiService {
   private async generateOnce(input: {
     role: ModelRole;
     feature: string;
-    shop: string | null;
+    caller: AiCaller;
     messages: ReturnType<typeof buildReplyDraftPrompt>;
     maxTokens?: number;
   }): Promise<Result<string, AiFailureReason>> {
+    const gated = await this.refused(input);
+    if (gated) return err(gated);
+
+    const shop = input.caller.shop;
     const chain = await this.repo.chainFor(input.role, this.clock.now());
     if (chain.length === 0) {
-      await this.recordFailure({ ...input, model: "(none)", reason: "no_model", startedAt: this.clock.now() });
+      await this.recordFailure({ ...input, shop, model: "(none)", reason: "no_model", startedAt: this.clock.now() });
       return err("no_model");
     }
 
@@ -179,15 +242,15 @@ export class AiService {
           // Whitespace is a failed draft, not a draft — and another model may
           // well produce words, so it is worth the retry.
           last = "provider";
-          await this.afterFailure({ ...input, model, reason: last, startedAt });
+          await this.afterFailure({ ...input, shop, model, reason: last, startedAt });
           continue;
         }
 
-        await this.afterSuccess({ ...input, model, usage: result.usage, startedAt });
+        await this.afterSuccess({ ...input, shop, model, usage: result.usage, startedAt });
         return ok(text);
       } catch (cause) {
         last = reasonOf(cause);
-        await this.afterFailure({ ...input, model, reason: last, startedAt });
+        await this.afterFailure({ ...input, shop, model, reason: last, startedAt });
         // Nothing another model can do about it.
         if (!isRetriable(last)) return err(last);
       }

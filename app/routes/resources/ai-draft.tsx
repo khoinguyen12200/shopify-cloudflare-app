@@ -4,9 +4,11 @@ import { requireAdminUser } from "~/services/admin-auth.server";
 import { SupportService } from "~/services/support.server";
 import { AiService } from "~/services/ai.server";
 import type { ThreadForPrompt } from "~/ai/draft-prompt";
+import { toReplyTone } from "~/ai/tones";
 
 /**
- * Streams a drafted support reply, token by token.
+ * Streams a REWRITE of what the staff member has already typed, token by token
+ * — or a suggestion when the box is empty.
  *
  * A plain `text/plain` stream rather than the AI SDK's data-stream protocol:
  * the client is one textarea being filled in, not a chat transcript, so there
@@ -24,6 +26,10 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
 
   const form = await request.formData();
   const ticketId = String(form.get("ticketId") ?? "");
+  // What the staff member has already written, and how they want it to sound.
+  // Both come off a form, so the tone is narrowed rather than trusted.
+  const currentText = String(form.get("currentText") ?? "");
+  const tone = toReplyTone(String(form.get("tone") ?? ""));
 
   const support = new SupportService();
   const found = await support.findForStaff(ticketId);
@@ -40,10 +46,13 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
     })),
   };
 
-  const started = await new AiService().streamDraftReply({
+  const started = await new AiService().streamReply({
     thread,
-    // Our spend, not the merchant's: they did not ask for this draft.
-    shop: null,
+    currentText,
+    tone,
+    // The staff console: never gated by a merchant's plan, and our own spend,
+    // because they did not ask for this draft.
+    caller: { surface: "staff", shop: null },
   });
 
   if (!started.ok) {

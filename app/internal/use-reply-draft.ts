@@ -1,29 +1,40 @@
 import { useCallback, useRef, useState } from "react";
+import type { ReplyTone } from "~/ai/tones";
 
 /**
- * Streams a drafted reply into a textarea, token by token.
+ * Rewrites what is in the reply box, in a chosen tone, streaming as it goes.
  *
- * A `fetch` and a reader rather than `useCompletion` from `@ai-sdk/react`: the
- * target is an existing uncontrolled `<textarea>` that a staff member is about
- * to edit and submit through a plain form. Handing that textarea's value to a
- * hook would make the form controlled, and the draft is a starting point, not
- * state the app owns.
+ * The draft REPLACES the text rather than appending to it, because that is what
+ * the feature is: the staff member decided what to say, and the model is
+ * choosing better words for the same thing. Appending would leave them holding
+ * both versions and deleting one.
  *
- * The draft is APPENDED to whatever is already typed, never a replacement — a
- * staff member who wrote two sentences and then asked for help should not lose
- * them.
+ * Two details that matter, and both were bugs:
+ *
+ * The box is written by ASSIGNMENT from a locally accumulated string, never
+ * `+=` on the live value. Two readers appending into one textarea interleave
+ * word by word — "ItIt seems seems like like" — and assignment makes each
+ * stream self-consistent whatever else is running.
+ *
+ * A second run cannot start while one is in flight. The guard is a ref, not
+ * state, so it is set synchronously on the click rather than on the next
+ * render, which is exactly the window a double-fire slips through.
  */
 export type DraftState = "idle" | "drafting" | "error";
 
 export function useReplyDraft(textareaId: string) {
   const [state, setState] = useState<DraftState>("idle");
   const [error, setError] = useState<string | null>(null);
+  const running = useRef(false);
   const abort = useRef<AbortController | null>(null);
 
   const draft = useCallback(
-    async (ticketId: string) => {
+    async (input: { ticketId: string; tone: ReplyTone }) => {
       const target = document.getElementById(textareaId);
       if (!(target instanceof HTMLTextAreaElement)) return;
+      // Synchronous, so a second click in the same tick cannot get past it.
+      if (running.current) return;
+      running.current = true;
 
       abort.current?.abort();
       const controller = new AbortController();
@@ -32,8 +43,13 @@ export function useReplyDraft(textareaId: string) {
       setState("drafting");
       setError(null);
 
+      // The text being rewritten is read BEFORE the box is cleared.
+      const currentText = target.value;
+
       const body = new FormData();
-      body.set("ticketId", ticketId);
+      body.set("ticketId", input.ticketId);
+      body.set("currentText", currentText);
+      body.set("tone", input.tone);
 
       try {
         const response = await fetch("/internal/ai/draft", {
@@ -48,25 +64,37 @@ export function useReplyDraft(textareaId: string) {
           return;
         }
 
-        // Separated from anything already typed, so an appended draft never
-        // runs into the end of a half-written sentence.
-        if (target.value.trim() !== "") target.value += "\n\n";
-
+        let draft = "";
         const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
         for (;;) {
           const { done, value } = await reader.read();
           if (done) break;
-          target.value += value;
-          // Keep the newest text in view while it arrives.
+          draft += value;
+          // Assignment, never `+=` on the element — see the note above.
+          target.value = draft;
           target.scrollTop = target.scrollHeight;
+        }
+
+        // A model that returned nothing must not wipe what they wrote.
+        if (draft.trim() === "") {
+          target.value = currentText;
+          setError("The model returned nothing. Your text is unchanged.");
+          setState("error");
+          return;
         }
 
         setState("idle");
       } catch (cause) {
-        // An abort is the staff member pressing the button again, not a failure.
-        if (controller.signal.aborted) return;
-        setError(cause instanceof Error ? cause.message : "The draft could not be written.");
+        // Restore rather than leave them with a half-written rewrite.
+        target.value = currentText;
+        if (controller.signal.aborted) {
+          setState("idle");
+          return;
+        }
+        setError(cause instanceof Error ? cause.message : "The rewrite could not be written.");
         setState("error");
+      } finally {
+        running.current = false;
       }
     },
     [textareaId],
@@ -80,13 +108,15 @@ function messageFor(reason: string): string {
   switch (reason.trim()) {
     case "no_model":
       return "No model is set for writing yet — choose one under AI.";
+    case "forbidden":
+      return "This shop's plan does not include AI.";
     case "not_configured":
       return "Workers AI is not available in this environment.";
     case "rate_limited":
-      return "Too many drafts just now. Try again in a moment.";
+      return "Too many rewrites just now. Try again in a moment.";
     case "timeout":
       return "The model took too long. Try again.";
     default:
-      return "The draft could not be written. Write the reply yourself, or try again.";
+      return "The rewrite could not be written. Your text is unchanged.";
   }
 }

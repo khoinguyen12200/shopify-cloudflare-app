@@ -4,6 +4,7 @@ import { runWithRequestContext } from "~/request-context.server";
 import { setupTestDatabase } from "~/test/db";
 import { AiRepo } from "~/models/ai.server";
 import { fakeTextGenerator } from "~/test/fake-ai";
+import type { AiFailureReason, AiGate } from "~/ports/ai";
 import { AiService } from "./ai.server";
 import type { ThreadForPrompt } from "~/ai/draft-prompt";
 
@@ -11,6 +12,11 @@ setupTestDatabase();
 
 const inRequest = <T>(fn: () => Promise<T>) => runWithRequestContext(env, fn);
 const AT = 1_700_000_000_000;
+
+/** Our own console: never gated by a merchant's plan, and our own spend. */
+const STAFF = { surface: "staff", shop: null } as const;
+/** The embedded admin, acting for a merchant on their plan. */
+const MERCHANT = { surface: "merchant", shop: "alpha.myshopify.com" } as const;
 
 const thread: ThreadForPrompt = {
   subject: "Checkout is broken",
@@ -27,7 +33,7 @@ describe("drafting a support reply", () => {
     const generator = fakeTextGenerator({ reply: "Sorry about that — which browser?" });
     const result = await inRequest(async () => {
       await new AiRepo().addToChain({ role: "writing", modelId: "@cf/x/y", updatedBy: null, at: AT });
-      return service(generator).draftReply({ thread, shop: "alpha.myshopify.com" });
+      return service(generator).draftReply({ thread, caller: STAFF });
     });
 
     expect(result).toEqual({ ok: true, value: "Sorry about that — which browser?" });
@@ -39,7 +45,7 @@ describe("drafting a support reply", () => {
     const generator = fakeTextGenerator();
     await inRequest(async () => {
       await new AiRepo().addToChain({ role: "writing", modelId: "@cf/x/y", updatedBy: null, at: AT });
-      return service(generator).draftReply({ thread, shop: "alpha.myshopify.com" });
+      return service(generator).draftReply({ thread, caller: STAFF });
     });
 
     expect(generator.only().model).toBe("@cf/x/y");
@@ -49,7 +55,7 @@ describe("drafting a support reply", () => {
     const generator = fakeTextGenerator();
     await inRequest(async () => {
       await new AiRepo().addToChain({ role: "writing", modelId: "@cf/x/y", updatedBy: null, at: AT });
-      return service(generator).draftReply({ thread, shop: "alpha.myshopify.com" });
+      return service(generator).draftReply({ thread, caller: STAFF });
     });
 
     const user = generator.only().messages.at(-1)?.content ?? "";
@@ -61,7 +67,7 @@ describe("drafting a support reply", () => {
     const runs = await inRequest(async () => {
       const repo = new AiRepo();
       await repo.addToChain({ role: "writing", modelId: "@cf/x/y", updatedBy: null, at: AT });
-      await service(generator).draftReply({ thread, shop: "alpha.myshopify.com" });
+      await service(generator).draftReply({ thread, caller: STAFF });
       return repo.recentRuns();
     });
 
@@ -79,7 +85,7 @@ describe("drafting a support reply", () => {
   it("refuses with no_model when nobody has chosen one for the role", async () => {
     // Degrades to "no draft" — it must never block a reply being sent.
     const result = await inRequest(() =>
-      service().draftReply({ thread, shop: "alpha.myshopify.com" }),
+      service().draftReply({ thread, caller: STAFF }),
     );
 
     expect(result).toEqual({ ok: false, reason: "no_model" });
@@ -88,7 +94,7 @@ describe("drafting a support reply", () => {
   it("still records a run when the model is missing, so the gap is visible", async () => {
     const runs = await inRequest(async () => {
       const repo = new AiRepo();
-      await service().draftReply({ thread, shop: "alpha.myshopify.com" });
+      await service().draftReply({ thread, caller: STAFF });
       return repo.recentRuns();
     });
 
@@ -100,7 +106,7 @@ describe("drafting a support reply", () => {
     const generator = fakeTextGenerator({ fail: "provider" });
     const result = await inRequest(async () => {
       await new AiRepo().addToChain({ role: "writing", modelId: "@cf/x/y", updatedBy: null, at: AT });
-      return service(generator).draftReply({ thread, shop: "alpha.myshopify.com" });
+      return service(generator).draftReply({ thread, caller: STAFF });
     });
 
     expect(result).toEqual({ ok: false, reason: "provider" });
@@ -111,7 +117,7 @@ describe("drafting a support reply", () => {
     const runs = await inRequest(async () => {
       const repo = new AiRepo();
       await repo.addToChain({ role: "writing", modelId: "@cf/x/y", updatedBy: null, at: AT });
-      await service(generator).draftReply({ thread, shop: "alpha.myshopify.com" });
+      await service(generator).draftReply({ thread, caller: STAFF });
       return repo.recentRuns();
     });
 
@@ -123,7 +129,7 @@ describe("drafting a support reply", () => {
     const generator = fakeTextGenerator({ reply: "   \n  " });
     const result = await inRequest(async () => {
       await new AiRepo().addToChain({ role: "writing", modelId: "@cf/x/y", updatedBy: null, at: AT });
-      return service(generator).draftReply({ thread, shop: "alpha.myshopify.com" });
+      return service(generator).draftReply({ thread, caller: STAFF });
     });
 
     expect(result).toEqual({ ok: false, reason: "provider" });
@@ -133,7 +139,7 @@ describe("drafting a support reply", () => {
     const generator = fakeTextGenerator({ reply: "  Hello.\n\n" });
     const result = await inRequest(async () => {
       await new AiRepo().addToChain({ role: "writing", modelId: "@cf/x/y", updatedBy: null, at: AT });
-      return service(generator).draftReply({ thread, shop: "alpha.myshopify.com" });
+      return service(generator).draftReply({ thread, caller: STAFF });
     });
 
     expect(result).toEqual({ ok: true, value: "Hello." });
@@ -152,10 +158,7 @@ describe("streaming a support reply", () => {
       const repo = new AiRepo();
       await repo.addToChain({ role: "writing", modelId: "@cf/x/y", updatedBy: null, at: AT });
 
-      const started = await service(generator).streamDraftReply({
-        thread,
-        shop: "alpha.myshopify.com",
-      });
+      const started = await service(generator).streamReply({ thread, currentText: "", tone: "professional", caller: STAFF });
       if (!started.ok) throw new Error(`expected a stream, got ${started.reason}`);
 
       let text = "";
@@ -173,7 +176,7 @@ describe("streaming a support reply", () => {
 
   it("refuses before opening a stream when no model is configured", async () => {
     const result = await inRequest(() =>
-      service().streamDraftReply({ thread, shop: "alpha.myshopify.com" }),
+      service().streamReply({ thread, currentText: "", tone: "professional", caller: STAFF }),
     );
 
     expect(result).toEqual({ ok: false, reason: "no_model" });
@@ -185,7 +188,7 @@ describe("summarising a thread", () => {
     const generator = fakeTextGenerator({ reply: "Payment fails. Waiting on us." });
     await inRequest(async () => {
       await new AiRepo().addToChain({ role: "summary", modelId: "@cf/s/m", updatedBy: null, at: AT });
-      return service(generator).summariseThread({ thread, shop: "alpha.myshopify.com" });
+      return service(generator).summariseThread({ thread, caller: STAFF });
     });
 
     expect(generator.only().model).toBe("@cf/s/m");
@@ -195,7 +198,7 @@ describe("summarising a thread", () => {
     const runs = await inRequest(async () => {
       const repo = new AiRepo();
       await repo.addToChain({ role: "summary", modelId: "@cf/s/m", updatedBy: null, at: AT });
-      await service().summariseThread({ thread, shop: "alpha.myshopify.com" });
+      await service().summariseThread({ thread, caller: STAFF });
       return repo.recentRuns();
     });
 
@@ -219,7 +222,7 @@ describe("falling back down the chain", () => {
     const generator = fakeTextGenerator({ reply: "Draft." });
     await inRequest(async () => {
       await chain(["@cf/a/first", "@cf/b/second"]);
-      return service(generator).draftReply({ thread, shop: null });
+      return service(generator).draftReply({ thread, caller: STAFF });
     });
 
     expect(generator.calls).toHaveLength(1);
@@ -234,7 +237,7 @@ describe("falling back down the chain", () => {
 
     const result = await inRequest(async () => {
       await chain(["@cf/a/first", "@cf/b/second"]);
-      return service(generator).draftReply({ thread, shop: null });
+      return service(generator).draftReply({ thread, caller: STAFF });
     });
 
     expect(result).toEqual({ ok: true, value: "Second model's draft." });
@@ -252,7 +255,7 @@ describe("falling back down the chain", () => {
 
     const result = await inRequest(async () => {
       await chain(["@cf/a/first", "@cf/b/second", "@cf/c/third"]);
-      return service(generator).draftReply({ thread, shop: null });
+      return service(generator).draftReply({ thread, caller: STAFF });
     });
 
     expect(generator.calls).toHaveLength(3);
@@ -267,7 +270,7 @@ describe("falling back down the chain", () => {
 
     const result = await inRequest(async () => {
       await chain(["@cf/a/first", "@cf/b/second", "@cf/c/third"]);
-      return service(generator).draftReply({ thread, shop: null });
+      return service(generator).draftReply({ thread, caller: STAFF });
     });
 
     expect(generator.calls).toHaveLength(1);
@@ -282,7 +285,7 @@ describe("falling back down the chain", () => {
 
     const after = await inRequest(async () => {
       const repo = await chain(["@cf/a/first", "@cf/b/second"]);
-      await service(generator).draftReply({ thread, shop: null });
+      await service(generator).draftReply({ thread, caller: STAFF });
       return repo.chainFor("writing", AT);
     });
 
@@ -297,7 +300,7 @@ describe("falling back down the chain", () => {
 
     const runs = await inRequest(async () => {
       const repo = await chain(["@cf/a/first", "@cf/b/second"]);
-      await service(generator).draftReply({ thread, shop: null });
+      await service(generator).draftReply({ thread, caller: STAFF });
       return repo.recentRuns();
     });
 
@@ -316,7 +319,7 @@ describe("falling back down the chain", () => {
     const after = await inRequest(async () => {
       const repo = await chain(["@cf/a/first", "@cf/b/second"]);
       await repo.markHealth({ role: "writing", modelId: "@cf/a/first", healthy: false, at: AT });
-      await service(generator).draftReply({ thread, shop: null });
+      await service(generator).draftReply({ thread, caller: STAFF });
       return repo.chainFor("writing", AT);
     });
 
@@ -332,7 +335,7 @@ describe("falling back down the chain", () => {
     const healthy = await inRequest(async () => {
       const repo = await chain(["@cf/a/only"]);
       await repo.markHealth({ role: "writing", modelId: "@cf/a/only", healthy: false, at: AT });
-      await service(generator).draftReply({ thread, shop: null });
+      await service(generator).draftReply({ thread, caller: STAFF });
       const [row] = await repo.allModels();
       return row?.healthy;
     });
@@ -341,7 +344,104 @@ describe("falling back down the chain", () => {
   });
 
   it("refuses with no_model when the purpose has an empty chain", async () => {
-    const result = await inRequest(() => service().draftReply({ thread, shop: null }));
+    const result = await inRequest(() => service().draftReply({ thread, caller: STAFF }));
     expect(result).toEqual({ ok: false, reason: "no_model" });
+  });
+});
+
+/**
+ * The gate — who may use AI at all.
+ *
+ * Injected as a port, so these prove the USE CASE honours a refusal without
+ * needing a plan, a subscription row, or a billing round trip.
+ */
+describe("gating AI by who is asking", () => {
+  const gated = (reason: AiFailureReason | null) => ({
+    async refuse() {
+      return reason;
+    },
+  });
+
+  const withGate = (gate: AiGate, generator = fakeTextGenerator()) => ({
+    generator,
+    service: new AiService(new AiRepo(), generator, { now: () => AT }, gate),
+  });
+
+  it("refuses when the gate says so", async () => {
+    const { service } = withGate(gated("forbidden"));
+
+    const result = await inRequest(async () => {
+      await new AiRepo().addToChain({ role: "writing", modelId: "@cf/x/y", updatedBy: null, at: AT });
+      return service.draftReply({ thread, caller: MERCHANT });
+    });
+
+    expect(result).toEqual({ ok: false, reason: "forbidden" });
+  });
+
+  it("does not spend a token when it refuses", async () => {
+    // A gate that runs after the model is not a gate.
+    const { service, generator } = withGate(gated("forbidden"));
+
+    await inRequest(async () => {
+      await new AiRepo().addToChain({ role: "writing", modelId: "@cf/x/y", updatedBy: null, at: AT });
+      return service.draftReply({ thread, caller: MERCHANT });
+    });
+
+    expect(generator.calls).toEqual([]);
+  });
+
+  it("still records the refusal, so 'why did nothing happen' has an answer", async () => {
+    const { service } = withGate(gated("forbidden"));
+
+    const runs = await inRequest(async () => {
+      const repo = new AiRepo();
+      await repo.addToChain({ role: "writing", modelId: "@cf/x/y", updatedBy: null, at: AT });
+      await service.draftReply({ thread, caller: MERCHANT });
+      return repo.recentRuns();
+    });
+
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toMatchObject({
+      status: "error",
+      reasonCode: "forbidden",
+      shop: MERCHANT.shop,
+    });
+  });
+
+  it("proceeds when the gate allows", async () => {
+    const { service } = withGate(gated(null), fakeTextGenerator({ reply: "Allowed." }));
+
+    const result = await inRequest(async () => {
+      await new AiRepo().addToChain({ role: "writing", modelId: "@cf/x/y", updatedBy: null, at: AT });
+      return service.draftReply({ thread, caller: MERCHANT });
+    });
+
+    expect(result).toEqual({ ok: true, value: "Allowed." });
+  });
+
+  it("refuses a stream before it opens", async () => {
+    const { service, generator } = withGate(gated("forbidden"));
+
+    const result = await inRequest(async () => {
+      await new AiRepo().addToChain({ role: "writing", modelId: "@cf/x/y", updatedBy: null, at: AT });
+      return service.streamReply({ thread, currentText: "hi", tone: "professional", caller: MERCHANT });
+    });
+
+    expect(result).toEqual({ ok: false, reason: "forbidden" });
+    expect(generator.calls).toEqual([]);
+  });
+
+  it("records the merchant's shop on a gated run, not null", async () => {
+    // It IS their request, even refused — otherwise a refusal cannot be traced
+    // back to the shop that hit it.
+    const { service } = withGate(gated("forbidden"));
+
+    const runs = await inRequest(async () => {
+      const repo = new AiRepo();
+      await service.draftReply({ thread, caller: MERCHANT });
+      return repo.recentRuns();
+    });
+
+    expect(runs[0]?.shop).toBe(MERCHANT.shop);
   });
 });

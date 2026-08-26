@@ -1,5 +1,6 @@
 import { Form, useActionData, useLoaderData, useNavigation } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import { useState } from "react";
 import {
   Alert,
   AlertDescription,
@@ -11,6 +12,11 @@ import {
   CardHeader,
   Label,
   Page,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Text,
   Textarea,
 } from "ngk-dashboard";
@@ -27,6 +33,13 @@ import { formatMoney } from "~/money";
 import type { Locale } from "~/i18n/config";
 import { Sparkles } from "lucide-react";
 import { useReplyDraft } from "~/internal/use-reply-draft";
+import {
+  DEFAULT_TONE,
+  REPLY_TONES,
+  TONE_LABEL,
+  toReplyTone,
+  type ReplyTone,
+} from "~/ai/tones";
 
 /** The internal console is staff-only and English-only — no i18n here. */
 const LOCALE: Locale = "en";
@@ -148,8 +161,9 @@ export default function InternalSupportThread() {
   const busy = navigation.state !== "idle";
   const pendingIntent = navigation.formData?.get("intent");
   const isClosed = ticket.status === "closed";
-  // Targets the composer's textarea by id and appends into it.
+  // Targets the composer's textarea by id and rewrites what is in it.
   const draft = useReplyDraft("body");
+  const [tone, setTone] = useState<ReplyTone>(DEFAULT_TONE);
 
   return (
     <Page
@@ -206,19 +220,34 @@ export default function InternalSupportThread() {
                       {busy && !pendingIntent ? "Sending…" : "Send reply"}
                     </Button>
                     {/*
-                      A draft, not an answer. It APPENDS into the box above so a
-                      half-written reply survives, and a human edits and sends
-                      every word — which is what makes this the safe place to
-                      put a model.
+                      Rewrites what is in the box, in the chosen tone. The staff
+                      member decides WHAT to say; the model only chooses better
+                      words for it — and a human edits and sends every one, which
+                      is what makes this the safe place to put a model.
+
+                      The label follows the box: with text it polishes, empty it
+                      suggests one from the thread.
                     */}
+                    <Select value={tone} onValueChange={(next) => setTone(toReplyTone(next))}>
+                      <SelectTrigger className="w-40" aria-label="Tone">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {REPLY_TONES.map((option) => (
+                          <SelectItem key={option} value={option}>
+                            {TONE_LABEL[option]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <Button
                       type="button"
                       variant="outline"
                       disabled={busy || draft.state === "drafting"}
-                      onClick={() => void draft.draft(ticket.id)}
+                      onClick={() => void draft.draft({ ticketId: ticket.id, tone })}
                     >
                       <Sparkles className="mr-1 size-4" />
-                      {draft.state === "drafting" ? "Drafting…" : "Draft with AI"}
+                      {draft.state === "drafting" ? "Rewriting…" : "Improve with AI"}
                     </Button>
                     {!isClosed && (
                       <Button
