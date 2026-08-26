@@ -20,3 +20,4 @@ export * from "./schema/admin-users";
 export * from "./schema/notifications";
 export * from "./schema/billing";
 export * from "./schema/support";
+export * from "./schema/ai";

@@ -62,6 +62,15 @@
     { "binding": "UPLOADS", "bucket_name": "app-support-uploads" }
   ],
 
+  // Workers AI — text generation for support-reply drafting. A binding, so
+  // there is no API key to store or leak, and it bills on this account.
+  // See @rules/cloudflare.md for the written reason this is in scope.
+  //
+  // NOT simulated by Miniflare: `npm run dev` reaches the real service, and
+  // tests have no binding at all, which the adapter reports as `not_configured`
+  // rather than failing obscurely.
+  "ai": { "binding": "AI" },
+
   // Ticket creation and uploads are merchant-triggered writes that cost us
   // database rows, storage and staff attention, so they are the two endpoints
   // worth a limiter. Config-only binding, and it FAILS OPEN when absent — a
@@ -107,7 +116,11 @@
     // Must be an address on a domain onboarded to Email Sending. Empty means
     // email is disabled and sendEmail() reports notConfigured.
     "EMAIL_FROM": "",
-    "EMAIL_FROM_NAME": ""
+    "EMAIL_FROM_NAME": "",
+    // Optional. Set it to an AI Gateway id and every Workers AI call gains
+    // caching, cost tracking and request logs for free. Empty = straight to
+    // Workers AI.
+    "AI_GATEWAY_ID": ""
   },
 
   // ─────────────────────────── PRODUCTION ───────────────────────────
@@ -128,6 +141,8 @@
       "r2_buckets": [
         { "binding": "UPLOADS", "bucket_name": "app-support-uploads-prod" }
       ],
+      // Re-declared, never inherited (@rules/cloudflare.md).
+      "ai": { "binding": "AI" },
       "ratelimits": [
         {
           "name": "SUPPORT_LIMITER",

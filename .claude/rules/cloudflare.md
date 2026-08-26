@@ -29,12 +29,36 @@ needs it; do not scaffold one speculatively.
 | **Email Sending** | Transactional email | Verified sender domain from `vars`; failures leave a retryable record |
 | **Rate Limiting** | Runaway clients / webhook floods | Config-only binding, fails open when absent |
 | **Observability** | Logs | `enabled: true` + `head_sampling_rate`, structured JSON |
+| **Workers AI** | Text generation behind a chosen model | Binding only — no API key exists to leak. Every call goes through the port in `app/ports/ai.ts`, is metered into `ai_runs`, and names a ROLE rather than a model id |
 
 **Everything else is out of scope until a written reason says otherwise** —
-Durable Objects, Hyperdrive, Vectorize, Workers AI, Browser Rendering, Images,
+Durable Objects, Hyperdrive, Vectorize, Browser Rendering, Images,
 Stream, Containers, Analytics Engine, service bindings, Workers for Platforms.
 Adding a binding is an architecture decision, not a convenience — write down
 *why* in the same change.
+
+**Workers AI moved IN SCOPE**, and here is the written reason. Support staff
+answer the same questions repeatedly, and a draft they edit is faster than a
+reply they compose; drafting is also the safest possible first AI surface,
+because a human reads every word before a merchant does. Workers AI rather than
+a hosted provider because it is a BINDING: no API key to store, rotate or leak,
+no egress, and it bills on the same account as everything else. The AI SDK
+(`ai` + `workers-ai-provider`) sits behind our own port, so swapping to a hosted
+model later is an adapter change and nothing above it moves.
+
+The constraints that come with it:
+
+- **No model id is ever hardcoded in a feature.** A caller names a ROLE
+  (`writing`, `summary`); which model serves that role is a row in `ai_models`,
+  chosen from a catalogue in the internal console. A typo'd or retired id
+  resolves to nothing at call time, which reads as a broken feature rather than
+  a bad setting — hence a select, never a text field.
+- **Every call is metered.** One `ai_runs` row per call, with tokens and
+  latency, because tokens are what cost money and an unmetered AI surface is an
+  unbounded bill.
+- **AI is decoration, never correctness.** A failed or absent model degrades the
+  feature to "no draft"; it must never block a reply being sent
+  (@rules/data.md).
 
 Two calls that recur and deserve a recorded answer rather than a reflex:
 
