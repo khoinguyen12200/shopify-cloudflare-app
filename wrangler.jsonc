@@ -113,7 +113,8 @@
     "required": [
       "SHOPIFY_API_SECRET",
       "SHOP_CUSTOM_DOMAIN",
-      "INTERNAL_SESSION_SECRET"
+      "INTERNAL_SESSION_SECRET",
+      "SHOPIFY_PARTNER_API_TOKEN"
     ]
   },
 
@@ -132,7 +133,8 @@
     // Optional. Set it to an AI Gateway id and every Workers AI call gains
     // caching, cost tracking and request logs for free. Empty = straight to
     // Workers AI.
-    "AI_GATEWAY_ID": ""
+    "AI_GATEWAY_ID": "",
+    "SHOPIFY_PARTNER_APP_ID": ""
   },
 
   // ─────────────────────────── PRODUCTION ───────────────────────────
@@ -187,7 +189,8 @@
         "required": [
           "SHOPIFY_API_SECRET",
           "SHOP_CUSTOM_DOMAIN",
-          "INTERNAL_SESSION_SECRET"
+          "INTERNAL_SESSION_SECRET",
+          "SHOPIFY_PARTNER_API_TOKEN"
         ]
       },
       "vars": {
@@ -197,7 +200,8 @@
         // Your production URL — must match application_url in shopify.app.toml.
         "SHOPIFY_APP_URL": "https://example.com",
         "EMAIL_FROM": "",
-        "EMAIL_FROM_NAME": ""
+        "EMAIL_FROM_NAME": "",
+        "SHOPIFY_PARTNER_APP_ID": ""
       }
     }
   }
