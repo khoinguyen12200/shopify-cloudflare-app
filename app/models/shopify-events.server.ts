@@ -93,49 +93,23 @@ export class ShopifyEventRepo {
     const db = getDb();
     const status = event.type;
     const operational = event.type === "INSTALLED" || event.type === "REACTIVATED";
-    const inserted = await db.transaction(async (tx) => {
-      const ledger = await tx.insert(shopifyEvents).values({ source: "partner_history", eventId: event.id, eventType: event.type, shop: event.shop, shopifyShopId: event.shopifyShopId, occurredAt: event.occurredAt, synchronizedAt: event.synchronizedAt }).onConflictDoNothing().returning({ eventId: shopifyEvents.eventId });
-      await tx.insert(shopifyRelationshipEvents).values({ eventSource: "partner_history", eventId: event.id, reason: event.reason, reasonDescription: event.reasonDescription }).onConflictDoNothing();
-      await tx.insert(shops).values({ shop: event.shop, shopifyShopId: event.shopifyShopId, installedAt: event.occurredAt, currentInstalledAt: operational ? event.occurredAt : null, uninstalledAt: operational ? null : event.occurredAt, relationshipStatus: status, relationshipOccurredAt: event.occurredAt, relationshipExternalId: event.id }).onConflictDoUpdate({ target: shops.shop, set: { shopifyShopId: event.shopifyShopId, relationshipStatus: status, relationshipOccurredAt: event.occurredAt, relationshipExternalId: event.id, currentInstalledAt: operational ? event.occurredAt : null, uninstalledAt: operational ? null : event.occurredAt }, where: or(sql`${shops.relationshipOccurredAt} IS NULL`, sql`${shops.relationshipOccurredAt} < ${event.occurredAt}`, and(eq(shops.relationshipOccurredAt, event.occurredAt), sql`${shops.relationshipExternalId} < ${event.id}`)) });
-      /*
-      tx.insert(shopifyEvents).values({ source: "partner_history", eventId: event.id, eventType: event.type, shop: event.shop, shopifyShopId: event.shopifyShopId, occurredAt: event.occurredAt, synchronizedAt: event.synchronizedAt }).onConflictDoNothing().returning({ eventId: shopifyEvents.eventId }),
-      tx.insert(shopifyRelationshipEvents).values({ eventSource: "partner_history", eventId: event.id, reason: event.reason, reasonDescription: event.reasonDescription }).onConflictDoNothing(),
-      tx.insert(shops).values({ shop: event.shop, shopifyShopId: event.shopifyShopId, installedAt: event.occurredAt, currentInstalledAt: operational ? event.occurredAt : null, uninstalledAt: operational ? null : event.occurredAt, relationshipStatus: status, relationshipOccurredAt: event.occurredAt, relationshipExternalId: event.id }).onConflictDoUpdate({ target: shops.shop, set: { shopifyShopId: event.shopifyShopId, relationshipStatus: status, relationshipOccurredAt: event.occurredAt, relationshipExternalId: event.id, currentInstalledAt: operational ? event.occurredAt : null, uninstalledAt: operational ? null : event.occurredAt }, where: or(sql`${shops.relationshipOccurredAt} IS NULL`, sql`${shops.relationshipOccurredAt} < ${event.occurredAt}`, and(eq(shops.relationshipOccurredAt, event.occurredAt), sql`${shops.relationshipExternalId} < ${event.id}`)) }).returning({ shop: shops.shop }),
-      */
-      if (event.type === "INSTALLED") await tx.update(shops).set({ installedAt: sql`min(${shops.installedAt}, ${event.occurredAt})` }).where(eq(shops.shop, event.shop));
-      return ledger;
-    });
+    const [inserted] = await db.batch([
+      db.insert(shopifyEvents).values({ source: "partner_history", eventId: event.id, eventType: event.type, shop: event.shop, shopifyShopId: event.shopifyShopId, occurredAt: event.occurredAt, synchronizedAt: event.synchronizedAt }).onConflictDoNothing().returning({ eventId: shopifyEvents.eventId }),
+      db.insert(shopifyRelationshipEvents).values({ eventSource: "partner_history", eventId: event.id, reason: event.reason, reasonDescription: event.reasonDescription }).onConflictDoNothing(),
+      db.insert(shops).values({ shop: event.shop, shopifyShopId: event.shopifyShopId, installedAt: event.occurredAt, currentInstalledAt: operational ? event.occurredAt : null, uninstalledAt: operational ? null : event.occurredAt, relationshipStatus: status, relationshipOccurredAt: event.occurredAt, relationshipExternalId: event.id }).onConflictDoUpdate({ target: shops.shop, set: { shopifyShopId: event.shopifyShopId, relationshipStatus: status, relationshipOccurredAt: event.occurredAt, relationshipExternalId: event.id, currentInstalledAt: operational ? event.occurredAt : null, uninstalledAt: operational ? null : event.occurredAt }, where: or(sql`${shops.relationshipOccurredAt} IS NULL`, sql`${shops.relationshipOccurredAt} < ${event.occurredAt}`, and(eq(shops.relationshipOccurredAt, event.occurredAt), sql`${shops.relationshipExternalId} < ${event.id}`)) }),
+    ]);
     return inserted.length ? "inserted" : "duplicate";
   }
 
   async recordPartnerSubscription(event: PartnerSubscriptionEvent): Promise<"inserted" | "duplicate"> {
     const db = getDb();
     const status = event.status;
-    const inserted = await db.transaction(async (tx) => {
-      const ledger = await tx.insert(shopifyEvents).values({ source: "partner_history", eventId: event.id, eventType: event.type, shop: event.shop, shopifyShopId: event.shopifyShopId, occurredAt: event.occurredAt, synchronizedAt: event.synchronizedAt }).onConflictDoNothing().returning({ eventId: shopifyEvents.eventId });
-      await tx.insert(shopifySubscriptionEvents).values({ eventSource: "partner_history", eventId: event.id, subscriptionId: event.subscriptionId, status, planHandle: event.planHandle ?? null, billingInterval: event.billingInterval ?? null, trialEndsAt: event.trialEndsAt ?? null, currentPeriodEndsAt: event.currentPeriodEndsAt ?? null, cancellationEffectiveAt: event.cancellationEffectiveAt ?? null, priceAmount: event.price?.amount ?? null, priceCurrency: event.price?.currency ?? null }).onConflictDoNothing();
-      const parent = await tx.insert(shopSubscriptions).values({ shop: event.shop, subscriptionId: event.subscriptionId, status, planHandle: event.planHandle ?? null, billingInterval: event.billingInterval ?? null, trialEndsAt: event.trialEndsAt ?? null, currentPeriodEndsAt: event.currentPeriodEndsAt ?? null, cancellationEffectiveAt: event.cancellationEffectiveAt ?? null, appliedOccurredAt: event.occurredAt, appliedExternalId: event.id }).onConflictDoUpdate({ target: [shopSubscriptions.shop, shopSubscriptions.subscriptionId], set: { status, appliedOccurredAt: event.occurredAt, appliedExternalId: event.id }, where: or(sql`${shopSubscriptions.appliedOccurredAt} < ${event.occurredAt}`, and(eq(shopSubscriptions.appliedOccurredAt, event.occurredAt), sql`${shopSubscriptions.appliedExternalId} < ${event.id}`)) }).returning({ subscriptionId: shopSubscriptions.subscriptionId });
-      if (parent.length && event.items) await tx.delete(shopSubscriptionItems).where(and(eq(shopSubscriptionItems.shop, event.shop), eq(shopSubscriptionItems.subscriptionId, event.subscriptionId)));
-      if (parent.length && event.items?.length) await tx.insert(shopSubscriptionItems).values(event.items.map((item, position) => ({ shop: event.shop, subscriptionId: event.subscriptionId, position, itemType: item.itemType, priceAmount: item.priceAmount ?? null, priceCurrency: item.priceCurrency ?? null, cappedAmountAmount: item.cappedAmountAmount ?? null, cappedAmountCurrency: item.cappedAmountCurrency ?? null })));
-      /*
-      tx.insert(shopifyEvents).values({
-        source: "partner_history", eventId: event.id, eventType: event.type,
-        shop: event.shop, shopifyShopId: event.shopifyShopId,
-        occurredAt: event.occurredAt, synchronizedAt: event.synchronizedAt,
-      }).onConflictDoNothing().returning({ eventId: shopifyEvents.eventId }),
-      tx.insert(shopifySubscriptionEvents).values({
-        eventSource: "partner_history", eventId: event.id, subscriptionId: event.subscriptionId,
-        status, planHandle: event.planHandle ?? null,
-        billingInterval: event.billingInterval ?? null, trialEndsAt: event.trialEndsAt ?? null,
-        currentPeriodEndsAt: event.currentPeriodEndsAt ?? null,
-        cancellationEffectiveAt: event.cancellationEffectiveAt ?? null,
-        priceAmount: event.price?.amount ?? null, priceCurrency: event.price?.currency ?? null,
-      }).onConflictDoNothing(),
-      tx.insert(shopSubscriptions).values({ shop: event.shop, subscriptionId: event.subscriptionId, status, planHandle: event.planHandle ?? null, billingInterval: event.billingInterval ?? null, trialEndsAt: event.trialEndsAt ?? null, currentPeriodEndsAt: event.currentPeriodEndsAt ?? null, cancellationEffectiveAt: event.cancellationEffectiveAt ?? null, appliedOccurredAt: event.occurredAt, appliedExternalId: event.id }).onConflictDoUpdate({ target: [shopSubscriptions.shop, shopSubscriptions.subscriptionId], set: { status, planHandle: event.planHandle ?? null, billingInterval: event.billingInterval ?? null, trialEndsAt: event.trialEndsAt ?? null, currentPeriodEndsAt: event.currentPeriodEndsAt ?? null, cancellationEffectiveAt: event.cancellationEffectiveAt ?? null, appliedOccurredAt: event.occurredAt, appliedExternalId: event.id }, where: or(sql`${shopSubscriptions.appliedOccurredAt} < ${event.occurredAt}`, and(eq(shopSubscriptions.appliedOccurredAt, event.occurredAt), sql`${shopSubscriptions.appliedExternalId} < ${event.id}`)) }).returning({ subscriptionId: shopSubscriptions.subscriptionId }),
-      */
-      void ledger;
-      return ledger;
-    });
+    const [inserted] = await db.batch([
+      db.insert(shopifyEvents).values({ source: "partner_history", eventId: event.id, eventType: event.type, shop: event.shop, shopifyShopId: event.shopifyShopId, occurredAt: event.occurredAt, synchronizedAt: event.synchronizedAt }).onConflictDoNothing().returning({ eventId: shopifyEvents.eventId }),
+      db.insert(shopifySubscriptionEvents).values({ eventSource: "partner_history", eventId: event.id, subscriptionId: event.subscriptionId, status, planHandle: event.planHandle ?? null, billingInterval: event.billingInterval ?? null, trialEndsAt: event.trialEndsAt ?? null, currentPeriodEndsAt: event.currentPeriodEndsAt ?? null, cancellationEffectiveAt: event.cancellationEffectiveAt ?? null, priceAmount: event.price?.amount ?? null, priceCurrency: event.price?.currency ?? null }).onConflictDoNothing(),
+      db.insert(shopSubscriptions).values({ shop: event.shop, subscriptionId: event.subscriptionId, status, planHandle: event.planHandle ?? null, billingInterval: event.billingInterval ?? null, trialEndsAt: event.trialEndsAt ?? null, currentPeriodEndsAt: event.currentPeriodEndsAt ?? null, cancellationEffectiveAt: event.cancellationEffectiveAt ?? null, appliedOccurredAt: event.occurredAt, appliedExternalId: event.id }).onConflictDoUpdate({ target: [shopSubscriptions.shop, shopSubscriptions.subscriptionId], set: { status, planHandle: event.planHandle ?? sql`${shopSubscriptions.planHandle}`, billingInterval: event.billingInterval ?? sql`${shopSubscriptions.billingInterval}`, trialEndsAt: event.trialEndsAt ?? sql`${shopSubscriptions.trialEndsAt}`, currentPeriodEndsAt: event.currentPeriodEndsAt ?? sql`${shopSubscriptions.currentPeriodEndsAt}`, cancellationEffectiveAt: event.cancellationEffectiveAt ?? sql`${shopSubscriptions.cancellationEffectiveAt}`, appliedOccurredAt: event.occurredAt, appliedExternalId: event.id }, where: or(sql`${shopSubscriptions.appliedOccurredAt} < ${event.occurredAt}`, and(eq(shopSubscriptions.appliedOccurredAt, event.occurredAt), sql`${shopSubscriptions.appliedExternalId} < ${event.id}`)) }),
+    ]);
+    if (inserted.length && event.items) await db.batch([db.delete(shopSubscriptionItems).where(and(eq(shopSubscriptionItems.shop, event.shop), eq(shopSubscriptionItems.subscriptionId, event.subscriptionId))), ...(event.items.length ? [db.insert(shopSubscriptionItems).values(event.items.map((item, position) => ({ shop: event.shop, subscriptionId: event.subscriptionId, position, itemType: item.itemType, priceAmount: item.priceAmount ?? null, priceCurrency: item.priceCurrency ?? null, cappedAmountAmount: item.cappedAmountAmount ?? null, cappedAmountCurrency: item.cappedAmountCurrency ?? null })))] : [])]);
     return inserted.length === 1 ? "inserted" : "duplicate";
   }
 

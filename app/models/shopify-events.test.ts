@@ -30,6 +30,16 @@ function relationshipEvent(
 }
 
 describe("ShopifyEventRepo", () => {
+  it("updates subscription metadata on newer lifecycle events", async () => {
+    const row = await inRequest(async () => {
+      const repo = new ShopifyEventRepo();
+      const base = { shop: "metadata-ledger.myshopify.com", shopifyShopId: "gid://shopify/Shop/9", subscriptionId: "sub-9", synchronizedAt: 1, status: "ACTIVE" as const };
+      await repo.recordPartnerSubscription({ ...base, id: "evt-1", type: "CREATED", occurredAt: 1, planHandle: "basic", billingInterval: "MONTH", trialEndsAt: 10, cancellationEffectiveAt: null });
+      await repo.recordPartnerSubscription({ ...base, id: "evt-2", type: "UPDATED", occurredAt: 2, planHandle: "pro", billingInterval: "YEAR", trialEndsAt: 20, cancellationEffectiveAt: 30 });
+      return env.DB.prepare("SELECT plan_handle AS plan, billing_interval AS interval, trial_ends_at AS trial, cancellation_effective_at AS cancel FROM shop_subscriptions WHERE shop = ?").bind(base.shop).first();
+    });
+    expect(row).toMatchObject({ plan: "pro", interval: "YEAR", trial: 20, cancel: 30 });
+  });
   it("records a Partner event ID exactly once", async () => {
     const result = await inRequest(async () => {
       const repo = new ShopifyEventRepo();
