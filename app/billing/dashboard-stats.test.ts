@@ -3,7 +3,20 @@ import { computeBillingStats } from "./dashboard-stats";
 import type { Shop, SubscriptionEvent } from "~/db/schema";
 
 function shop(overrides: Partial<Shop> = {}): Shop {
-  return { shop: "a.myshopify.com", installedAt: 1, uninstalledAt: null, ...overrides };
+  return {
+    shop: "a.myshopify.com",
+    shopifyShopId: null,
+    relationshipStatus: null,
+    relationshipOccurredAt: null,
+    relationshipExternalId: null,
+    installedAt: 1,
+    currentInstalledAt: null,
+    uninstalledAt: null,
+    lastAuthenticatedAt: null,
+    lastWebhookAt: null,
+    lastReconciledAt: null,
+    ...overrides,
+  };
 }
 
 function event(overrides: Partial<SubscriptionEvent> = {}): SubscriptionEvent {

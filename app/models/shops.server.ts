@@ -1,6 +1,17 @@
-import { desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { getDb } from "~/request-context.server";
 import { shops, type Shop } from "~/db/schema";
+import {
+  isOperationalRelationship,
+  type RelationshipState,
+} from "~/domain/shop-lifecycle";
+
+const relationshipStatuses: Record<RelationshipState["kind"], NonNullable<Shop["relationshipStatus"]>> = {
+  installed: "INSTALLED",
+  uninstalled: "UNINSTALLED",
+  deactivated: "DEACTIVATED",
+  reactivated: "REACTIVATED",
+};
 
 /**
  * The ONLY place `shops` is queried. Models are the sole layer that touches
@@ -33,6 +44,44 @@ export class ShopRepo {
       .update(shops)
       .set({ uninstalledAt: now })
       .where(eq(shops.shop, shop));
+  }
+
+  /**
+   * Persist a state already resolved by the pure relationship state machine.
+   * The SQL conflict condition repeats its deterministic ordering key so two
+   * workers cannot let a stale projection overwrite a newer one.
+   */
+  async applyRelationship(shop: string, transition: RelationshipState): Promise<void> {
+    const isOperational = isOperationalRelationship(transition);
+    await getDb()
+      .insert(shops)
+      .values({
+        shop,
+        installedAt: transition.occurredAt,
+        currentInstalledAt: isOperational ? transition.occurredAt : null,
+        uninstalledAt: isOperational ? null : transition.occurredAt,
+        relationshipStatus: relationshipStatuses[transition.kind],
+        relationshipOccurredAt: transition.occurredAt,
+        relationshipExternalId: transition.externalId,
+      })
+      .onConflictDoUpdate({
+        target: shops.shop,
+        set: {
+          currentInstalledAt: isOperational ? transition.occurredAt : null,
+          uninstalledAt: isOperational ? null : transition.occurredAt,
+          relationshipStatus: relationshipStatuses[transition.kind],
+          relationshipOccurredAt: transition.occurredAt,
+          relationshipExternalId: transition.externalId,
+        },
+        where: or(
+          isNull(shops.relationshipOccurredAt),
+          lt(shops.relationshipOccurredAt, transition.occurredAt),
+          and(
+            eq(shops.relationshipOccurredAt, transition.occurredAt),
+            lt(shops.relationshipExternalId, transition.externalId),
+          ),
+        ),
+      });
   }
 
   /** Every shop the app has ever seen, newest install first — the internal console's Shops list. */

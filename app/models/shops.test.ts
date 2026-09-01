@@ -3,6 +3,7 @@ import { runWithRequestContext } from "~/request-context.server";
 import { env } from "cloudflare:test";
 import { setupTestDatabase } from "~/test/db";
 import { ShopRepo } from "./shops.server";
+import type { RelationshipState } from "~/domain/shop-lifecycle";
 
 setupTestDatabase();
 
@@ -83,5 +84,48 @@ describe("ShopRepo", () => {
       "newer.myshopify.com",
       "older.myshopify.com",
     ]);
+  });
+
+  it("keeps the newest ordered relationship transition as the shop projection", async () => {
+    const shop = "projection.myshopify.com";
+    const installed: RelationshipState = {
+      kind: "installed",
+      occurredAt: 200,
+      externalId: "event-2",
+    };
+    const staleUninstall: RelationshipState = {
+      kind: "uninstalled",
+      occurredAt: 100,
+      externalId: "event-1",
+    };
+
+    const found = await inRequest(async () => {
+      const repo = new ShopRepo();
+      await repo.applyRelationship(shop, installed);
+      await repo.applyRelationship(shop, staleUninstall);
+      return repo.get(shop);
+    });
+
+    expect(found).toMatchObject({
+      shop,
+      relationshipStatus: "INSTALLED",
+      relationshipOccurredAt: 200,
+      relationshipExternalId: "event-2",
+    });
+  });
+
+  it("does not read a relationship projection through a different shop key", async () => {
+    const found = await inRequest(async () => {
+      const repo = new ShopRepo();
+      const relationship: RelationshipState = {
+        kind: "installed",
+        occurredAt: 100,
+        externalId: "event-1",
+      };
+      await repo.applyRelationship("mine.myshopify.com", relationship);
+      return repo.get("theirs.myshopify.com");
+    });
+
+    expect(found).toBeUndefined();
   });
 });

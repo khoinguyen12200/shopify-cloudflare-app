@@ -10,7 +10,20 @@ import ShopDetail from "./detail";
 import type { Shop, SubscriptionEvent } from "~/db/schema";
 
 function shop(overrides: Partial<Shop> = {}): Shop {
-  return { shop: "cool-shop.myshopify.com", installedAt: 1_700_000_000_000, uninstalledAt: null, ...overrides };
+  return {
+    shop: "cool-shop.myshopify.com",
+    shopifyShopId: null,
+    relationshipStatus: null,
+    relationshipOccurredAt: null,
+    relationshipExternalId: null,
+    installedAt: 1_700_000_000_000,
+    currentInstalledAt: null,
+    uninstalledAt: null,
+    lastAuthenticatedAt: null,
+    lastWebhookAt: null,
+    lastReconciledAt: null,
+    ...overrides,
+  };
 }
 
 function event(overrides: Partial<SubscriptionEvent> = {}): SubscriptionEvent {
