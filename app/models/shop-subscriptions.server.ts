@@ -40,21 +40,21 @@ export class ShopSubscriptionRepo {
   async upsertObservation(shop: string, observation: SubscriptionObservationInput): Promise<"applied" | "stale" | "duplicate"> {
     const db = getDb();
     const current = await this.get(shop, observation.subscriptionId);
-    if (current && (observation.occurredAt < current.appliedOccurredAt || (observation.occurredAt === current.appliedOccurredAt && observation.externalId <= current.appliedExternalId))) {
-      return observation.occurredAt === current.appliedOccurredAt && observation.externalId === current.appliedExternalId ? "duplicate" : "stale";
-    }
+    const duplicate = current && observation.occurredAt === current.appliedOccurredAt && observation.externalId === current.appliedExternalId;
+    const stale = current && (observation.occurredAt < current.appliedOccurredAt || (observation.occurredAt === current.appliedOccurredAt && observation.externalId < current.appliedExternalId));
+    if (stale) return "stale";
     const { applySubscriptionObservation } = await import("~/domain/subscription-lifecycle");
     const state = applySubscriptionObservation(current ? { kind: kindByStatus[current.status], occurredAt: current.appliedOccurredAt, externalId: current.appliedExternalId } : null, observation);
     await db.insert(shopSubscriptions).values({
       shop, subscriptionId: observation.subscriptionId, status: statusByKind[state.kind],
-      planHandle: observation.planHandle ?? null, billingInterval: observation.billingInterval ?? null,
-      trialEndsAt: observation.trialEndsAt ?? null, currentPeriodEndsAt: observation.currentPeriodEndsAt ?? null,
-      cancellationEffectiveAt: observation.cancellationEffectiveAt ?? null,
+      planHandle: observation.planHandle ?? current?.planHandle ?? null, billingInterval: observation.billingInterval ?? current?.billingInterval ?? null,
+      trialEndsAt: observation.trialEndsAt ?? current?.trialEndsAt ?? null, currentPeriodEndsAt: observation.currentPeriodEndsAt ?? current?.currentPeriodEndsAt ?? null,
+      cancellationEffectiveAt: observation.cancellationEffectiveAt ?? current?.cancellationEffectiveAt ?? null,
       appliedOccurredAt: observation.occurredAt, appliedExternalId: observation.externalId,
     }).onConflictDoUpdate({ target: [shopSubscriptions.shop, shopSubscriptions.subscriptionId], set: {
-      status: statusByKind[state.kind], planHandle: observation.planHandle ?? null,
-      billingInterval: observation.billingInterval ?? null, trialEndsAt: observation.trialEndsAt ?? null,
-      currentPeriodEndsAt: observation.currentPeriodEndsAt ?? null, cancellationEffectiveAt: observation.cancellationEffectiveAt ?? null,
+      status: statusByKind[state.kind], planHandle: observation.planHandle ?? current?.planHandle ?? null,
+      billingInterval: observation.billingInterval ?? current?.billingInterval ?? null, trialEndsAt: observation.trialEndsAt ?? current?.trialEndsAt ?? null,
+      currentPeriodEndsAt: observation.currentPeriodEndsAt ?? current?.currentPeriodEndsAt ?? null, cancellationEffectiveAt: observation.cancellationEffectiveAt ?? current?.cancellationEffectiveAt ?? null,
       appliedOccurredAt: observation.occurredAt, appliedExternalId: observation.externalId,
     }, where: or(sql`${shopSubscriptions.appliedOccurredAt} < ${observation.occurredAt}`, and(eq(shopSubscriptions.appliedOccurredAt, observation.occurredAt), sql`${shopSubscriptions.appliedExternalId} < ${observation.externalId}`)) });
     if (observation.items) {
@@ -62,7 +62,7 @@ export class ShopSubscriptionRepo {
       const rows = observation.items.map((item, position) => ({ shop, subscriptionId: observation.subscriptionId, position, itemType: item.itemType, priceAmount: item.priceAmount ?? null, priceCurrency: item.priceCurrency ?? null, cappedAmountAmount: item.cappedAmountAmount ?? null, cappedAmountCurrency: item.cappedAmountCurrency ?? null }));
       await db.batch(rows.length ? [replacement, db.insert(shopSubscriptionItems).values(rows)] : [replacement]);
     }
-    return "applied";
+    return duplicate ? "duplicate" : "applied";
   }
 
   async upsertSubscriptionProjection(shop: string, observation: SubscriptionObservationInput): Promise<"applied" | "stale" | "duplicate"> {

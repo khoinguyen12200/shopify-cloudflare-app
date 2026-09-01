@@ -34,6 +34,7 @@ export interface PartnerSubscriptionEvent {
   readonly currentPeriodEndsAt?: number | null;
   readonly cancellationEffectiveAt?: number | null;
   readonly price?: { readonly amount: number | null; readonly currency: string | null };
+  readonly items?: readonly { readonly itemType: string; readonly priceAmount?: number | null; readonly priceCurrency?: string | null; readonly cappedAmountAmount?: number | null; readonly cappedAmountCurrency?: string | null }[];
 }
 
 /**
@@ -124,6 +125,7 @@ export class ShopifyEventRepo {
         planHandle: event.planHandle ?? null, billingInterval: event.billingInterval ?? null,
         trialEndsAt: event.trialEndsAt ?? null, currentPeriodEndsAt: event.currentPeriodEndsAt ?? null,
         cancellationEffectiveAt: event.cancellationEffectiveAt ?? null,
+        items: event.items,
       });
     }
     return inserted.length === 1 ? "inserted" : "duplicate";
