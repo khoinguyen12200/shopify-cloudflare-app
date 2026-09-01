@@ -3,7 +3,7 @@
 //
 //   npm run install:skill                    # detaches, returns immediately
 //   npm run install:skill -- --wait          # block until done (use this in CI)
-//   npm run install:skill -- --locked        # exact versions from skills-lock.json
+//   npm run install:skill -- --locked        # restore the committed skill set
 //   npm run install:skill -- --agent claude-code,codex
 //   npm run install:skill -- --jobs 1        # serialize the sources
 //
@@ -28,7 +28,16 @@
 // reproducible from `skills-lock.json`. That is the whole reason this command
 // exists: clone, `npm install`, `npm run install:skill`, and the skills are back.
 import { spawn, spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync, existsSync, openSync, closeSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, relative } from "node:path";
 
@@ -50,7 +59,10 @@ function flagValue(name, fallback) {
   return inline || argv[i + 1] || fallback;
 }
 
-const agents = flagValue("agent", "*");
+const defaultAgents = ["claude-code", "codex"];
+const agents = flagValue("agent", defaultAgents.join(","))
+  .split(",")
+  .filter(Boolean);
 // 0 (the default) means "one job per source" — i.e. all of them at once.
 // Math.max(1, …) here would silently force serial execution.
 const jobsRaw = Number(flagValue("jobs", "0"));
@@ -94,14 +106,24 @@ if (!wait) {
 
 // ── From here on we are the worker ─────────────────────────────────────────
 if (locked) {
-  // Exact versions from skills-lock.json. NOTE: this restores the universal
-  // `.agents/skills/` store but does NOT create the Claude Code / Eve symlinks
-  // — the CLI has no lockfile-aware agent-linking step today.
-  const { status } = spawnSync(skillsBin, ["experimental_install"], {
-    cwd: repoRoot,
-    stdio: "inherit",
-  });
-  process.exit(status ?? 1);
+  const lockedLockfile = readFileSync(lockPath, "utf8");
+  const lockedSnapshot = JSON.parse(lockedLockfile);
+  const universalComplete = Object.keys(lockedSnapshot.skills ?? {}).every(
+    (name) => existsSync(join(repoRoot, ".agents/skills", name, "SKILL.md")),
+  );
+
+  if (!universalComplete) {
+    const install = spawnSync(skillsBin, ["experimental_install"], {
+      cwd: repoRoot,
+      stdio: "inherit",
+    });
+    writeFileSync(lockPath, lockedLockfile);
+    if (install.status !== 0) process.exit(install.status ?? 1);
+  }
+
+  linkClaudeSkills(lockedSnapshot);
+  verifyInstalledSkills(lockedSnapshot);
+  process.exit(0);
 }
 
 if (!existsSync(lockPath)) {
@@ -136,13 +158,53 @@ if (sources.length === 0) {
   process.exit(1);
 }
 
+function verifyInstalledSkills(lock) {
+  const skillNames = Object.keys(lock.skills ?? {});
+  const stores = [".agents/skills", ".claude/skills"];
+  const missing = stores.flatMap((store) =>
+    skillNames
+      .filter((name) => {
+        const skillPath = join(repoRoot, store, name);
+        return !existsSync(skillPath) || !statSync(skillPath).isDirectory();
+      })
+      .map((name) => `${store}/${name}`),
+  );
+
+  if (missing.length > 0) {
+    console.error(`\nMissing ${missing.length} installed skill path(s):`);
+    for (const path of missing) console.error(`  ${path}`);
+    process.exit(1);
+  }
+
+  console.log(
+    `\nVerified ${skillNames.length} locked skills for Claude Code and Codex.`,
+  );
+}
+
+function linkClaudeSkills(lock) {
+  const claudeStore = join(repoRoot, ".claude/skills");
+  mkdirSync(claudeStore, { recursive: true });
+
+  for (const name of Object.keys(lock.skills ?? {})) {
+    const target = join(repoRoot, ".agents/skills", name);
+    const link = join(claudeStore, name);
+    if (existsSync(link)) continue;
+
+    symlinkSync(
+      process.platform === "win32" ? target : relative(claudeStore, target),
+      link,
+      process.platform === "win32" ? "junction" : "dir",
+    );
+  }
+}
+
 /**
  * Run one `skills add`, buffering its output so parallel runs do not interleave
  * into noise. The buffer is printed as one block when the source finishes.
  */
 function installSource(source) {
   return new Promise((resolve) => {
-    const args = ["add", source, "--skill", "*", "--agent", agents, "-y"];
+    const args = ["add", source, "--skill", "*", "--agent", ...agents, "-y"];
     const child = spawn(skillsBin, args, {
       cwd: repoRoot,
       stdio: ["ignore", "pipe", "pipe"],
@@ -171,7 +233,7 @@ async function withConcurrency(items, limit, run) {
 
 const limit = jobs || sources.length;
 console.log(
-  `Installing skills from ${sources.length} source(s) for agent(s) "${agents}" ` +
+  `Installing skills from ${sources.length} source(s) for agent(s) "${agents.join(",")}" ` +
     `(${limit} in parallel):`,
 );
 for (const s of sources) console.log(`  • ${s}`);
@@ -213,6 +275,8 @@ if (failed.length > 0) {
   );
   process.exit(1);
 }
+
+verifyInstalledSkills(readLock());
 
 console.log(
   `\n✓ Skills installed in ${seconds}s. Review them before use — they run with ` +

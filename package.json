@@ -7,6 +7,7 @@
   },
   "scripts": {
     "prepare": "git config core.hooksPath .githooks",
+    "postinstall": "node scripts/setup-agents.mjs",
     "verify": "npm run typecheck && npm run lint && npm test",
     "precommit": "npm run typecheck && npm run lint",
     "dev": "node scripts/shopify.mjs app dev --config dev",
@@ -39,6 +40,7 @@
     "shopify:logout": "node scripts/shopify.mjs auth logout",
     "graphql-codegen": "graphql-codegen",
     "install:skill": "node scripts/install-skills.mjs",
+    "test:agent-setup": "node --test scripts/setup-agents.contract.mjs",
     "db:seed": "node scripts/seed-admin.mjs",
     "admin:create": "node scripts/create-admin.mjs",
     "check:placeholders": "node scripts/check-placeholders.mjs production",

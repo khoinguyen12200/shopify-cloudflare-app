@@ -10,9 +10,10 @@
  * requirements checklist expects real support resources, and every reviewer
  * looks for them. They are scaffolded here so the routes exist from day one.
  *
- * REPLACE EVERY PLACEHOLDER BELOW. Shipping this text as-is is worse than having
- * no policy: it is a false statement about how you handle personal data.
- * This is not legal advice — have a lawyer review the final wording.
+ * Use docs/LEGAL_TEMPLATE.md to inventory data, processors, retention, terms,
+ * and release checks before replacing every placeholder below. Shipping this
+ * text as-is is a false statement about personal-data handling. This is not
+ * legal advice; have qualified counsel review final wording.
  */
 
 export const APP_NAME = "TODO: Your App Name";
