@@ -16,7 +16,16 @@ import {
 import {
   isOperationalRelationship,
   type RelationshipState,
+  applyRelationshipEvent,
 } from "~/domain/shop-lifecycle";
+
+export interface RelationshipObservation {
+  readonly shop: string;
+  readonly shopifyShopId: string;
+  readonly type: import("~/domain/shop-lifecycle").RelationshipEventType;
+  readonly occurredAt: number;
+  readonly externalId: string;
+}
 
 const relationshipStatuses: Record<RelationshipState["kind"], NonNullable<Shop["relationshipStatus"]>> = {
   installed: "INSTALLED",
@@ -31,6 +40,16 @@ const relationshipStatuses: Record<RelationshipState["kind"], NonNullable<Shop["
  * spans tenants.
  */
 export class ShopRepo {
+  async upsertRelationshipProjection(event: RelationshipObservation): Promise<"applied" | "stale" | "duplicate"> {
+    const current = await this.get(event.shop);
+    if (current?.relationshipOccurredAt !== null && current?.relationshipOccurredAt !== undefined && (event.occurredAt < current.relationshipOccurredAt || (event.occurredAt === current.relationshipOccurredAt && event.externalId <= (current.relationshipExternalId ?? "")))) {
+      return event.occurredAt === current.relationshipOccurredAt && event.externalId === current.relationshipExternalId ? "duplicate" : "stale";
+    }
+    const kindByStatus = { INSTALLED: "installed", UNINSTALLED: "uninstalled", DEACTIVATED: "deactivated", REACTIVATED: "reactivated" } as const;
+    const state = applyRelationshipEvent(current?.relationshipStatus ? { kind: kindByStatus[current.relationshipStatus], occurredAt: current.relationshipOccurredAt ?? 0, externalId: current.relationshipExternalId ?? "" } : null, { type: event.type, occurredAt: event.occurredAt, externalId: event.externalId });
+    await this.applyRelationship(event.shop, state, event.shopifyShopId);
+    return "applied";
+  }
   async get(shop: string): Promise<Shop | undefined> {
     const rows = await getDb()
       .select()
