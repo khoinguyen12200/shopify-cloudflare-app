@@ -1,9 +1,11 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, or, sql } from "drizzle-orm";
 import type { RelationshipEventType } from "~/domain/shop-lifecycle";
 import {
   shopifyEvents,
   shopifyRelationshipEvents,
   shopifySubscriptionEvents,
+  shopSubscriptionItems,
+  shops,
 } from "~/db/schema";
 import { getDb } from "~/request-context.server";
 
@@ -88,16 +90,15 @@ export class ShopifyEventRepo {
   }
 
   async recordPartnerRelationship(event: PartnerRelationshipEvent): Promise<"inserted" | "duplicate"> {
-    const result = await this.recordPartnerEvent(event);
-    if (result === "inserted") {
-      const { ShopRepo } = await import("./shops.server");
-      await new ShopRepo().upsertRelationshipProjection({
-        ...event,
-        externalId: event.id,
-        type: event.type,
-      });
-    }
-    return result;
+    const db = getDb();
+    const status = event.type;
+    const operational = event.type === "INSTALLED" || event.type === "REACTIVATED";
+    const [inserted] = await db.batch([
+      db.insert(shopifyEvents).values({ source: "partner_history", eventId: event.id, eventType: event.type, shop: event.shop, shopifyShopId: event.shopifyShopId, occurredAt: event.occurredAt, synchronizedAt: event.synchronizedAt }).onConflictDoNothing().returning({ eventId: shopifyEvents.eventId }),
+      db.insert(shopifyRelationshipEvents).values({ eventSource: "partner_history", eventId: event.id, reason: event.reason, reasonDescription: event.reasonDescription }).onConflictDoNothing(),
+      db.insert(shops).values({ shop: event.shop, shopifyShopId: event.shopifyShopId, installedAt: event.occurredAt, currentInstalledAt: operational ? event.occurredAt : null, uninstalledAt: operational ? null : event.occurredAt, relationshipStatus: status, relationshipOccurredAt: event.occurredAt, relationshipExternalId: event.id }).onConflictDoUpdate({ target: shops.shop, set: { shopifyShopId: event.shopifyShopId, relationshipStatus: status, relationshipOccurredAt: event.occurredAt, relationshipExternalId: event.id, currentInstalledAt: operational ? event.occurredAt : null, uninstalledAt: operational ? null : event.occurredAt }, where: or(sql`${shops.relationshipOccurredAt} < ${event.occurredAt}`, and(eq(shops.relationshipOccurredAt, event.occurredAt), sql`${shops.relationshipExternalId} < ${event.id}`)) }),
+    ]);
+    return inserted.length ? "inserted" : "duplicate";
   }
 
   async recordPartnerSubscription(event: PartnerSubscriptionEvent): Promise<"inserted" | "duplicate"> {
@@ -117,16 +118,8 @@ export class ShopifyEventRepo {
         priceAmount: event.price?.amount ?? null, priceCurrency: event.price?.currency ?? null,
       }).onConflictDoNothing(),
     ]);
-    if (inserted.length === 1) {
-      const { ShopSubscriptionRepo } = await import("./shop-subscriptions.server");
-      await new ShopSubscriptionRepo().upsertObservation(event.shop, {
-        subscriptionId: event.subscriptionId, type: event.type, status: event.status,
-        occurredAt: event.occurredAt, externalId: event.id,
-        planHandle: event.planHandle ?? null, billingInterval: event.billingInterval ?? null,
-        trialEndsAt: event.trialEndsAt ?? null, currentPeriodEndsAt: event.currentPeriodEndsAt ?? null,
-        cancellationEffectiveAt: event.cancellationEffectiveAt ?? null,
-        items: event.items,
-      });
+    if (inserted.length === 1 && event.items) {
+      await db.batch([db.delete(shopSubscriptionItems).where(and(eq(shopSubscriptionItems.shop, event.shop), eq(shopSubscriptionItems.subscriptionId, event.subscriptionId))), ...(event.items.length ? [db.insert(shopSubscriptionItems).values(event.items.map((item, position) => ({ shop: event.shop, subscriptionId: event.subscriptionId, position, itemType: item.itemType, priceAmount: item.priceAmount ?? null, priceCurrency: item.priceCurrency ?? null, cappedAmountAmount: item.cappedAmountAmount ?? null, cappedAmountCurrency: item.cappedAmountCurrency ?? null })))] : [])]);
     }
     return inserted.length === 1 ? "inserted" : "duplicate";
   }
