@@ -28,12 +28,6 @@ api_version = "2026-10"
   topics = [ "app/scopes_update" ]
   uri = "/webhooks/app/scopes_update"
 
-  # Keeps subscription_events current — see app/routes/webhooks/app/subscriptions-update.tsx
-  # and the internal console's Subscriptions page, which reads it.
-  [[webhooks.subscriptions]]
-  topics = [ "app_subscriptions/update" ]
-  uri = "/webhooks/app/subscriptions_update"
-
   # MANDATORY for every app distributed through the Shopify App Store — all
   # three topics, whether or not the app stores personal data. Missing or
   # non-functioning compliance webhooks are an automatic review rejection.
@@ -47,7 +41,7 @@ api_version = "2026-10"
 # https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 # Keep this minimal, and keep it in sync with shopify.app.dev.toml — a scope
 # that exists in only one env produces bugs that reproduce in only one env.
-scopes = "write_products"
+scopes = ""
 
 [auth]
 redirect_urls = [ "https://example.com/auth/callback" ]
