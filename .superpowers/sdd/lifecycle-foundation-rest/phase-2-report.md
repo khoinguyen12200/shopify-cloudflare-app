@@ -6,4 +6,6 @@ Implemented Partner relationship/subscription ledger writes, ordered projections
 
 Tests: `npx vitest run app/models/shopify-events.test.ts app/models/shops.test.ts app/models/shop-subscriptions.test.ts app/models/shop-sync-checkpoints.test.ts` (17 passed); `npm run typecheck`; `npm run lint`.
 
+Commit: `5c8bf7b feat: project Partner lifecycle events`.
+
 Concerns: projection and ledger writes are separate D1 operations after ledger insert; duplicate IDs never invoke projection. Full transaction orchestration remains for reconciliation phase.
