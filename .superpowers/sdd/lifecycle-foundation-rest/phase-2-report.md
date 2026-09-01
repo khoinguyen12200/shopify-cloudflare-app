@@ -8,4 +8,6 @@ Tests: `npx vitest run app/models/shopify-events.test.ts app/models/shops.test.t
 
 Commit: `5c8bf7b feat: project Partner lifecycle events`.
 
+Review fixes: `ddbf2fc fix: harden lifecycle projection persistence` adds duplicate repair, metadata preservation, item propagation, and stale-write guards.
+
 Concerns: projection and ledger writes are separate D1 operations after ledger insert; duplicate IDs never invoke projection. Full transaction orchestration remains for reconciliation phase.
