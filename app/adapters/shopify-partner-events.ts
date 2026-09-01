@@ -5,6 +5,18 @@ const relationshipTypes = {
   RELATIONSHIP_REACTIVATED: "REACTIVATED",
 } as const;
 
+type SubscriptionEvent = {
+  readonly kind: "subscription";
+  readonly id: string;
+  readonly occurredAt: string;
+  readonly shop: string;
+  readonly shopId: string;
+  readonly type: "CREATED" | "UPDATED" | "CANCELLATION_SCHEDULED" | "CANCELED" | "FROZEN" | "UNFROZEN";
+  readonly cancelEffectiveOn: string | null;
+  readonly planHandle: string | null;
+  readonly billingPeriod: string | null;
+};
+
 export type PartnerHistoryEvent =
   | {
       readonly kind: "relationship";
@@ -14,6 +26,7 @@ export type PartnerHistoryEvent =
       readonly shopId: string;
       readonly type: (typeof relationshipTypes)[keyof typeof relationshipTypes];
     }
+  | SubscriptionEvent
   | { readonly kind: "ignored"; readonly id: string };
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -35,12 +48,34 @@ export function parsePartnerEvent(value: unknown): PartnerHistoryEvent {
   const eventType = stringField(event, "eventType");
   if (!id || !eventType) throw new Error("Partner event omitted id or eventType");
 
-  if (!(eventType in relationshipTypes)) return { kind: "ignored", id };
-
   const occurredAt = stringField(event, "occurredAt");
   const shop = record(event.shop);
   const shopId = shop && stringField(shop, "id");
   const shopDomain = shop && stringField(shop, "myshopifyDomain");
+
+  if (eventType.startsWith("SUBSCRIPTION_")) {
+    const state = stringField(event, "subscriptionState") ?? stringField(event, "state");
+    const validState = state === "CREATED" || state === "UPDATED" || state === "CANCELLATION_SCHEDULED"
+      || state === "CANCELED" || state === "FROZEN" || state === "UNFROZEN";
+    if (!occurredAt || Number.isNaN(Date.parse(occurredAt)) || !shopId || !shopDomain || !state || !validState) {
+      throw new Error(`Partner subscription event ${id} omitted valid lifecycle fields`);
+    }
+    const plan = record(event.plan);
+    return {
+      kind: "subscription",
+      id,
+      occurredAt,
+      shop: shopDomain,
+      shopId,
+      type: state,
+      cancelEffectiveOn: stringField(event, "cancelEffectiveOn"),
+      planHandle: plan && stringField(plan, "handle"),
+      billingPeriod: plan && stringField(plan, "billingPeriod"),
+    };
+  }
+
+  if (!(eventType in relationshipTypes)) return { kind: "ignored", id };
+
   if (!occurredAt || Number.isNaN(Date.parse(occurredAt)) || !shopId || !shopDomain) {
     throw new Error(`Partner relationship event ${id} omitted valid lifecycle fields`);
   }
