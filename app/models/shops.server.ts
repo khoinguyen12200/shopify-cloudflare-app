@@ -1,6 +1,18 @@
 import { and, desc, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { getDb } from "~/request-context.server";
-import { shops, type Shop } from "~/db/schema";
+import {
+  shops,
+  shopGrantedScopes,
+  shopifyEvents,
+  shopifyRelationshipEvents,
+  shopifySubscriptionEvents,
+  shopScopeChangeItems,
+  shopScopeChanges,
+  shopSubscriptionItems,
+  shopSubscriptions,
+  type Shop,
+  webhookDeliveries,
+} from "~/db/schema";
 import {
   isOperationalRelationship,
   type RelationshipState,
@@ -51,12 +63,18 @@ export class ShopRepo {
    * The SQL conflict condition repeats its deterministic ordering key so two
    * workers cannot let a stale projection overwrite a newer one.
    */
-  async applyRelationship(shop: string, transition: RelationshipState): Promise<void> {
+  async applyRelationship(
+    shop: string,
+    transition: RelationshipState,
+    shopifyShopId: string,
+  ): Promise<void> {
     const isOperational = isOperationalRelationship(transition);
-    await getDb()
+    const db = getDb();
+    await db
       .insert(shops)
       .values({
         shop,
+        shopifyShopId,
         installedAt: transition.occurredAt,
         currentInstalledAt: isOperational ? transition.occurredAt : null,
         uninstalledAt: isOperational ? null : transition.occurredAt,
@@ -67,6 +85,7 @@ export class ShopRepo {
       .onConflictDoUpdate({
         target: shops.shop,
         set: {
+          shopifyShopId,
           currentInstalledAt: isOperational ? transition.occurredAt : null,
           uninstalledAt: isOperational ? null : transition.occurredAt,
           relationshipStatus: relationshipStatuses[transition.kind],
@@ -82,6 +101,15 @@ export class ShopRepo {
           ),
         ),
       });
+
+    // The current relationship is ordered by its latest event, but first
+    // installation is historical: a delayed older install must still repair it.
+    if (transition.kind === "installed") {
+      await db
+        .update(shops)
+        .set({ installedAt: sql`min(${shops.installedAt}, ${transition.occurredAt})` })
+        .where(eq(shops.shop, shop));
+    }
   }
 
   /** Every shop the app has ever seen, newest install first — the internal console's Shops list. */
@@ -107,10 +135,60 @@ export class ShopRepo {
    * forget is data you told Shopify you had erased.
    */
   async purge(shop: string): Promise<number> {
-    const deleted = await getDb()
-      .delete(shops)
-      .where(eq(shops.shop, shop))
-      .returning({ shop: shops.shop });
-    return deleted.length;
+    const db = getDb();
+    const deleted = await db.batch([
+      db
+        .delete(shopScopeChangeItems)
+        .where(sql`exists (
+          select 1 from ${shopScopeChanges}
+          where ${shopScopeChanges.id} = ${shopScopeChangeItems.scopeChangeId}
+            and ${shopScopeChanges.shop} = ${shop}
+        )`)
+        .returning({ id: shopScopeChangeItems.scopeChangeId }),
+      db
+        .delete(shopScopeChanges)
+        .where(eq(shopScopeChanges.shop, shop))
+        .returning({ id: shopScopeChanges.id }),
+      db
+        .delete(shopSubscriptionItems)
+        .where(eq(shopSubscriptionItems.shop, shop))
+        .returning({ subscriptionId: shopSubscriptionItems.subscriptionId }),
+      db
+        .delete(shopSubscriptions)
+        .where(eq(shopSubscriptions.shop, shop))
+        .returning({ subscriptionId: shopSubscriptions.subscriptionId }),
+      db
+        .delete(shopifyRelationshipEvents)
+        .where(sql`exists (
+          select 1 from ${shopifyEvents}
+          where ${shopifyEvents.source} = ${shopifyRelationshipEvents.eventSource}
+            and ${shopifyEvents.eventId} = ${shopifyRelationshipEvents.eventId}
+            and ${shopifyEvents.shop} = ${shop}
+        )`)
+        .returning({ eventId: shopifyRelationshipEvents.eventId }),
+      db
+        .delete(shopifySubscriptionEvents)
+        .where(sql`exists (
+          select 1 from ${shopifyEvents}
+          where ${shopifyEvents.source} = ${shopifySubscriptionEvents.eventSource}
+            and ${shopifyEvents.eventId} = ${shopifySubscriptionEvents.eventId}
+            and ${shopifyEvents.shop} = ${shop}
+        )`)
+        .returning({ eventId: shopifySubscriptionEvents.eventId }),
+      db
+        .delete(shopifyEvents)
+        .where(eq(shopifyEvents.shop, shop))
+        .returning({ eventId: shopifyEvents.eventId }),
+      db
+        .delete(shopGrantedScopes)
+        .where(eq(shopGrantedScopes.shop, shop))
+        .returning({ scope: shopGrantedScopes.scope }),
+      db
+        .delete(webhookDeliveries)
+        .where(eq(webhookDeliveries.shop, shop))
+        .returning({ id: webhookDeliveries.id }),
+      db.delete(shops).where(eq(shops.shop, shop)).returning({ shop: shops.shop }),
+    ]);
+    return deleted.reduce((total, rows) => total + rows.length, 0);
   }
 }

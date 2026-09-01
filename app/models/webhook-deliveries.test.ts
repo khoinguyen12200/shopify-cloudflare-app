@@ -90,6 +90,88 @@ describe("WebhookDeliveryRepo", () => {
     });
   });
 
+  it("grants processing to only one worker", async () => {
+    const claims = await inRequest(async () => {
+      const repo = new WebhookDeliveryRepo();
+      const input = delivery();
+      await repo.claim(input);
+      return [
+        await repo.markProcessing(input.shop, input.id, 1_700_000_000_200),
+        await repo.markProcessing(input.shop, input.id, 1_700_000_000_201),
+      ];
+    });
+
+    expect(claims).toEqual(["claimed", "unavailable"]);
+  });
+
+  it("does not reclaim a processed delivery", async () => {
+    const result = await inRequest(async () => {
+      const repo = new WebhookDeliveryRepo();
+      const input = delivery();
+      await repo.claim(input);
+      await repo.markProcessing(input.shop, input.id, 1_700_000_000_200);
+      await repo.markProcessed(input.shop, input.id, 1_700_000_000_300);
+      const retry = await repo.markProcessing(input.shop, input.id, 1_700_000_000_400);
+      return { retry, stored: await repo.get(input.shop, input.id) };
+    });
+
+    expect(result).toEqual({
+      retry: "unavailable",
+      stored: expect.objectContaining({
+        status: "processed",
+        attempts: 1,
+        processedAt: 1_700_000_000_300,
+      }),
+    });
+  });
+
+  it("does not let a stale failure overwrite a processed delivery", async () => {
+    const stored = await inRequest(async () => {
+      const repo = new WebhookDeliveryRepo();
+      const input = delivery();
+      await repo.claim(input);
+      await repo.markProcessing(input.shop, input.id, 1_700_000_000_200);
+      await repo.markProcessed(input.shop, input.id, 1_700_000_000_300);
+      await repo.markFailed(input.shop, input.id, {
+        failedAt: 1_700_000_000_400,
+        failureCode: "late_failure",
+        failureDetail: "A stale worker completed after the successful worker.",
+      });
+      return repo.get(input.shop, input.id);
+    });
+
+    expect(stored).toMatchObject({
+      status: "processed",
+      processedAt: 1_700_000_000_300,
+      failedAt: null,
+      failureCode: null,
+      failureDetail: null,
+    });
+  });
+
+  it("does not let a stale success overwrite a failed delivery", async () => {
+    const stored = await inRequest(async () => {
+      const repo = new WebhookDeliveryRepo();
+      const input = delivery();
+      await repo.claim(input);
+      await repo.markProcessing(input.shop, input.id, 1_700_000_000_200);
+      await repo.markFailed(input.shop, input.id, {
+        failedAt: 1_700_000_000_300,
+        failureCode: "processing_error",
+        failureDetail: "The worker failed while processing the delivery.",
+      });
+      await repo.markProcessed(input.shop, input.id, 1_700_000_000_400);
+      return repo.get(input.shop, input.id);
+    });
+
+    expect(stored).toMatchObject({
+      status: "failed",
+      processedAt: null,
+      failedAt: 1_700_000_000_300,
+      failureCode: "processing_error",
+    });
+  });
+
   it("does not expose a delivery through another shop's scope", async () => {
     const found = await inRequest(async () => {
       const repo = new WebhookDeliveryRepo();

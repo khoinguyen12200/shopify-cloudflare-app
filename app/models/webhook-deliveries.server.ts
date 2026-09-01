@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   type NewWebhookDelivery,
   type WebhookDelivery,
@@ -40,8 +40,12 @@ export class WebhookDeliveryRepo {
     return delivery;
   }
 
-  async markProcessing(shop: string, id: string, startedAt: number): Promise<void> {
-    await getDb()
+  async markProcessing(
+    shop: string,
+    id: string,
+    startedAt: number,
+  ): Promise<"claimed" | "unavailable"> {
+    const claimed = await getDb()
       .update(webhookDeliveries)
       .set({
         status: "processing",
@@ -52,14 +56,28 @@ export class WebhookDeliveryRepo {
         failureCode: null,
         failureDetail: null,
       })
-      .where(and(eq(webhookDeliveries.shop, shop), eq(webhookDeliveries.id, id)));
+      .where(
+        and(
+          eq(webhookDeliveries.shop, shop),
+          eq(webhookDeliveries.id, id),
+          inArray(webhookDeliveries.status, ["received", "queued", "failed"]),
+        ),
+      )
+      .returning({ id: webhookDeliveries.id });
+    return claimed.length === 1 ? "claimed" : "unavailable";
   }
 
   async markProcessed(shop: string, id: string, processedAt: number): Promise<void> {
     await getDb()
       .update(webhookDeliveries)
       .set({ status: "processed", processedAt })
-      .where(and(eq(webhookDeliveries.shop, shop), eq(webhookDeliveries.id, id)));
+      .where(
+        and(
+          eq(webhookDeliveries.shop, shop),
+          eq(webhookDeliveries.id, id),
+          eq(webhookDeliveries.status, "processing"),
+        ),
+      );
   }
 
   async markFailed(
@@ -79,6 +97,12 @@ export class WebhookDeliveryRepo {
         failureCode: failure.failureCode,
         failureDetail: failure.failureDetail,
       })
-      .where(and(eq(webhookDeliveries.shop, shop), eq(webhookDeliveries.id, id)));
+      .where(
+        and(
+          eq(webhookDeliveries.shop, shop),
+          eq(webhookDeliveries.id, id),
+          eq(webhookDeliveries.status, "processing"),
+        ),
+      );
   }
 }
