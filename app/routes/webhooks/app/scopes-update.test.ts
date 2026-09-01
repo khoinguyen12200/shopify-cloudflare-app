@@ -4,9 +4,13 @@ import { RouterContextProvider } from "react-router";
 import { runWithRequestContext } from "~/request-context.server";
 import { KVSessionStorage } from "~/session-storage.server";
 import { offlineSession, signedWebhookRequest } from "~/test/factories";
+import { setupTestDatabase } from "~/test/db";
+import { WebhookDeliveryRepo } from "~/models/webhook-deliveries.server";
 import { action } from "./scopes-update";
 
 const WEBHOOK_URL = "https://example.test/webhooks/app/scopes_update";
+
+setupTestDatabase();
 
 function post(request: Request) {
   return runWithRequestContext(env, () =>
@@ -33,7 +37,7 @@ describe("app/scopes_update webhook", () => {
     await expect(post(request)).rejects.toMatchObject({ status: 401 });
   });
 
-  it("updates the stored session's scope from the payload's current list", async () => {
+  it("durably queues the normalized scope observation", async () => {
     const shop = "scopes-update.myshopify.com";
     const storage = new KVSessionStorage(env.SESSION);
     await storage.storeSession(offlineSession(shop, { scope: "read_products" }));
@@ -48,8 +52,10 @@ describe("app/scopes_update webhook", () => {
     const response = await post(request);
     expect(response.status).toBe(200);
 
-    const stored = await storage.loadSession(`offline_${shop}`);
-    expect(stored?.scope).toBe("read_products,write_products");
+    const delivery = await runWithRequestContext(env, () =>
+      new WebhookDeliveryRepo().get(shop, "webhook-id-1"),
+    );
+    expect(delivery?.status).toBe("queued");
   });
 
   it("leaves the stored session untouched when the payload is malformed", async () => {
@@ -66,8 +72,7 @@ describe("app/scopes_update webhook", () => {
       payload: { updated_at: "2024-10-01T00:00:00.000Z" },
     });
 
-    const response = await post(request);
-    expect(response.status).toBe(200);
+    await expect(post(request)).rejects.toMatchObject({ status: 400 });
 
     const stored = await storage.loadSession(`offline_${shop}`);
     expect(stored?.scope).toBe("read_products");

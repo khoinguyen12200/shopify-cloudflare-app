@@ -3,7 +3,7 @@ import { env } from "cloudflare:test";
 import { RouterContextProvider } from "react-router";
 import { runWithRequestContext } from "~/request-context.server";
 import { setupTestDatabase } from "~/test/db";
-import { ShopRepo } from "~/models/shops.server";
+import { WebhookDeliveryRepo } from "~/models/webhook-deliveries.server";
 import { KVSessionStorage } from "~/session-storage.server";
 import { offlineSession, signedWebhookRequest } from "~/test/factories";
 import { action } from "./uninstalled";
@@ -41,11 +41,10 @@ describe("app/uninstalled webhook", () => {
     await expect(post(request)).rejects.toMatchObject({ status: 401 });
   });
 
-  it("records the uninstall and deletes the shop's stored session", async () => {
+  it("durably queues uninstall work even when the shop session exists", async () => {
     const shop = "uninstalled.myshopify.com";
     const storage = new KVSessionStorage(env.SESSION);
     await inRequest(async () => {
-      await new ShopRepo().recordInstall(shop, 1);
       await storage.storeSession(offlineSession(shop));
     });
 
@@ -58,15 +57,13 @@ describe("app/uninstalled webhook", () => {
     const response = await post(request);
     expect(response.status).toBe(200);
 
-    const record = await inRequest(() => new ShopRepo().get(shop));
-    expect(record?.uninstalledAt).not.toBeNull();
-    expect(await storage.loadSession(`offline_${shop}`)).toBeUndefined();
+    const delivery = await inRequest(() => new WebhookDeliveryRepo().get(shop, "webhook-id-1"));
+    expect(delivery?.status).toBe("queued");
   });
 
   it("is idempotent — a replayed delivery is a no-op, not an error", async () => {
     const shop = "replayed-uninstall.myshopify.com";
     await inRequest(async () => {
-      await new ShopRepo().recordInstall(shop, 1);
       await new KVSessionStorage(env.SESSION).storeSession(offlineSession(shop));
     });
 

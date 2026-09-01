@@ -90,6 +90,18 @@ describe("WebhookDeliveryRepo", () => {
     });
   });
 
+  it("marks a claimed delivery as queued before a worker handles it", async () => {
+    const stored = await inRequest(async () => {
+      const repo = new WebhookDeliveryRepo();
+      const input = delivery();
+      await repo.claim(input);
+      await repo.markQueued(input.shop, input.id);
+      return repo.get(input.shop, input.id);
+    });
+
+    expect(stored).toMatchObject({ status: "queued" });
+  });
+
   it("grants processing to only one worker", async () => {
     const claims = await inRequest(async () => {
       const repo = new WebhookDeliveryRepo();

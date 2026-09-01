@@ -5,6 +5,14 @@ import {
 } from "react-router";
 import { runWithRequestContext } from "../app/request-context.server";
 import { runScheduledSweeps } from "../app/services/scheduled.server";
+import { WebhookDeliveryRepo } from "../app/models/webhook-deliveries.server";
+import { WebhookScopeObservationRepo } from "../app/models/webhook-scope-observations.server";
+import { ShopRepo } from "../app/models/shops.server";
+import { KVSessionStorage } from "../app/session-storage.server";
+import {
+  consumeWebhook,
+  isQueuedWebhook,
+} from "../app/services/webhook-consumer";
 
 /**
  * With `future.v8_middleware`, a loader/action's `context` is a
@@ -34,14 +42,47 @@ export default {
     });
   },
 
-  /**
-   * Cron (wrangler.jsonc `triggers.crons`). Wrapped in the request context so
-   * getEnv()/getDb() resolve here exactly as they do in `fetch`.
-   *
-   * Add a `queue` handler the same way when a consumer appears — work longer
-   * than ~30s belongs on a Queue, never in waitUntil.
-   */
+  /** Cron work shares the request context used by HTTP routes. */
   async scheduled(_controller, env) {
     await runWithRequestContext(env, () => runScheduledSweeps(Date.now()));
+  },
+
+  async queue(batch, env) {
+    await runWithRequestContext(env, async () => {
+      for (const message of batch.messages) {
+        if (!isQueuedWebhook(message.body)) {
+          console.error(JSON.stringify({ event: "webhook.invalid_queue_message" }));
+          message.ack();
+          continue;
+        }
+        const work = message.body;
+        try {
+          await consumeWebhook({
+            deliveries: new WebhookDeliveryRepo(),
+            now: Date.now,
+            handlers: {
+              "app/uninstalled": async (delivery) => {
+                await new ShopRepo().recordUninstall(delivery.shop, Date.now());
+                const sessions = await new KVSessionStorage(env.SESSION).findSessionsByShop(delivery.shop);
+                await new KVSessionStorage(env.SESSION).deleteSessions(sessions.map((session) => session.id));
+              },
+              "app/scopes_update": async (delivery) => {
+                const storage = new KVSessionStorage(env.SESSION);
+                const scopes = await new WebhookScopeObservationRepo().list(delivery.id, delivery.shop);
+                const sessions = await storage.findSessionsByShop(delivery.shop);
+                await Promise.all(sessions.map(async (session) => {
+                  session.scope = scopes.join(",");
+                  await storage.storeSession(session);
+                }));
+              },
+            },
+          }, work);
+          message.ack();
+        } catch (error) {
+          console.error(JSON.stringify({ event: "webhook.consumer_failed", id: work.id, error: error instanceof Error ? error.message : String(error) }));
+          message.retry();
+        }
+      }
+    });
   },
 } satisfies ExportedHandler<Env>;

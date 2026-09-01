@@ -44,6 +44,22 @@ export const webhookDeliveries = sqliteTable(
 export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
 export type NewWebhookDelivery = typeof webhookDeliveries.$inferInsert;
 
+/** Normalized values needed by a queued scope-update consumer; never raw JSON. */
+export const webhookScopeObservations = sqliteTable(
+  "webhook_scope_observations",
+  {
+    deliveryId: text("delivery_id")
+      .notNull()
+      .references(() => webhookDeliveries.id, { onDelete: "cascade" }),
+    shop: text("shop").notNull(),
+    scope: text("scope").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.deliveryId, table.scope] }),
+    index("webhook_scope_observations_shop_idx").on(table.shop),
+  ],
+);
+
 /** Immutable facts observed from Shopify, not the transport attempts that carried them. */
 export const shopifyEvents = sqliteTable(
   "shopify_events",

@@ -40,6 +40,20 @@ export class WebhookDeliveryRepo {
     return delivery;
   }
 
+  /** The worker is not allowed to claim a delivery until its queue handoff succeeded. */
+  async markQueued(shop: string, id: string): Promise<void> {
+    await getDb()
+      .update(webhookDeliveries)
+      .set({ status: "queued" })
+      .where(
+        and(
+          eq(webhookDeliveries.shop, shop),
+          eq(webhookDeliveries.id, id),
+          eq(webhookDeliveries.status, "received"),
+        ),
+      );
+  }
+
   async markProcessing(
     shop: string,
     id: string,

@@ -19,6 +19,18 @@
   // that expired long ago; add your own sweeps to the same handler.
   "triggers": { "crons": ["30 3 * * *"] },
 
+  // Authenticated Shopify webhooks are acknowledged only after their durable
+  // inbox row and Queue handoff succeed. The DLQ preserves exhausted work for
+  // operator inspection instead of silently losing lifecycle changes.
+  "queues": {
+    "producers": [{ "binding": "WEBHOOK_QUEUE", "queue": "shopify-webhooks" }],
+    "consumers": [{
+      "queue": "shopify-webhooks",
+      "max_retries": 8,
+      "dead_letter_queue": "shopify-webhooks-dlq"
+    }]
+  },
+
   // ─────────────────────────── LOCAL DEV + TESTS ───────────────────────────
   // This top-level config is for Miniflare (`npm run dev`, vitest) only.
   // Miniflare simulates each binding by its NAME and ignores the ids below, so
@@ -131,6 +143,14 @@
   "env": {
     "production": {
       "observability": { "enabled": true },
+      "queues": {
+        "producers": [{ "binding": "WEBHOOK_QUEUE", "queue": "shopify-webhooks-prod" }],
+        "consumers": [{
+          "queue": "shopify-webhooks-prod",
+          "max_retries": 8,
+          "dead_letter_queue": "shopify-webhooks-dlq-prod"
+        }]
+      },
       "kv_namespaces": [
         // Replace with the real id: `wrangler kv namespace create SESSION`
         { "binding": "SESSION", "id": "REPLACE_ME" }
