@@ -19,6 +19,15 @@ export type SubscriptionObservationInput = SubscriptionObservation & {
   }[];
 };
 
+export interface CurrentSubscriptionProjection {
+  readonly shop: string;
+  readonly status: SubscriptionStatus;
+  readonly billingInterval: string | null;
+  readonly priceAmount: number | null;
+  readonly priceCurrency: string | null;
+  readonly planHandle: string | null;
+}
+
 const statusByKind: Record<string, SubscriptionStatus> = {
   none: "NONE", pending: "PENDING", active: "ACTIVE", cancellation_scheduled: "CANCELLATION_SCHEDULED",
   frozen: "FROZEN", canceled: "CANCELED", unknown: "UNKNOWN",
@@ -28,6 +37,36 @@ const kindByStatus: Record<SubscriptionStatus, "none" | "pending" | "active" | "
 };
 
 export class ShopSubscriptionRepo {
+  async currentForShop(shop: string): Promise<CurrentSubscriptionProjection | undefined> {
+    const rows = await getDb().select({
+      shop: shopSubscriptions.shop,
+      status: shopSubscriptions.status,
+      billingInterval: shopSubscriptions.billingInterval,
+      planHandle: shopSubscriptions.planHandle,
+      priceAmount: shopSubscriptionItems.priceAmount,
+      priceCurrency: shopSubscriptionItems.priceCurrency,
+    }).from(shopSubscriptions).leftJoin(shopSubscriptionItems, and(
+      eq(shopSubscriptionItems.shop, shopSubscriptions.shop),
+      eq(shopSubscriptionItems.subscriptionId, shopSubscriptions.subscriptionId),
+    )).where(eq(shopSubscriptions.shop, shop)).orderBy(shopSubscriptionItems.position);
+    return rows[0];
+  }
+
+  async listCurrent(): Promise<CurrentSubscriptionProjection[]> {
+    const rows = await getDb().select({
+      shop: shopSubscriptions.shop,
+      status: shopSubscriptions.status,
+      billingInterval: shopSubscriptions.billingInterval,
+      planHandle: shopSubscriptions.planHandle,
+      priceAmount: shopSubscriptionItems.priceAmount,
+      priceCurrency: shopSubscriptionItems.priceCurrency,
+    }).from(shopSubscriptions).leftJoin(shopSubscriptionItems, and(
+      eq(shopSubscriptionItems.shop, shopSubscriptions.shop),
+      eq(shopSubscriptionItems.subscriptionId, shopSubscriptions.subscriptionId),
+    )).orderBy(shopSubscriptionItems.position);
+    return rows;
+  }
+
   async get(shop: string, subscriptionId: string) {
     const [row] = await getDb().select().from(shopSubscriptions).where(and(eq(shopSubscriptions.shop, shop), eq(shopSubscriptions.subscriptionId, subscriptionId))).limit(1);
     return row;

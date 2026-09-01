@@ -7,29 +7,24 @@ import {
   type RouteObject,
 } from "react-router";
 import Subscriptions from "./subscriptions";
-import type { SubscriptionEvent } from "~/db/schema";
+import type { SubscriptionHistoryRow } from "~/models/shopify-events.server";
 
-function event(overrides: Partial<SubscriptionEvent> = {}): SubscriptionEvent {
+function event(overrides: Partial<SubscriptionHistoryRow> = {}): SubscriptionHistoryRow {
   return {
     id: "evt-1",
     shop: "example.myshopify.com",
     subscriptionId: "gid://shopify/AppSubscription/1",
-    name: "TODO:PRO",
     status: "ACTIVE",
     planHandle: "todo-pro",
-    interval: "every_30_days",
+    billingInterval: "EVERY_30_DAYS",
     priceAmount: 1900,
     priceCurrency: "USD",
-    cappedAmountAmount: null,
-    cappedAmountCurrency: null,
-    shopifyCreatedAt: 1_700_000_000_000,
-    shopifyUpdatedAt: 1_700_000_000_000,
-    receivedAt: 1_700_000_001_000,
+    occurredAt: 1_700_000_000_000,
     ...overrides,
   };
 }
 
-async function render(events: SubscriptionEvent[]) {
+async function render(events: SubscriptionHistoryRow[]) {
   const routes: RouteObject[] = [
     {
       path: "/internal/subscriptions",
@@ -61,7 +56,7 @@ describe("the internal subscriptions page", () => {
   it("shows the shop, plan, and status for each event", async () => {
     const html = await render([event()]);
     expect(html).toContain("example.myshopify.com");
-    expect(html).toContain("TODO:PRO");
+    expect(html).toContain("todo-pro");
     expect(html).toContain("Active");
   });
 
@@ -71,24 +66,24 @@ describe("the internal subscriptions page", () => {
   });
 
   it("renders every documented status with a real label", async () => {
-    const statuses: SubscriptionEvent["status"][] = [
+    const statuses: SubscriptionHistoryRow["status"][] = [
       "ACTIVE",
-      "CANCELLED",
+      "CANCELLATION_SCHEDULED",
+      "CANCELED",
+      "NONE",
       "PENDING",
-      "DECLINED",
-      "EXPIRED",
       "FROZEN",
-      "ACCEPTED",
+      "UNKNOWN",
     ];
     const html = await render(statuses.map((status, i) => event({ id: `evt-${i}`, status })));
     for (const label of [
       "Active",
-      "Cancelled",
-      "Pending approval",
-      "Declined",
-      "Expired",
+      "Cancellation scheduled",
+      "Canceled",
+      "Free",
+      "Pending",
       "Frozen",
-      "Accepted",
+      "Unknown",
     ]) {
       expect(html, label).toContain(label);
     }

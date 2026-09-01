@@ -50,4 +50,22 @@ describe("ShopSubscriptionRepo", () => {
     });
     expect(row).toMatchObject({ planHandle: "pro", billingInterval: "EVERY_30_DAYS" });
   });
+
+  it("returns every recurring pricing item for a current subscription", async () => {
+    const rows = await inRequest(async () => {
+      const repo = new ShopSubscriptionRepo();
+      await repo.upsertObservation("items.myshopify.com", {
+        type: "CREATED", status: "ACTIVE", subscriptionId: "sub-1", occurredAt: 1, externalId: "evt-1",
+        items: [
+          { itemType: "base", priceAmount: 1900, priceCurrency: "USD" },
+          { itemType: "usage", priceAmount: 500, priceCurrency: "USD" },
+        ],
+      });
+      return repo.listCurrent();
+    });
+    expect(rows).toMatchObject([
+      { shop: "items.myshopify.com", priceAmount: 1900, priceCurrency: "USD" },
+      { shop: "items.myshopify.com", priceAmount: 500, priceCurrency: "USD" },
+    ]);
+  });
 });

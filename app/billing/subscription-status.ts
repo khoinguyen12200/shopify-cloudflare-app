@@ -1,5 +1,5 @@
 import { currencyDecimals, fromDecimalString, toCurrency, type Money } from "~/money";
-import type { SubscriptionStatus } from "~/db/schema";
+export type SubscriptionStatus = "ACTIVE" | "CANCELLED" | "PENDING" | "DECLINED" | "EXPIRED" | "FROZEN" | "ACCEPTED";
 
 /** The parts of `billing.check()`'s `AppSubscription` this module actually reads. */
 export interface AppSubscriptionLike {

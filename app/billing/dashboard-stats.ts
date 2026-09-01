@@ -1,6 +1,16 @@
-import { applyRate, sum, toCurrency, type Money } from "~/money";
-import { storedEventPrice } from "./subscription-event";
-import type { Shop, SubscriptionEvent, SubscriptionStatus } from "~/db/schema";
+import { applyRate, fromMinorUnits, sum, toCurrency, type Money } from "~/money";
+import type { Shop } from "~/db/schema";
+import type { SubscriptionStatus } from "~/domain/subscription-lifecycle";
+import { isOperationalRelationship } from "~/domain/shop-lifecycle";
+
+export interface BillingProjection {
+  readonly shop: string;
+  readonly relationshipStatus: Shop["relationshipStatus"];
+  readonly subscriptionStatus: SubscriptionStatus | null;
+  readonly billingInterval: string | null;
+  readonly priceAmount: number | null;
+  readonly priceCurrency: string | null;
+}
 
 export interface BillingStats {
   readonly totalShops: number;
@@ -14,36 +24,42 @@ export interface BillingStats {
   readonly mrrByCurrency: readonly Money[];
 }
 
-const PAID_STATUSES: ReadonlySet<SubscriptionStatus> = new Set(["ACTIVE", "ACCEPTED"]);
+const PAID_STATUSES: ReadonlySet<SubscriptionStatus> = new Set(["ACTIVE", "CANCELLATION_SCHEDULED"]);
 
 /** An annual charge's monthly equivalent, for a like-for-like MRR figure. */
-function monthlyEquivalent(event: SubscriptionEvent): Money | null {
-  const price = storedEventPrice(event);
-  if (event.interval !== "annual") return price;
+function monthlyEquivalent(projection: BillingProjection): Money | null {
+  if (projection.priceAmount === null || projection.priceCurrency === null) return null;
+  const currency = toCurrency(projection.priceCurrency);
+  if (!currency.ok) return null;
+  const priceResult = fromMinorUnits(projection.priceAmount, currency.value);
+  if (!priceResult.ok) return null;
+  const price = priceResult.value;
+  const interval = projection.billingInterval?.toUpperCase();
+  if (interval !== "ANNUAL" && interval !== "YEAR") return price;
   const monthly = applyRate(price, 1 / 12, "half_away_from_zero");
   return monthly.ok ? monthly.value : null;
 }
 
 /**
- * The dashboard's own numbers, derived from the shops table and each shop's
- * latest subscription event — never a live Shopify call (@rules/data.md:
- * this is decoration, and decoration degrades, but it should not cost a
- * round-trip on every dashboard load either).
+ * Dashboard numbers derived from relationship and current subscription projections.
  */
-export function computeBillingStats(
-  shops: readonly Shop[],
-  latestPerShop: ReadonlyMap<string, SubscriptionEvent>,
-): BillingStats {
+export function computeBillingStats(projections: readonly BillingProjection[]): BillingStats {
   const monthlyByCurrency = new Map<string, Money[]>();
-  let paidShops = 0;
+  const paidShops = new Set<string>();
+  const shops = new Set(projections.map((projection) => projection.shop));
 
-  for (const shop of shops) {
-    if (shop.uninstalledAt !== null) continue;
-    const latest = latestPerShop.get(shop.shop);
-    if (!latest || !PAID_STATUSES.has(latest.status)) continue;
-    paidShops += 1;
+  for (const projection of projections) {
+    if (!isOperationalRelationship(projection.relationshipStatus ? {
+      kind: projection.relationshipStatus === "INSTALLED" || projection.relationshipStatus === "REACTIVATED"
+        ? projection.relationshipStatus === "INSTALLED" ? "installed" : "reactivated"
+        : projection.relationshipStatus === "UNINSTALLED" ? "uninstalled" : "deactivated",
+      occurredAt: 0,
+      externalId: "",
+    } : null)) continue;
+    if (!projection.subscriptionStatus || !PAID_STATUSES.has(projection.subscriptionStatus)) continue;
+    paidShops.add(projection.shop);
 
-    const monthly = monthlyEquivalent(latest);
+    const monthly = monthlyEquivalent(projection);
     if (!monthly) continue; // Malformed arithmetic degrades this one figure, not the page.
     const bucket = monthlyByCurrency.get(monthly.currency) ?? [];
     bucket.push(monthly);
@@ -59,9 +75,9 @@ export function computeBillingStats(
   }
 
   return {
-    totalShops: shops.length,
-    paidShops,
-    freeShops: shops.length - paidShops,
+    totalShops: shops.size,
+    paidShops: paidShops.size,
+    freeShops: shops.size - paidShops.size,
     mrrByCurrency,
   };
 }

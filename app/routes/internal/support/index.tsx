@@ -21,7 +21,8 @@ import { LifeBuoy } from "lucide-react";
 import { requireAdminUser } from "~/services/admin-auth.server";
 import { AdminUserRepo } from "~/models/admin-users.server";
 import { SupportService } from "~/services/support.server";
-import { SubscriptionEventRepo } from "~/models/subscription-events.server";
+import { ShopSubscriptionRepo } from "~/models/shop-subscriptions.server";
+import { planForShopifyHandle } from "~/billing/plans";
 import { isUnreadFor, statusOf, type SupportStatus } from "~/support/status";
 import { CATEGORY_LABEL_EN } from "~/support/categories";
 import { formatDateTime } from "~/i18n/format";
@@ -30,24 +31,22 @@ import type { Locale } from "~/i18n/config";
 /** The internal console is staff-only and English-only — no i18n here. */
 const LOCALE: Locale = "en";
 
-const PAID_STATUSES = new Set(["ACTIVE", "ACCEPTED"]);
+const PAID_STATUSES = new Set(["ACTIVE", "CANCELLATION_SCHEDULED"]);
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const actor = await requireAdminUser(request);
 
-  const [tickets, latestPerShop] = await Promise.all([
+  const [tickets, currentSubscriptions] = await Promise.all([
     new SupportService().listOpenForStaff(),
-    // Plan context, joined in memory from ONE query — neither reference app
-    // shows this, and it is what makes a billing question answerable without
-    // opening a second screen.
-    new SubscriptionEventRepo().latestPerShop(),
+    new ShopSubscriptionRepo().listCurrent(),
   ]);
+  const currentByShop = new Map(currentSubscriptions.map((subscription) => [subscription.shop, subscription]));
 
   return {
     notifySupport: actor.notifySupport,
     tickets: tickets.map((ticket) => {
-      const latest = latestPerShop.get(ticket.shop);
-      const paid = latest && PAID_STATUSES.has(latest.status) ? latest : undefined;
+      const current = currentByShop.get(ticket.shop);
+      const paid = current && PAID_STATUSES.has(current.status) ? current : undefined;
       return {
         id: ticket.id,
         shop: ticket.shop,
@@ -56,7 +55,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         category: ticket.category,
         status: statusOf(ticket),
         lastMessageAt: ticket.lastMessageAt,
-        planName: paid?.name ?? "Free",
+        planName: planForShopifyHandle(paid?.planHandle)?.name ?? (paid?.planHandle ?? "Free"),
         unread: isUnreadFor({
           lastMessageAt: ticket.lastMessageAt,
           lastReadAt: ticket.staffLastReadAt,

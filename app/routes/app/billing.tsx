@@ -15,7 +15,7 @@ import { pricingPlansUrl } from "~/billing/pricing-plans-url";
 import { FEATURED_PLAN_KEY, PLANS, PLAN_LIST } from "~/billing/plans";
 import { refreshShopSubscription } from "~/wiring.server";
 import { PlanCard, PLAN_CARD_CSS } from "~/components/billing/PlanCard";
-import type { SubscriptionStatus } from "~/db/schema";
+import type { SubscriptionStatus } from "~/billing/subscription-status";
 
 type Subscribed = Extract<BillingStatus, { kind: "subscribed" }>;
 
@@ -55,7 +55,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   // Shopify owns the actual subscribe/upgrade/cancel flow (Managed Pricing);
   // this page only ever reads status. There's no in-app request()/cancel() —
-  // see app/routes/webhooks/app/subscriptions-update.tsx for how changes made
+  // Partner subscription history projects entitlement changes.
   // on Shopify's hosted page reach this app.
   const check = await billing.check();
   const status = resolveBillingStatus(check, Date.now());

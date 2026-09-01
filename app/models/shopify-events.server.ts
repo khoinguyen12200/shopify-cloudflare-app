@@ -40,12 +40,58 @@ export interface PartnerSubscriptionEvent {
   readonly items?: readonly { readonly itemType: string; readonly priceAmount?: number | null; readonly priceCurrency?: string | null; readonly cappedAmountAmount?: number | null; readonly cappedAmountCurrency?: string | null }[];
 }
 
+export interface SubscriptionHistoryRow {
+  readonly id: string;
+  readonly shop: string;
+  readonly subscriptionId: string;
+  readonly status: import("~/domain/subscription-lifecycle").SubscriptionStatus;
+  readonly planHandle: string | null;
+  readonly billingInterval: string | null;
+  readonly priceAmount: number | null;
+  readonly priceCurrency: string | null;
+  readonly occurredAt: number;
+}
+
 /**
  * The sole D1 adapter for Shopify's immutable business-event history.
  * `partner_history` is part of the composite key because event identity is
  * guaranteed within the source that issued it.
  */
 export class ShopifyEventRepo {
+  async listSubscriptionEvents(shop: string): Promise<SubscriptionHistoryRow[]> {
+    return getDb().select({
+      id: shopifyEvents.eventId,
+      shop: shopifyEvents.shop,
+      subscriptionId: shopifySubscriptionEvents.subscriptionId,
+      status: shopifySubscriptionEvents.status,
+      planHandle: shopifySubscriptionEvents.planHandle,
+      billingInterval: shopifySubscriptionEvents.billingInterval,
+      priceAmount: shopifySubscriptionEvents.priceAmount,
+      priceCurrency: shopifySubscriptionEvents.priceCurrency,
+      occurredAt: shopifyEvents.occurredAt,
+    }).from(shopifyEvents).innerJoin(shopifySubscriptionEvents, and(
+      eq(shopifySubscriptionEvents.eventSource, shopifyEvents.source),
+      eq(shopifySubscriptionEvents.eventId, shopifyEvents.eventId),
+    )).where(and(eq(shopifyEvents.shop, shop), eq(shopifyEvents.source, "partner_history"))).orderBy(desc(shopifyEvents.occurredAt));
+  }
+
+  async listRecentSubscriptionEvents(limit: number): Promise<SubscriptionHistoryRow[]> {
+    return getDb().select({
+      id: shopifyEvents.eventId,
+      shop: shopifyEvents.shop,
+      subscriptionId: shopifySubscriptionEvents.subscriptionId,
+      status: shopifySubscriptionEvents.status,
+      planHandle: shopifySubscriptionEvents.planHandle,
+      billingInterval: shopifySubscriptionEvents.billingInterval,
+      priceAmount: shopifySubscriptionEvents.priceAmount,
+      priceCurrency: shopifySubscriptionEvents.priceCurrency,
+      occurredAt: shopifyEvents.occurredAt,
+    }).from(shopifyEvents).innerJoin(shopifySubscriptionEvents, and(
+      eq(shopifySubscriptionEvents.eventSource, shopifyEvents.source),
+      eq(shopifySubscriptionEvents.eventId, shopifyEvents.eventId),
+    )).where(eq(shopifyEvents.source, "partner_history")).orderBy(desc(shopifyEvents.occurredAt)).limit(limit);
+  }
+
   async recordAndProject(event: PartnerRelationshipEvent | PartnerSubscriptionEvent): Promise<"inserted" | "duplicate"> {
     return "subscriptionId" in event ? this.recordPartnerSubscription(event) : this.recordPartnerRelationship(event);
   }

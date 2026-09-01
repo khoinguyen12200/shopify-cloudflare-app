@@ -34,9 +34,8 @@ export interface Plan {
   readonly featureKeys: readonly PlanFeatureKey[];
   /**
    * The Managed Pricing plan handle, once you've configured this plan in the
-   * Partner/Dev Dashboard — TODO. Until then this is a placeholder and will
-   * never match a real `plan_handle` on an incoming
-   * `app_subscriptions/update` webhook (see app/routes/webhooks/app/subscriptions-update.tsx).
+   * Partner/Dev Dashboard — TODO. Until then this placeholder never matches
+   * an incoming Managed Pricing projection.
    * `null` for the free plan: there is no Shopify subscription behind it.
    */
   readonly shopifyPlanHandle: string | null;

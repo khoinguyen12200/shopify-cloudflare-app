@@ -15,34 +15,42 @@ import {
 } from "ngk-dashboard";
 import { requireAdminUser } from "~/services/admin-auth.server";
 import { ShopRepo } from "~/models/shops.server";
-import { SubscriptionEventRepo } from "~/models/subscription-events.server";
-import { storedEventPrice } from "~/billing/subscription-event";
+import { ShopifyEventRepo } from "~/models/shopify-events.server";
+import { planForShopifyHandle } from "~/billing/plans";
 import { formatDateTime } from "~/i18n/format";
-import { formatMoney } from "~/money";
+import { formatMoney, fromMinorUnits, toCurrency } from "~/money";
 import type { Locale } from "~/i18n/config";
-import type { SubscriptionStatus } from "~/db/schema";
+import type { SubscriptionStatus } from "~/domain/subscription-lifecycle";
 
 /** The internal console is staff-only and English-only — no i18n here. */
 const LOCALE: Locale = "en";
 
+function displayMoney(amount: number | null, currency: string | null): string {
+  if (amount === null || currency === null) return "—";
+  const code = toCurrency(currency);
+  if (!code.ok) return "—";
+  const money = fromMinorUnits(amount, code.value);
+  return money.ok ? formatMoney(LOCALE, money.value) : "—";
+}
+
 const STATUS_LABEL: Record<SubscriptionStatus, string> = {
   ACTIVE: "Active",
-  ACCEPTED: "Accepted",
-  PENDING: "Pending approval",
+  CANCELLATION_SCHEDULED: "Cancellation scheduled",
+  CANCELED: "Canceled",
+  NONE: "Free",
+  UNKNOWN: "Unknown",
+  PENDING: "Pending",
   FROZEN: "Frozen",
-  CANCELLED: "Cancelled",
-  DECLINED: "Declined",
-  EXPIRED: "Expired",
 };
 
 const STATUS_TONE: Record<SubscriptionStatus, "success" | "warning" | "destructive" | "outline"> = {
   ACTIVE: "success",
-  ACCEPTED: "success",
+  CANCELLATION_SCHEDULED: "warning",
+  CANCELED: "destructive",
+  NONE: "outline",
+  UNKNOWN: "outline",
   PENDING: "warning",
   FROZEN: "warning",
-  CANCELLED: "destructive",
-  DECLINED: "destructive",
-  EXPIRED: "outline",
 };
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
@@ -52,7 +60,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const shop = await new ShopRepo().get(shopDomain);
   if (!shop) throw new Response("Not found", { status: 404 });
 
-  const history = await new SubscriptionEventRepo().listForShop(shopDomain);
+  const history = await new ShopifyEventRepo().listSubscriptionEvents(shopDomain);
 
   return { shop, history };
 };
@@ -113,17 +121,17 @@ export default function ShopDetail() {
                 ) : (
                   history.map((event) => (
                     <TableRow key={event.id}>
-                      <TableCell className="font-medium">{event.name}</TableCell>
+                      <TableCell className="font-medium">{planForShopifyHandle(event.planHandle)?.name ?? event.planHandle ?? "Free"}</TableCell>
                       <TableCell>
                         <Badge variant={STATUS_TONE[event.status]}>
                           {STATUS_LABEL[event.status]}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {formatMoney(LOCALE, storedEventPrice(event))}
+                        {displayMoney(event.priceAmount, event.priceCurrency)}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {formatDateTime(LOCALE, event.shopifyUpdatedAt)}
+                        {formatDateTime(LOCALE, event.occurredAt)}
                       </TableCell>
                     </TableRow>
                   ))

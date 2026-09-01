@@ -85,6 +85,13 @@
       "when": 1788238881001,
       "tag": "0011_short_scarlet_spider",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1788297842177,
+      "tag": "0012_petite_legion",
+      "breakpoints": true
     }
   ]
 }

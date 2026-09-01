@@ -22,14 +22,13 @@ import {
 } from "ngk-dashboard";
 import { requireAdminUser } from "~/services/admin-auth.server";
 import { SupportService } from "~/services/support.server";
-import { SubscriptionEventRepo } from "~/models/subscription-events.server";
+import { ShopSubscriptionRepo } from "~/models/shop-subscriptions.server";
+import { planForShopifyHandle } from "~/billing/plans";
 import { statusOf, type SupportStatus } from "~/support/status";
 import { CATEGORY_LABEL_EN } from "~/support/categories";
 import { BODY_MAX } from "~/schemas/support";
 import { Thread, THREAD_CSS, type ThreadMessage } from "~/components/support/Thread";
 import { formatDateTime } from "~/i18n/format";
-import { storedEventPrice } from "~/billing/subscription-event";
-import { formatMoney } from "~/money";
 import type { Locale } from "~/i18n/config";
 import { Sparkles } from "lucide-react";
 import { useReplyDraft } from "~/internal/use-reply-draft";
@@ -55,10 +54,7 @@ export const loader = async ({ params, request }: LoaderFunctionArgs) => {
   // Opening it counts as reading it, so the queue's New badge clears by looking.
   await service.markStaffRead(ticketId);
 
-  // The commercial context, so a billing question is answerable here rather
-  // than on a second screen.
-  const history = await new SubscriptionEventRepo().listForShop(thread.ticket.shop);
-  const latest = history[0];
+  const current = await new ShopSubscriptionRepo().currentForShop(thread.ticket.shop);
 
   const messages: ThreadMessage[] = thread.messages.map((message) => ({
     id: message.id,
@@ -92,11 +88,10 @@ export const loader = async ({ params, request }: LoaderFunctionArgs) => {
       merchantEmail: thread.ticket.merchantEmail,
       ccEmails: thread.ticket.ccEmails,
     },
-    plan: latest
+    plan: current
       ? {
-          name: latest.name,
-          status: latest.status,
-          price: formatMoney(LOCALE, storedEventPrice(latest)),
+          name: planForShopifyHandle(current.planHandle)?.name ?? current.planHandle ?? "Free",
+          status: current.status,
         }
       : null,
     messages,
@@ -323,7 +318,7 @@ export default function InternalSupportThread() {
                 </Detail>
                 <Detail label="Shop">{ticket.shop}</Detail>
                 <Detail label="Plan">
-                  {plan ? `${plan.name} · ${plan.price}` : "Free"}
+                  {plan ? `${plan.name} · ${plan.status}` : "Free"}
                 </Detail>
                 {plan && <Detail label="Subscription">{plan.status}</Detail>}
                 <Detail label="Opened">

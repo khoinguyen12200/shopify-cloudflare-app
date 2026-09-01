@@ -5,7 +5,7 @@ import type { BillingStatus } from "./subscription-status";
  * Which catalogue plan a merchant is on, derived from `billing.check()`'s
  * status. Matched by name — `billing.check()` doesn't expose the Managed
  * Pricing plan handle, only the webhook does (see
- * app/routes/webhooks/app/subscriptions-update.tsx) — against every plan in
+ * Managed Pricing subscription history) — against every plan in
  * the catalogue, so adding a plan to `~/billing/plans` is enough; nothing
  * here needs to change.
  *

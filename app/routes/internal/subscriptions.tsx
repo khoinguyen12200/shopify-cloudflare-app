@@ -15,43 +15,51 @@ import {
 } from "ngk-dashboard";
 import { Receipt } from "lucide-react";
 import { requireAdminUser } from "~/services/admin-auth.server";
-import { SubscriptionEventRepo } from "~/models/subscription-events.server";
-import { storedEventPrice } from "~/billing/subscription-event";
+import { ShopifyEventRepo } from "~/models/shopify-events.server";
+import { planForShopifyHandle } from "~/billing/plans";
 import { formatDateTime } from "~/i18n/format";
 import type { Locale } from "~/i18n/config";
-import { formatMoney } from "~/money";
-import type { SubscriptionStatus } from "~/db/schema";
+import { formatMoney, fromMinorUnits, toCurrency } from "~/money";
+import type { SubscriptionStatus } from "~/domain/subscription-lifecycle";
 
 /** The internal console is staff-only and English-only — no i18n here. */
 const LOCALE: Locale = "en";
+
+function displayMoney(amount: number | null, currency: string | null): string {
+  if (amount === null || currency === null) return "—";
+  const code = toCurrency(currency);
+  if (!code.ok) return "—";
+  const money = fromMinorUnits(amount, code.value);
+  return money.ok ? formatMoney(LOCALE, money.value) : "—";
+}
 
 /** How many rows of history to show before this needs its own pagination. */
 const RECENT_LIMIT = 200;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await requireAdminUser(request);
-  const events = await new SubscriptionEventRepo().listRecent(RECENT_LIMIT);
+  const events = await new ShopifyEventRepo().listRecentSubscriptionEvents(RECENT_LIMIT);
   return { events };
 };
 
 const STATUS_LABEL: Record<SubscriptionStatus, string> = {
   ACTIVE: "Active",
-  ACCEPTED: "Accepted",
-  PENDING: "Pending approval",
+  CANCELLATION_SCHEDULED: "Cancellation scheduled",
+  CANCELED: "Canceled",
+  NONE: "Free",
+  UNKNOWN: "Unknown",
+  PENDING: "Pending",
   FROZEN: "Frozen",
-  CANCELLED: "Cancelled",
-  DECLINED: "Declined",
-  EXPIRED: "Expired",
 };
 
 const STATUS_TONE: Record<SubscriptionStatus, "success" | "warning" | "destructive" | "outline"> = {
   ACTIVE: "success",
-  ACCEPTED: "success",
+  CANCELLATION_SCHEDULED: "warning",
+  CANCELED: "destructive",
+  NONE: "outline",
+  UNKNOWN: "outline",
   PENDING: "warning",
   FROZEN: "warning",
-  CANCELLED: "destructive",
-  DECLINED: "destructive",
-  EXPIRED: "outline",
 };
 
 export default function Subscriptions() {
@@ -68,8 +76,7 @@ export default function Subscriptions() {
           heading="No subscription activity yet"
           icon={Receipt}
         >
-          It shows up here the first time a merchant subscribes, once the
-          app_subscriptions/update webhook is receiving live traffic.
+          It shows up after Partner history records subscription activity.
         </EmptyState>
       ) : (
         <Card>
@@ -88,17 +95,17 @@ export default function Subscriptions() {
                 {events.map((event) => (
                   <TableRow key={event.id}>
                     <TableCell className="font-medium">{event.shop}</TableCell>
-                    <TableCell>{event.name}</TableCell>
+                    <TableCell>{planForShopifyHandle(event.planHandle)?.name ?? event.planHandle ?? "Free"}</TableCell>
                     <TableCell>
                       <Badge variant={STATUS_TONE[event.status]}>
                         {STATUS_LABEL[event.status]}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {formatMoney(LOCALE, storedEventPrice(event))}
+                        {displayMoney(event.priceAmount, event.priceCurrency)}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {formatDateTime(LOCALE, event.shopifyUpdatedAt)}
+                      {formatDateTime(LOCALE, event.occurredAt)}
                     </TableCell>
                   </TableRow>
                 ))}

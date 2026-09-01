@@ -16,7 +16,8 @@ import {
 import { Store } from "lucide-react";
 import { requireAdminUser } from "~/services/admin-auth.server";
 import { ShopRepo } from "~/models/shops.server";
-import { SubscriptionEventRepo } from "~/models/subscription-events.server";
+import { ShopSubscriptionRepo } from "~/models/shop-subscriptions.server";
+import { planForShopifyHandle } from "~/billing/plans";
 import { formatDate } from "~/i18n/format";
 import type { Locale } from "~/i18n/config";
 
@@ -27,20 +28,21 @@ const PAID_STATUSES = new Set(["ACTIVE", "ACCEPTED"]);
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await requireAdminUser(request);
-  const [shops, latestPerShop] = await Promise.all([
+  const [shops, currentSubscriptions] = await Promise.all([
     new ShopRepo().listAll(),
-    new SubscriptionEventRepo().latestPerShop(),
+    new ShopSubscriptionRepo().listCurrent(),
   ]);
+  const currentByShop = new Map(currentSubscriptions.map((subscription) => [subscription.shop, subscription]));
 
   return {
     shops: shops.map((shop) => {
-      const latest = latestPerShop.get(shop.shop);
-      const paid = latest && PAID_STATUSES.has(latest.status) ? latest : undefined;
+      const current = currentByShop.get(shop.shop);
+      const paid = current && PAID_STATUSES.has(current.status) ? current : undefined;
       return {
         shop: shop.shop,
         installedAt: shop.installedAt,
         active: shop.uninstalledAt === null,
-        planName: paid?.name ?? "Free",
+        planName: planForShopifyHandle(paid?.planHandle)?.name ?? (paid?.planHandle ?? "Free"),
       };
     }),
   };

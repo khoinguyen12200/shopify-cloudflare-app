@@ -6,7 +6,7 @@ import { CircleDollarSign, Crown, Store, Users } from "lucide-react";
 import { requireAdminUser } from "~/services/admin-auth.server";
 import { AdminUserRepo } from "~/models/admin-users.server";
 import { ShopRepo } from "~/models/shops.server";
-import { SubscriptionEventRepo } from "~/models/subscription-events.server";
+import { ShopSubscriptionRepo } from "~/models/shop-subscriptions.server";
 import { computeBillingStats } from "~/billing/dashboard-stats";
 import { merchantTrend } from "~/domain/merchant-trend";
 import { formatMoney, toCurrency, zero } from "~/money";
@@ -33,18 +33,34 @@ const DashboardCharts = lazy(() => import("~/internal/components/DashboardCharts
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const user = await requireAdminUser(request);
 
-  const [admins, allShops, latestPerShop] = await Promise.all([
+  const [admins, allShops, currentSubscriptions] = await Promise.all([
     new AdminUserRepo().countAll(),
     new ShopRepo().listAll(),
-    new SubscriptionEventRepo().latestPerShop(),
+    new ShopSubscriptionRepo().listCurrent(),
   ]);
 
   const activeShops = allShops.filter((shop) => shop.uninstalledAt === null);
+  const currentByShop = new Map<string, typeof currentSubscriptions>();
+  for (const subscription of currentSubscriptions) {
+    const rows = currentByShop.get(subscription.shop) ?? [];
+    rows.push(subscription);
+    currentByShop.set(subscription.shop, rows);
+  }
 
   return {
     user,
     admins,
-    stats: computeBillingStats(activeShops, latestPerShop),
+    stats: computeBillingStats(activeShops.flatMap((shop) => {
+      const subscriptions = currentByShop.get(shop.shop) ?? [null];
+      return subscriptions.map((subscription) => ({
+        shop: shop.shop,
+        relationshipStatus: shop.relationshipStatus,
+        subscriptionStatus: subscription?.status ?? null,
+        billingInterval: subscription?.billingInterval ?? null,
+        priceAmount: subscription?.priceAmount ?? null,
+        priceCurrency: subscription?.priceCurrency ?? null,
+      }));
+    })),
     trend: merchantTrend(allShops, TREND_MONTHS, Date.now()),
   };
 };

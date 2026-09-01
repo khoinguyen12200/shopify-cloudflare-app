@@ -7,7 +7,8 @@ import {
   type RouteObject,
 } from "react-router";
 import ShopDetail from "./detail";
-import type { Shop, SubscriptionEvent } from "~/db/schema";
+import type { Shop } from "~/db/schema";
+import type { SubscriptionHistoryRow } from "~/models/shopify-events.server";
 
 function shop(overrides: Partial<Shop> = {}): Shop {
   return {
@@ -26,27 +27,22 @@ function shop(overrides: Partial<Shop> = {}): Shop {
   };
 }
 
-function event(overrides: Partial<SubscriptionEvent> = {}): SubscriptionEvent {
+function event(overrides: Partial<SubscriptionHistoryRow> = {}): SubscriptionHistoryRow {
   return {
     id: "evt-1",
     shop: "cool-shop.myshopify.com",
     subscriptionId: "gid://shopify/AppSubscription/1",
-    name: "TODO:PRO",
     status: "ACTIVE",
     planHandle: "todo-pro",
-    interval: "every_30_days",
+    billingInterval: "EVERY_30_DAYS",
     priceAmount: 1900,
     priceCurrency: "USD",
-    cappedAmountAmount: null,
-    cappedAmountCurrency: null,
-    shopifyCreatedAt: 1_700_000_000_000,
-    shopifyUpdatedAt: 1_700_000_000_000,
-    receivedAt: 1_700_000_001_000,
+    occurredAt: 1_700_000_000_000,
     ...overrides,
   };
 }
 
-async function render(data: { shop: Shop; history: SubscriptionEvent[] }) {
+async function render(data: { shop: Shop; history: SubscriptionHistoryRow[] }) {
   const routes: RouteObject[] = [
     { path: "/internal/shops/:shop", Component: ShopDetail, loader: () => data },
   ];
@@ -79,7 +75,7 @@ describe("the internal shop detail page", () => {
 
   it("shows subscription history with plan, status and price", async () => {
     const html = await render({ shop: shop(), history: [event()] });
-    expect(html).toContain("TODO:PRO");
+    expect(html).toContain("todo-pro");
     expect(html).toContain("$19.00");
   });
 });

@@ -65,7 +65,7 @@ export const shopifyEvents = sqliteTable(
   "shopify_events",
   {
     source: text("source", {
-      enum: ["partner_history", "webhook_observation", "authenticated_access"],
+      enum: ["partner_history", "webhook_observation", "authenticated_access", "legacy_migration"],
     }).notNull(),
     eventId: text("event_id").notNull(),
     eventType: text("event_type").notNull(),
