@@ -52,12 +52,16 @@ export class ShopifyEventRepo {
 
   async upsertRelationshipProjection(event: PartnerRelationshipEvent): Promise<"applied" | "stale" | "duplicate"> {
     const result = await this.recordPartnerRelationship(event);
-    return result === "inserted" ? "applied" : "duplicate";
+    if (result === "duplicate") return "duplicate";
+    const [row] = await getDb().select({ occurredAt: shops.relationshipOccurredAt, externalId: shops.relationshipExternalId }).from(shops).where(eq(shops.shop, event.shop)).limit(1);
+    return row?.occurredAt === event.occurredAt && row.externalId === event.id ? "applied" : "stale";
   }
 
   async upsertSubscriptionProjection(event: PartnerSubscriptionEvent): Promise<"applied" | "stale" | "duplicate"> {
     const result = await this.recordPartnerSubscription(event);
-    return result === "inserted" ? "applied" : "duplicate";
+    if (result === "duplicate") return "duplicate";
+    const [row] = await getDb().select({ occurredAt: shopSubscriptions.appliedOccurredAt, externalId: shopSubscriptions.appliedExternalId }).from(shopSubscriptions).where(and(eq(shopSubscriptions.shop, event.shop), eq(shopSubscriptions.subscriptionId, event.subscriptionId))).limit(1);
+    return row?.occurredAt === event.occurredAt && row.externalId === event.id ? "applied" : "stale";
   }
   async recordPartnerEvent(event: PartnerRelationshipEvent): Promise<"inserted" | "duplicate"> {
     const db = getDb();
@@ -112,7 +116,7 @@ export class ShopifyEventRepo {
       await tx.insert(shopifySubscriptionEvents).values({ eventSource: "partner_history", eventId: event.id, subscriptionId: event.subscriptionId, status, planHandle: event.planHandle ?? null, billingInterval: event.billingInterval ?? null, trialEndsAt: event.trialEndsAt ?? null, currentPeriodEndsAt: event.currentPeriodEndsAt ?? null, cancellationEffectiveAt: event.cancellationEffectiveAt ?? null, priceAmount: event.price?.amount ?? null, priceCurrency: event.price?.currency ?? null }).onConflictDoNothing();
       const parent = await tx.insert(shopSubscriptions).values({ shop: event.shop, subscriptionId: event.subscriptionId, status, planHandle: event.planHandle ?? null, billingInterval: event.billingInterval ?? null, trialEndsAt: event.trialEndsAt ?? null, currentPeriodEndsAt: event.currentPeriodEndsAt ?? null, cancellationEffectiveAt: event.cancellationEffectiveAt ?? null, appliedOccurredAt: event.occurredAt, appliedExternalId: event.id }).onConflictDoUpdate({ target: [shopSubscriptions.shop, shopSubscriptions.subscriptionId], set: { status, appliedOccurredAt: event.occurredAt, appliedExternalId: event.id }, where: or(sql`${shopSubscriptions.appliedOccurredAt} < ${event.occurredAt}`, and(eq(shopSubscriptions.appliedOccurredAt, event.occurredAt), sql`${shopSubscriptions.appliedExternalId} < ${event.id}`)) }).returning({ subscriptionId: shopSubscriptions.subscriptionId });
       if (parent.length && event.items) await tx.delete(shopSubscriptionItems).where(and(eq(shopSubscriptionItems.shop, event.shop), eq(shopSubscriptionItems.subscriptionId, event.subscriptionId)));
-      if (parent.length && event.items?.length) await tx.insert(shopSubscriptionItems).values(event.items.map((item, position) => ({ shop: event.shop, subscriptionId: event.subscriptionId, position, itemType: item.itemType, priceAmount: item.priceAmount ?? null, priceCurrency: item.priceCurrency ?? null })));
+      if (parent.length && event.items?.length) await tx.insert(shopSubscriptionItems).values(event.items.map((item, position) => ({ shop: event.shop, subscriptionId: event.subscriptionId, position, itemType: item.itemType, priceAmount: item.priceAmount ?? null, priceCurrency: item.priceCurrency ?? null, cappedAmountAmount: item.cappedAmountAmount ?? null, cappedAmountCurrency: item.cappedAmountCurrency ?? null })));
       /*
       tx.insert(shopifyEvents).values({
         source: "partner_history", eventId: event.id, eventType: event.type,
