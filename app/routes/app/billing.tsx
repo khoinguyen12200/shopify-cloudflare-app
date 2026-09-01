@@ -13,6 +13,7 @@ import { currentPlanKeyFor } from "~/billing/current-plan";
 import { planPriceLine, type PriceCadence } from "~/billing/plan-price-line";
 import { pricingPlansUrl } from "~/billing/pricing-plans-url";
 import { FEATURED_PLAN_KEY, PLANS, PLAN_LIST } from "~/billing/plans";
+import { refreshShopSubscription } from "~/wiring.server";
 import { PlanCard, PLAN_CARD_CSS } from "~/components/billing/PlanCard";
 import type { SubscriptionStatus } from "~/db/schema";
 
@@ -50,6 +51,7 @@ const APP_HANDLE_QUERY = `#graphql
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, billing, session } =
     await createShopify(getEnv()).authenticate.admin(request);
+  await refreshShopSubscription(getEnv(), session.shop);
 
   // Shopify owns the actual subscribe/upgrade/cancel flow (Managed Pricing);
   // this page only ever reads status. There's no in-app request()/cancel() —

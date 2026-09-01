@@ -8,12 +8,14 @@ import { getEnv } from "~/request-context.server";
 import { ShopRepo } from "~/models/shops.server";
 import { useLocale } from "~/i18n/useLocale";
 import { formatDateTime } from "~/i18n/format";
+import { refreshShopSubscription } from "~/wiring.server";
 
 export const handle = { i18n: ["common", "admin"] };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } =
     await createShopify(getEnv()).authenticate.admin(request);
+  await refreshShopSubscription(getEnv(), session.shop);
 
   // The Admin GraphQL call and the D1 read are independent — both need only
   // `session.shop` — so they run concurrently instead of one full round trip

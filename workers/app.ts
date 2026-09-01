@@ -44,7 +44,7 @@ export default {
 
   /** Cron work shares the request context used by HTTP routes. */
   async scheduled(_controller, env) {
-    await runWithRequestContext(env, () => runScheduledSweeps(Date.now()));
+    await runWithRequestContext(env, () => runScheduledSweeps(Date.now(), env));
   },
 
   async queue(batch, env) {

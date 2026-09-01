@@ -10,6 +10,8 @@ import {
 
 import { KVSessionStorage } from "./session-storage.server";
 import { ShopRepo } from "~/models/shops.server";
+import { refreshShopSubscription } from "~/wiring.server";
+import { getEnv } from "~/request-context.server";
 
 export const apiVersion = ApiVersion.October26;
 
@@ -43,6 +45,11 @@ export async function afterAuth({
   session: { shop: string };
 }): Promise<void> {
   await new ShopRepo().recordInstall(session.shop, Date.now());
+  try {
+    await refreshShopSubscription(getEnv(), session.shop);
+  } catch (error) {
+    console.error(JSON.stringify({ event: "subscription.refresh_failed", shop: session.shop, error: error instanceof Error ? error.message : String(error) }));
+  }
 }
 
 function buildShopify(env: Env) {

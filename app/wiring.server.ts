@@ -1,6 +1,32 @@
 import { WorkersAiGenerator, workersAiModelFactory } from "~/adapters/workers-ai.server";
 import { allowAll, type AiGate } from "~/ai/gate";
 import type { TextGenerator } from "~/ports/ai";
+import { ShopifyPartnerAdapter } from "~/adapters/shopify-partner.server";
+import { ShopifyEventRepo } from "~/models/shopify-events.server";
+import { ShopSubscriptionRepo } from "~/models/shop-subscriptions.server";
+import { ShopRepo } from "~/models/shops.server";
+import { refreshSubscription } from "~/services/reconcile-subscription";
+
+/** Targeted billing refresh composition. Missing Partner credentials stay observable. */
+export async function refreshShopSubscription(env: Env, shop: string, now = Date.now()) {
+  const identity = await new ShopRepo().get(shop);
+  const partner = new ShopifyPartnerAdapter({ token: env.SHOPIFY_PARTNER_API_TOKEN || "", fetch });
+  return refreshSubscription({
+    partner,
+    subscriptions: { upsertSubscriptionProjection: (tenant, observation) => new ShopSubscriptionRepo().upsertObservation(tenant, observation) },
+    clock: { now: () => now },
+    appId: env.SHOPIFY_PARTNER_APP_ID || null,
+  }, { shop, shopifyShopId: identity?.shopifyShopId ?? null }, now);
+}
+
+/** History ledger adapter binding kept here so services never import models. */
+export function historyLedger() {
+  const repo = new ShopifyEventRepo();
+  return {
+    recordPartnerRelationship: (event: Parameters<ShopifyEventRepo["recordPartnerRelationship"]>[0]) => repo.recordPartnerRelationship(event),
+    recordPartnerSubscription: (event: Parameters<ShopifyEventRepo["recordPartnerSubscription"]>[0]) => repo.recordPartnerSubscription(event),
+  };
+}
 
 /**
  * THE COMPOSITION ROOT — the one place a port is bound to an adapter.
