@@ -27,6 +27,19 @@ const historicalObservation = (
   externalId: string,
 ): SubscriptionObservation => ({ type, occurredAt, externalId });
 
+const statusObservation = (
+  type: "CREATED" | "UPDATED",
+  status: SubscriptionStatus,
+  occurredAt: number,
+  externalId: string,
+): SubscriptionObservation => ({ type, status, occurredAt, externalId });
+
+const unfrozenObservation = (occurredAt: number, externalId: string): SubscriptionObservation => ({
+  type: "UNFROZEN",
+  occurredAt,
+  externalId,
+});
+
 const activeSubscriptionObservation = (
   status: SubscriptionStatus,
   occurredAt: number,
@@ -34,6 +47,38 @@ const activeSubscriptionObservation = (
 ): SubscriptionObservation => ({ type: "ACTIVE_SUBSCRIPTION", status, occurredAt, externalId });
 
 describe("applySubscriptionObservation", () => {
+  it("records the status observed when a subscription is created", () => {
+    expect(
+      applySubscriptionObservation(null, statusObservation("CREATED", "ACTIVE", 100, "event-1")),
+    ).toEqual({ kind: "active", occurredAt: 100, externalId: "event-1" });
+  });
+
+  it("records the status observed when a subscription is updated", () => {
+    const active = applySubscriptionObservation(
+      null,
+      activeSubscriptionObservation("ACTIVE", 100, "subscription-1"),
+    );
+
+    expect(
+      applySubscriptionObservation(
+        active,
+        statusObservation("UPDATED", "CANCELLATION_SCHEDULED", 200, "event-2"),
+      ),
+    ).toEqual({ kind: "cancellation_scheduled", occurredAt: 200, externalId: "event-2" });
+  });
+
+  it("restores a frozen subscription to an active paid state when it is unfrozen", () => {
+    const frozen = applySubscriptionObservation(
+      null,
+      historicalObservation("FROZEN", 100, "event-1"),
+    );
+
+    const restored = applySubscriptionObservation(frozen, unfrozenObservation(200, "event-2"));
+
+    expect(restored).toEqual({ kind: "active", occurredAt: 200, externalId: "event-2" });
+    expect(isPaidSubscription(restored)).toBe(true);
+  });
+
   it("records a cancellation-scheduled observation", () => {
     expect(
       applySubscriptionObservation(

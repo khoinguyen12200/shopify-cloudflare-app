@@ -15,9 +15,26 @@ interface SubscriptionObservationBase {
 }
 
 export type SubscriptionObservation =
-  | (SubscriptionObservationBase & { readonly type: "CANCELLATION_SCHEDULED" })
-  | (SubscriptionObservationBase & { readonly type: "FROZEN" })
-  | (SubscriptionObservationBase & { readonly type: "CANCELED" })
+  | (SubscriptionObservationBase & {
+      readonly type: "CREATED";
+      readonly status: SubscriptionStatus;
+    })
+  | (SubscriptionObservationBase & {
+      readonly type: "UPDATED";
+      readonly status: SubscriptionStatus;
+    })
+  | (SubscriptionObservationBase & {
+      readonly type: "CANCELLATION_SCHEDULED";
+    })
+  | (SubscriptionObservationBase & {
+      readonly type: "FROZEN";
+    })
+  | (SubscriptionObservationBase & {
+      readonly type: "CANCELED";
+    })
+  | (SubscriptionObservationBase & {
+      readonly type: "UNFROZEN";
+    })
   | (SubscriptionObservationBase & {
       readonly type: "ACTIVE_SUBSCRIPTION";
       readonly status: SubscriptionStatus;
@@ -42,30 +59,37 @@ type HistoricalSubscriptionObservation = Exclude<
   { readonly type: "ACTIVE_SUBSCRIPTION" }
 >;
 
-type HistoricalTransition = (observation: HistoricalSubscriptionObservation) => SubscriptionState;
+type StatusSubscriptionObservation = Extract<
+  SubscriptionObservation,
+  { readonly status: SubscriptionStatus }
+>;
+
 type ActiveSubscriptionTransition = (
-  observation: Extract<SubscriptionObservation, { readonly type: "ACTIVE_SUBSCRIPTION" }>,
+  observation: StatusSubscriptionObservation,
 ) => SubscriptionState;
 
-const historicalTransitions: Record<
-  HistoricalSubscriptionObservation["type"],
-  HistoricalTransition
-> = {
-  CANCELLATION_SCHEDULED: (observation) => ({
-    kind: "cancellation_scheduled",
-    occurredAt: observation.occurredAt,
-    externalId: observation.externalId,
-  }),
-  FROZEN: (observation) => ({
-    kind: "frozen",
-    occurredAt: observation.occurredAt,
-    externalId: observation.externalId,
-  }),
-  CANCELED: (observation) => ({
-    kind: "canceled",
-    occurredAt: observation.occurredAt,
-    externalId: observation.externalId,
-  }),
+type HistoricalTransitions = {
+  readonly CREATED: (
+    observation: Extract<HistoricalSubscriptionObservation, { readonly type: "CREATED" }>,
+  ) => SubscriptionState;
+  readonly UPDATED: (
+    observation: Extract<HistoricalSubscriptionObservation, { readonly type: "UPDATED" }>,
+  ) => SubscriptionState;
+  readonly CANCELLATION_SCHEDULED: (
+    observation: Extract<
+      HistoricalSubscriptionObservation,
+      { readonly type: "CANCELLATION_SCHEDULED" }
+    >,
+  ) => SubscriptionState;
+  readonly FROZEN: (
+    observation: Extract<HistoricalSubscriptionObservation, { readonly type: "FROZEN" }>,
+  ) => SubscriptionState;
+  readonly CANCELED: (
+    observation: Extract<HistoricalSubscriptionObservation, { readonly type: "CANCELED" }>,
+  ) => SubscriptionState;
+  readonly UNFROZEN: (
+    observation: Extract<HistoricalSubscriptionObservation, { readonly type: "UNFROZEN" }>,
+  ) => SubscriptionState;
 };
 
 const activeSubscriptionTransitions: Record<SubscriptionStatus, ActiveSubscriptionTransition> = {
@@ -106,6 +130,50 @@ const activeSubscriptionTransitions: Record<SubscriptionStatus, ActiveSubscripti
   }),
 };
 
+const historicalTransitions: HistoricalTransitions = {
+  CREATED: (observation) => activeSubscriptionTransitions[observation.status](observation),
+  UPDATED: (observation) => activeSubscriptionTransitions[observation.status](observation),
+  CANCELLATION_SCHEDULED: (observation) => ({
+    kind: "cancellation_scheduled",
+    occurredAt: observation.occurredAt,
+    externalId: observation.externalId,
+  }),
+  FROZEN: (observation) => ({
+    kind: "frozen",
+    occurredAt: observation.occurredAt,
+    externalId: observation.externalId,
+  }),
+  CANCELED: (observation) => ({
+    kind: "canceled",
+    occurredAt: observation.occurredAt,
+    externalId: observation.externalId,
+  }),
+  UNFROZEN: (observation) => ({
+    kind: "active",
+    occurredAt: observation.occurredAt,
+    externalId: observation.externalId,
+  }),
+};
+
+function applyHistoricalSubscriptionObservation(
+  observation: HistoricalSubscriptionObservation,
+): SubscriptionState {
+  switch (observation.type) {
+    case "CREATED":
+      return historicalTransitions.CREATED(observation);
+    case "UPDATED":
+      return historicalTransitions.UPDATED(observation);
+    case "CANCELLATION_SCHEDULED":
+      return historicalTransitions.CANCELLATION_SCHEDULED(observation);
+    case "FROZEN":
+      return historicalTransitions.FROZEN(observation);
+    case "CANCELED":
+      return historicalTransitions.CANCELED(observation);
+    case "UNFROZEN":
+      return historicalTransitions.UNFROZEN(observation);
+  }
+}
+
 function isNewerSubscriptionObservation(
   current: SubscriptionState,
   observation: SubscriptionObservation,
@@ -128,7 +196,7 @@ export function applySubscriptionObservation(
   if (observation.type === "ACTIVE_SUBSCRIPTION") {
     return activeSubscriptionTransitions[observation.status](observation);
   }
-  return historicalTransitions[observation.type](observation);
+  return applyHistoricalSubscriptionObservation(observation);
 }
 
 export function isPaidSubscription(state: SubscriptionState | null): boolean {
