@@ -53,6 +53,13 @@ describe("computeBillingStats", () => {
     expect(stats.mrrByCurrency).toEqual([{ amount: 1900, currency: "USD" }]);
   });
 
+  it("excludes an uninstalled paid shop from paid totals and MRR", () => {
+    const latest = new Map([["a.myshopify.com", event()]]);
+    const stats = computeBillingStats([shop({ uninstalledAt: 2 })], latest);
+
+    expect(stats).toMatchObject({ paidShops: 0, freeShops: 1, mrrByCurrency: [] });
+  });
+
   it("does not count a CANCELLED subscription as paid", () => {
     const latest = new Map([["a.myshopify.com", event({ status: "CANCELLED" })]]);
     const stats = computeBillingStats([shop()], latest);

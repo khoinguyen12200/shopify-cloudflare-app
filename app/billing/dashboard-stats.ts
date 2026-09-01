@@ -38,6 +38,7 @@ export function computeBillingStats(
   let paidShops = 0;
 
   for (const shop of shops) {
+    if (shop.uninstalledAt !== null) continue;
     const latest = latestPerShop.get(shop.shop);
     if (!latest || !PAID_STATUSES.has(latest.status)) continue;
     paidShops += 1;
