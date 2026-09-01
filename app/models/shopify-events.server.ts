@@ -5,6 +5,7 @@ import {
   shopifyRelationshipEvents,
   shopifySubscriptionEvents,
   shopSubscriptionItems,
+  shopSubscriptions,
   shops,
 } from "~/db/schema";
 import { getDb } from "~/request-context.server";
@@ -50,18 +51,13 @@ export class ShopifyEventRepo {
   }
 
   async upsertRelationshipProjection(event: PartnerRelationshipEvent): Promise<"applied" | "stale" | "duplicate"> {
-    const { ShopRepo } = await import("./shops.server");
-    return new ShopRepo().upsertRelationshipProjection({ ...event, externalId: event.id });
+    const result = await this.recordPartnerRelationship(event);
+    return result === "inserted" ? "applied" : "duplicate";
   }
 
   async upsertSubscriptionProjection(event: PartnerSubscriptionEvent): Promise<"applied" | "stale" | "duplicate"> {
-    const { ShopSubscriptionRepo } = await import("./shop-subscriptions.server");
-    return new ShopSubscriptionRepo().upsertObservation(event.shop, {
-      subscriptionId: event.subscriptionId, type: event.type, status: event.status,
-      occurredAt: event.occurredAt, externalId: event.id, planHandle: event.planHandle,
-      billingInterval: event.billingInterval, trialEndsAt: event.trialEndsAt,
-      currentPeriodEndsAt: event.currentPeriodEndsAt, cancellationEffectiveAt: event.cancellationEffectiveAt,
-    });
+    const result = await this.recordPartnerSubscription(event);
+    return result === "inserted" ? "applied" : "duplicate";
   }
   async recordPartnerEvent(event: PartnerRelationshipEvent): Promise<"inserted" | "duplicate"> {
     const db = getDb();
@@ -103,6 +99,7 @@ export class ShopifyEventRepo {
 
   async recordPartnerSubscription(event: PartnerSubscriptionEvent): Promise<"inserted" | "duplicate"> {
     const db = getDb();
+    const status = event.status;
     const [inserted] = await db.batch([
       db.insert(shopifyEvents).values({
         source: "partner_history", eventId: event.id, eventType: event.type,
@@ -111,12 +108,13 @@ export class ShopifyEventRepo {
       }).onConflictDoNothing().returning({ eventId: shopifyEvents.eventId }),
       db.insert(shopifySubscriptionEvents).values({
         eventSource: "partner_history", eventId: event.id, subscriptionId: event.subscriptionId,
-        status: event.status, planHandle: event.planHandle ?? null,
+        status, planHandle: event.planHandle ?? null,
         billingInterval: event.billingInterval ?? null, trialEndsAt: event.trialEndsAt ?? null,
         currentPeriodEndsAt: event.currentPeriodEndsAt ?? null,
         cancellationEffectiveAt: event.cancellationEffectiveAt ?? null,
         priceAmount: event.price?.amount ?? null, priceCurrency: event.price?.currency ?? null,
       }).onConflictDoNothing(),
+      db.insert(shopSubscriptions).values({ shop: event.shop, subscriptionId: event.subscriptionId, status, planHandle: event.planHandle ?? null, billingInterval: event.billingInterval ?? null, trialEndsAt: event.trialEndsAt ?? null, currentPeriodEndsAt: event.currentPeriodEndsAt ?? null, cancellationEffectiveAt: event.cancellationEffectiveAt ?? null, appliedOccurredAt: event.occurredAt, appliedExternalId: event.id }).onConflictDoUpdate({ target: [shopSubscriptions.shop, shopSubscriptions.subscriptionId], set: { status, planHandle: event.planHandle ?? null, billingInterval: event.billingInterval ?? null, trialEndsAt: event.trialEndsAt ?? null, currentPeriodEndsAt: event.currentPeriodEndsAt ?? null, cancellationEffectiveAt: event.cancellationEffectiveAt ?? null, appliedOccurredAt: event.occurredAt, appliedExternalId: event.id }, where: or(sql`${shopSubscriptions.appliedOccurredAt} < ${event.occurredAt}`, and(eq(shopSubscriptions.appliedOccurredAt, event.occurredAt), sql`${shopSubscriptions.appliedExternalId} < ${event.id}`)) }),
     ]);
     if (inserted.length === 1 && event.items) {
       await db.batch([db.delete(shopSubscriptionItems).where(and(eq(shopSubscriptionItems.shop, event.shop), eq(shopSubscriptionItems.subscriptionId, event.subscriptionId))), ...(event.items.length ? [db.insert(shopSubscriptionItems).values(event.items.map((item, position) => ({ shop: event.shop, subscriptionId: event.subscriptionId, position, itemType: item.itemType, priceAmount: item.priceAmount ?? null, priceCurrency: item.priceCurrency ?? null, cappedAmountAmount: item.cappedAmountAmount ?? null, cappedAmountCurrency: item.cappedAmountCurrency ?? null })))] : [])]);

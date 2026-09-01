@@ -45,7 +45,7 @@ export class ShopSubscriptionRepo {
     if (stale) return "stale";
     const { applySubscriptionObservation } = await import("~/domain/subscription-lifecycle");
     const state = applySubscriptionObservation(current ? { kind: kindByStatus[current.status], occurredAt: current.appliedOccurredAt, externalId: current.appliedExternalId } : null, observation);
-    await db.insert(shopSubscriptions).values({
+    const applied = await db.insert(shopSubscriptions).values({
       shop, subscriptionId: observation.subscriptionId, status: statusByKind[state.kind],
       planHandle: observation.planHandle ?? current?.planHandle ?? null, billingInterval: observation.billingInterval ?? current?.billingInterval ?? null,
       trialEndsAt: observation.trialEndsAt ?? current?.trialEndsAt ?? null, currentPeriodEndsAt: observation.currentPeriodEndsAt ?? current?.currentPeriodEndsAt ?? null,
@@ -56,7 +56,8 @@ export class ShopSubscriptionRepo {
       billingInterval: observation.billingInterval ?? current?.billingInterval ?? null, trialEndsAt: observation.trialEndsAt ?? current?.trialEndsAt ?? null,
       currentPeriodEndsAt: observation.currentPeriodEndsAt ?? current?.currentPeriodEndsAt ?? null, cancellationEffectiveAt: observation.cancellationEffectiveAt ?? current?.cancellationEffectiveAt ?? null,
       appliedOccurredAt: observation.occurredAt, appliedExternalId: observation.externalId,
-    }, where: or(sql`${shopSubscriptions.appliedOccurredAt} < ${observation.occurredAt}`, and(eq(shopSubscriptions.appliedOccurredAt, observation.occurredAt), sql`${shopSubscriptions.appliedExternalId} < ${observation.externalId}`)) });
+    }, where: or(sql`${shopSubscriptions.appliedOccurredAt} < ${observation.occurredAt}`, and(eq(shopSubscriptions.appliedOccurredAt, observation.occurredAt), sql`${shopSubscriptions.appliedExternalId} < ${observation.externalId}`)) }).returning({ subscriptionId: shopSubscriptions.subscriptionId });
+    if (applied.length === 0 && !duplicate) return "stale";
     if (observation.items) {
       const replacement = db.delete(shopSubscriptionItems).where(and(eq(shopSubscriptionItems.shop, shop), eq(shopSubscriptionItems.subscriptionId, observation.subscriptionId)));
       const rows = observation.items.map((item, position) => ({ shop, subscriptionId: observation.subscriptionId, position, itemType: item.itemType, priceAmount: item.priceAmount ?? null, priceCurrency: item.priceCurrency ?? null, cappedAmountAmount: item.cappedAmountAmount ?? null, cappedAmountCurrency: item.cappedAmountCurrency ?? null }));
