@@ -5,6 +5,7 @@ import { scopesUpdatePayloadSchema } from "~/schemas/webhooks";
 import { WebhookDeliveryRepo } from "~/models/webhook-deliveries.server";
 import { WebhookScopeObservationRepo } from "~/models/webhook-scope-observations.server";
 import { ingestWebhook, sha256Json } from "~/services/webhook-ingest";
+import { formatWebhookLog, writeWebhookLog } from "~/services/webhook-logging";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const shopify = createShopify(getEnv());
@@ -17,6 +18,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     deliveries: new WebhookDeliveryRepo(),
     queue: getEnv().WEBHOOK_QUEUE,
     hashPayload: sha256Json,
+    log: async (webhook, outcome, latencyMs) => writeWebhookLog(await formatWebhookLog({ deliveryId: webhook.webhookId, topic: webhook.topic, shop: webhook.shop, handler: webhook.topic, outcome, attempts: 0, latencyMs })),
     beforeEnqueue: async (webhook) => {
       await new WebhookScopeObservationRepo().record(webhook.webhookId, webhook.shop, parsed.data.current);
     },
