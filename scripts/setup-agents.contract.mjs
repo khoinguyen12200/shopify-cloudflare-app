@@ -31,10 +31,20 @@ test("the installer verifies every locked skill for both primary hosts", async (
   assert.match(installer, /\.agents\/skills/);
 });
 
-test("restoring skills does not rewrite the committed lockfile", async () => {
+test("locked installs verify committed lockfile bytes without restoring mutations", async () => {
   const installer = await readProjectFile("scripts/install-skills.mjs");
 
-  assert.match(installer, /writeFileSync\(lockPath, lockedLockfile\)/);
+  assert.match(installer, /lockedLockfile\.equals\(readFileSync\(lockPath\)\)/);
+  assert.doesNotMatch(installer, /writeFileSync\(lockPath, lockedLockfile\)/);
+});
+
+test("installer supports isolated, validated destinations", async () => {
+  const installer = await readProjectFile("scripts/install-skills.mjs");
+
+  assert.match(installer, /--temp-root/);
+  assert.match(installer, /--claude-dir/);
+  assert.match(installer, /--codex-dir/);
+  assert.match(installer, /must be under --temp-root/);
 });
 
 test("Codex receives the project-scoped Shopify MCP server", async () => {

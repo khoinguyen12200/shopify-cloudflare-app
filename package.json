@@ -40,7 +40,7 @@
     "shopify:logout": "node scripts/shopify.mjs auth logout",
     "graphql-codegen": "graphql-codegen",
     "install:skill": "node scripts/install-skills.mjs",
-    "test:agent-setup": "node --test scripts/setup-agents.contract.mjs",
+    "test:agent-setup": "node --test scripts/setup-agents.contract.mjs scripts/install-skills.test.mjs",
     "db:seed": "node scripts/seed-admin.mjs",
     "admin:create": "node scripts/create-admin.mjs",
     "check:placeholders": "node scripts/check-placeholders.mjs production",

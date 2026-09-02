@@ -30,6 +30,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import {
   closeSync,
+  cpSync,
   existsSync,
   mkdirSync,
   openSync,
@@ -39,7 +40,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, join, relative } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const lockPath = join(repoRoot, "skills-lock.json");
@@ -67,6 +68,26 @@ const agents = flagValue("agent", defaultAgents.join(","))
 // Math.max(1, …) here would silently force serial execution.
 const jobsRaw = Number(flagValue("jobs", "0"));
 const jobs = Number.isFinite(jobsRaw) && jobsRaw > 0 ? Math.floor(jobsRaw) : 0;
+
+const tempRootValue = flagValue("temp-root", "");
+const explicitCodexDir = flagValue("codex-dir", "");
+const explicitClaudeDir = flagValue("claude-dir", "");
+if ((explicitCodexDir || explicitClaudeDir) && !tempRootValue) {
+  console.error("--codex-dir and --claude-dir require --temp-root");
+  process.exit(1);
+}
+const tempRoot = tempRootValue ? resolve(tempRootValue) : repoRoot;
+function destination(name, value, fallback) {
+  const path = resolve(value || fallback);
+  const outside = relative(tempRoot, path).startsWith("..") || isAbsolute(relative(tempRoot, path));
+  if ((value || tempRootValue) && outside) {
+    console.error(`${name} must be under --temp-root`);
+    process.exit(1);
+  }
+  return path;
+}
+const codexDir = destination("--codex-dir", explicitCodexDir, join(tempRoot, ".agents/skills"));
+const claudeDir = destination("--claude-dir", explicitClaudeDir, join(tempRoot, ".claude/skills"));
 
 const skillsBin = join(
   repoRoot,
@@ -106,21 +127,29 @@ if (!wait) {
 
 // ── From here on we are the worker ─────────────────────────────────────────
 if (locked) {
-  const lockedLockfile = readFileSync(lockPath, "utf8");
-  const lockedSnapshot = JSON.parse(lockedLockfile);
+  const lockedLockfile = readFileSync(lockPath);
+  const lockedSnapshot = JSON.parse(lockedLockfile.toString("utf8"));
   const universalComplete = Object.keys(lockedSnapshot.skills ?? {}).every(
-    (name) => existsSync(join(repoRoot, ".agents/skills", name, "SKILL.md")),
+    (name) => existsSync(join(codexDir, name, "SKILL.md")),
   );
 
   if (!universalComplete) {
-    const install = spawnSync(skillsBin, ["experimental_install"], {
-      cwd: repoRoot,
-      stdio: "inherit",
-    });
-    writeFileSync(lockPath, lockedLockfile);
+    const install = tempRootValue
+      ? (() => {
+          cpSync(join(repoRoot, ".agents/skills"), codexDir, { recursive: true });
+          return { status: 0 };
+        })()
+      : spawnSync(skillsBin, ["experimental_install"], {
+          cwd: repoRoot,
+          stdio: "inherit",
+        });
     if (install.status !== 0) process.exit(install.status ?? 1);
   }
 
+  if (!lockedLockfile.equals(readFileSync(lockPath))) {
+    console.error("Locked install changed skills-lock.json; refusing altered lockfile.");
+    process.exit(1);
+  }
   linkClaudeSkills(lockedSnapshot);
   verifyInstalledSkills(lockedSnapshot);
   process.exit(0);
@@ -160,11 +189,11 @@ if (sources.length === 0) {
 
 function verifyInstalledSkills(lock) {
   const skillNames = Object.keys(lock.skills ?? {});
-  const stores = [".agents/skills", ".claude/skills"];
+  const stores = [codexDir, claudeDir];
   const missing = stores.flatMap((store) =>
     skillNames
       .filter((name) => {
-        const skillPath = join(repoRoot, store, name);
+        const skillPath = join(store, name);
         return !existsSync(skillPath) || !statSync(skillPath).isDirectory();
       })
       .map((name) => `${store}/${name}`),
@@ -182,11 +211,11 @@ function verifyInstalledSkills(lock) {
 }
 
 function linkClaudeSkills(lock) {
-  const claudeStore = join(repoRoot, ".claude/skills");
+  const claudeStore = claudeDir;
   mkdirSync(claudeStore, { recursive: true });
 
   for (const name of Object.keys(lock.skills ?? {})) {
-    const target = join(repoRoot, ".agents/skills", name);
+    const target = join(codexDir, name);
     const link = join(claudeStore, name);
     if (existsSync(link)) continue;
 
