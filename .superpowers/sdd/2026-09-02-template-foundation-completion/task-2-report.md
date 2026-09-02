@@ -7,4 +7,5 @@
 - Verified: `npx vitest run app/services/compliance-support.test.ts` (4 passed).
 - Verified: `npx vitest run app/models/tenant-purge.test.ts app/services/compliance.test.ts app/services/compliance-support.test.ts app/session-storage.test.ts` (28 passed).
 - Verified: `npm run typecheck` (passed; existing deprecation warnings only).
-- Process note: initial new integration proof passed immediately because purge behavior already existed; no RED failure is claimed retroactively.
+- Regression RED: temporarily restored the missing notification-preference purge behavior with `where(sql\`0\`)`; `npx vitest run app/models/tenant-purge.test.ts` failed because `target.myshopify.com` remained beside the global and other-tenant rows.
+- Regression GREEN: restored `where(eq(notificationPreferences.scope, shop))`; the same focused suite passed (3 tests).

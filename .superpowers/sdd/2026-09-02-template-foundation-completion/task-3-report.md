@@ -23,9 +23,8 @@
 
 - Added `updateOwnProfile` in-memory user-port test outside `runWithRequestContext`.
 - Added `checkResetToken` in-memory token-port test outside `runWithRequestContext`.
-- RED confirmed by intentional assertion failure in admin-management test; corrected assertion and both tests pass.
-- Focused injection tests: 2 passed.
-- Current workspace `npm run typecheck` is blocked by unrelated concurrent AI/support/scheduled changes (`app/ai/task.test.ts`, support routes/tests, `workers/app.ts`).
+- Regression RED: temporarily replayed the pre-port implementations that directly construct `AdminUserRepo` and `PasswordResetTokenRepo`; both focused tests failed at the repository boundary with `getDb() called outside of a request context`.
+- Regression GREEN: restored `deps.users.updateProfile` and `deps.tokens.findByHash`; both focused injection tests passed.
 - `rg '^import .*~/models' app/services/admin-auth.server.ts app/services/admin-management.server.ts app/services/password-reset.server.ts` — no output.
 
 ## Review follow-up
