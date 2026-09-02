@@ -188,7 +188,9 @@ Template TODOs are intentional: replace them before launch. Required secrets are
 `SHOPIFY_PARTNER_API_TOKEN`; set them with `wrangler secret put` in production.
 Create D1/KV/R2 resources first, copy IDs into `wrangler.jsonc`, then run
 migrations before deploy. Keep Shopify Partner app ID and plan handles aligned
-with TOML and billing plan registry.
+with TOML and billing plan registry. Set `SHOPIFY_PARTNER_ORGANIZATION_ID` to
+the numeric ID from Partner Dashboard URL; keep `SHOPIFY_PARTNER_API_VERSION`
+pinned to supported Partner version used by validated queries.
 
 **Migrations retry on a transient Cloudflare 5xx.** `wrangler d1 migrations apply`
 intermittently fails while querying migration state; in a deploy chain that

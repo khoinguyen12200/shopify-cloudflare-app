@@ -1,16 +1,29 @@
-import type { ActiveSubscription, ShopifyPartnerPort, SubscriptionDiscount, SubscriptionPricingItem } from "~/ports/shopify-partner";
+import type { ActiveSubscription, ShopifyPartnerPort } from "~/ports/shopify-partner";
 import { parsePartnerEvent } from "./shopify-partner-events";
-
-const endpoint = "https://partners.shopify.com/";
 
 const activeSubscriptionQuery = `query ActiveSubscription($appId: ID!, $shopId: ID!) {
   activeSubscription(appId: $appId, shopId: $shopId) {
     shop { id myshopifyDomain }
-    billingPeriod cancelAtEndOfCycle trialEndsAt
+    billingPeriod
+    cancelAtEndOfCycle
+    trialEndsAt
     currentBillingCycle { startTime endTime }
-    items { handle description price { __typename active currency ... on FlatRatePrice { amount } ... on TieredPrice { tiersMode tiers { upTo amountPerUnit amount } } } discount { amount percentage originalDiscountCycles remainingDiscountCycles discountEndsAt } usage { quantity cost { amount currencyCode } } }
-    pendingUpdate { billingPeriod items { handle price { __typename ... on FlatRatePrice { amount } } } legacySubscriptionId }
     legacySubscriptionId
+    items {
+      handle
+      description
+      price {
+        __typename
+        ... on FlatRatePrice { amount currency }
+        ... on TieredPrice { currency }
+      }
+      usage { quantity cost { amount currencyCode } }
+    }
+    pendingUpdate {
+      billingPeriod
+      legacySubscriptionId
+      items { handle description price { __typename currency ... on FlatRatePrice { amount } ... on TieredPrice { tiersMode tiers { upTo amountPerUnit amount } } } }
+    }
   }
 }`;
 
@@ -39,13 +52,6 @@ function object(value: unknown): Record<string, unknown> | null {
     ? Object.fromEntries(Object.entries(value))
     : null;
 }
-function stringValue(value: unknown): string | undefined { return typeof value === "string" ? value : undefined; }
-function money(value: unknown): { amount: string; currency: string } | undefined {
-  const row = object(value);
-  const amount = stringValue(row?.amount);
-  const currency = stringValue(row?.currency) ?? stringValue(row?.currencyCode);
-  return amount && currency ? { amount, currency } : undefined;
-}
 
 function graphqlData(value: unknown): Record<string, unknown> {
   const body = object(value);
@@ -59,14 +65,57 @@ function graphqlData(value: unknown): Record<string, unknown> {
   return data;
 }
 
+function string(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function subscriptionItem(value: unknown): ActiveSubscription["items"][number] {
+  const item = object(value) ?? {};
+  const price = object(item.price);
+  const usage = object(item.usage);
+  const cost = usage && object(usage.cost);
+  return {
+    handle: string(item.handle),
+    description: string(item.description),
+    price: price ? { amount: string(price.amount), currency: string(price.currency) } : null,
+    cappedAmount: cost ? { amount: string(cost.amount), currency: string(cost.currencyCode) } : null,
+  };
+}
+
+function activeSubscription(value: Record<string, unknown>): ActiveSubscription {
+  const shop = object(value.shop);
+  const cycle = object(value.currentBillingCycle);
+  const pending = object(value.pendingUpdate);
+  return {
+    shop: shop ? { id: string(shop.id), myshopifyDomain: string(shop.myshopifyDomain) } : null,
+    billingPeriod: string(value.billingPeriod),
+    cancelAtEndOfCycle: value.cancelAtEndOfCycle === true,
+    trialEndsAt: string(value.trialEndsAt), legacySubscriptionId: string(value.legacySubscriptionId),
+    currentBillingCycle: cycle && string(cycle.startTime) && string(cycle.endTime)
+      ? { startTime: string(cycle.startTime)!, endTime: string(cycle.endTime)! } : null,
+    items: Array.isArray(value.items) ? value.items.map(subscriptionItem) : [],
+    pendingUpdate: pending ? { billingPeriod: string(pending.billingPeriod), legacySubscriptionId: string(pending.legacySubscriptionId), items: Array.isArray(pending.items) ? pending.items.map(subscriptionItem) : [] } : null,
+  };
+}
+
 export class ShopifyPartnerAdapter implements ShopifyPartnerPort {
   constructor(private readonly dependencies: {
     readonly token: string;
+    readonly organizationId: string;
+    readonly apiVersion: string;
     readonly fetch: typeof fetch;
   }) {}
 
+  private endpoint(): string {
+    const placeholder = /^(?:REPLACE_ME|TODO|CHANGE_ME)$/i;
+    if (!this.dependencies.token || !this.dependencies.organizationId || !this.dependencies.apiVersion || placeholder.test(this.dependencies.organizationId) || placeholder.test(this.dependencies.apiVersion)) {
+      throw new Error("Partner API organization, version, and token are required");
+    }
+    return `https://partners.shopify.com/${encodeURIComponent(this.dependencies.organizationId)}/api/${encodeURIComponent(this.dependencies.apiVersion)}/graphql.json`;
+  }
+
   async activeSubscription(appId: string, shopId: string): Promise<ActiveSubscription | null> {
-    const response = await this.dependencies.fetch(endpoint, {
+    const response = await this.dependencies.fetch(this.endpoint(), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -81,34 +130,7 @@ export class ShopifyPartnerAdapter implements ShopifyPartnerPort {
     }
     const subscription = object(data.activeSubscription);
     if (!subscription) return null;
-    const items = Array.isArray(subscription.items) ? subscription.items : [];
-    const pricingItems: SubscriptionPricingItem[] = items.flatMap((item) => {
-      const row = object(item); const price = money(row?.price);
-      if (!row) return [];
-      return [{ handle: stringValue(row.handle) ?? null, priceAmount: price?.amount ?? null, priceCurrency: price?.currency ?? null, cappedAmount: null, cappedCurrency: null }];
-    });
-    const discounts: SubscriptionDiscount[] = items.flatMap((item) => {
-      const row = object(item); const discount = object(row?.discount); const price = money(row?.price);
-      const amount = stringValue(discount?.amount);
-      return amount && price ? [{ amount, currency: price.currency, duration: stringValue(discount?.discountEndsAt) ?? null }] : [];
-    });
-    const usage = items.map((item) => money(object(object(item)?.usage)?.cost)).find((value) => value !== undefined);
-    const pending = object(subscription.pendingUpdate);
-    return {
-      id: typeof subscription.id === "string" ? subscription.id : undefined,
-      legacySubscriptionId: stringValue(subscription.legacySubscriptionId) ?? stringValue(subscription.legacyId),
-      status: typeof subscription.status === "string" ? subscription.status : undefined,
-      state: typeof subscription.state === "string" ? subscription.state : undefined,
-      planHandle: typeof subscription.planHandle === "string" ? subscription.planHandle : undefined,
-      billingPeriod: typeof subscription.billingPeriod === "string" ? subscription.billingPeriod : undefined,
-      trialEndsAt: typeof subscription.trialEndsAt === "string" ? subscription.trialEndsAt : undefined,
-      currentPeriodStart: stringValue(object(subscription.currentBillingCycle)?.startTime),
-      currentPeriodEnd: stringValue(object(subscription.currentBillingCycle)?.endTime),
-      pricingItems,
-      discounts,
-      usage: usage ? { billedAmount: usage.amount, billedCurrency: usage.currency } : undefined,
-      pendingUpdate: pending ? { status: stringValue(pending.status) ?? "PENDING", effectiveAt: stringValue(pending.effectiveAt) ?? null } : undefined,
-    };
+    return activeSubscription(subscription);
   }
 
   async listHistoricalEvents(input: {
@@ -128,7 +150,7 @@ export class ShopifyPartnerAdapter implements ShopifyPartnerPort {
         "SUBSCRIPTION_FROZEN", "SUBSCRIPTION_UNFROZEN",
       ],
     };
-    const response = await this.dependencies.fetch(endpoint, {
+    const response = await this.dependencies.fetch(this.endpoint(), {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": this.dependencies.token },
       body: JSON.stringify({ query: historicalEventsQuery, variables: { filter, cursor: input.cursor ?? null } }),

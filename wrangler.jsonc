@@ -134,7 +134,9 @@
     // caching, cost tracking and request logs for free. Empty = straight to
     // Workers AI.
     "AI_GATEWAY_ID": "",
-    "SHOPIFY_PARTNER_APP_ID": ""
+    "SHOPIFY_PARTNER_APP_ID": "",
+    "SHOPIFY_PARTNER_ORGANIZATION_ID": "",
+    "SHOPIFY_PARTNER_API_VERSION": "2026-07"
   },
 
   // ─────────────────────────── PRODUCTION ───────────────────────────
@@ -201,7 +203,9 @@
         "SHOPIFY_APP_URL": "https://example.com",
         "EMAIL_FROM": "",
         "EMAIL_FROM_NAME": "",
-        "SHOPIFY_PARTNER_APP_ID": ""
+        "SHOPIFY_PARTNER_APP_ID": "",
+        "SHOPIFY_PARTNER_ORGANIZATION_ID": "",
+        "SHOPIFY_PARTNER_API_VERSION": "2026-07"
       }
     }
   }

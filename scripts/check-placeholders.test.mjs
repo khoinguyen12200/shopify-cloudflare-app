@@ -12,6 +12,8 @@ function validFiles() {
           SHOPIFY_API_KEY: "client-key",
           SHOPIFY_APP_URL: "https://app.example.org",
           SHOPIFY_PARTNER_APP_ID: "gid://partners/App/1",
+          SHOPIFY_PARTNER_ORGANIZATION_ID: "1234567",
+          SHOPIFY_PARTNER_API_VERSION: "2026-07",
         },
         secrets: { required: ["SHOPIFY_PARTNER_API_TOKEN"] },
       } },
@@ -26,6 +28,15 @@ function validFiles() {
 
 test("accepts populated production config while allowing local fixture values", () => {
   assert.deepEqual(validateLaunchContract(validFiles()), []);
+});
+
+test("rejects missing Partner organization and API version", () => {
+  const files = validFiles();
+  delete files.wrangler.env.production.vars.SHOPIFY_PARTNER_ORGANIZATION_ID;
+  files.wrangler.env.production.vars.SHOPIFY_PARTNER_API_VERSION = "";
+  const issues = validateLaunchContract(files).join("\n");
+  assert.match(issues, /SHOPIFY_PARTNER_ORGANIZATION_ID/);
+  assert.match(issues, /SHOPIFY_PARTNER_API_VERSION/);
 });
 
 test("rejects every launch placeholder and redirect drift", () => {

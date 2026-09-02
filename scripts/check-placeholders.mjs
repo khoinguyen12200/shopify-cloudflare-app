@@ -125,7 +125,7 @@ export function validateLaunchContract(files) {
   if (findPlaceholders(production).length > 0) issues.push("Cloudflare production binding contains placeholder values");
 
   const vars = production.vars ?? {};
-  for (const key of ["SHOPIFY_API_KEY", "SHOPIFY_APP_URL", "SHOPIFY_PARTNER_APP_ID"]) {
+  for (const key of ["SHOPIFY_API_KEY", "SHOPIFY_APP_URL", "SHOPIFY_PARTNER_APP_ID", "SHOPIFY_PARTNER_ORGANIZATION_ID", "SHOPIFY_PARTNER_API_VERSION"]) {
     if (!vars[key] || PLACEHOLDER.test(vars[key]) || vars[key] === "https://example.com") {
       issues.push(`${key} is missing or placeholder`);
     }

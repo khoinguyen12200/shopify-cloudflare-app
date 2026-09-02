@@ -1,10 +1,9 @@
-import type { ShopifyPartnerPort } from "~/ports/shopify-partner";
+import type { ActiveSubscription, ShopifyPartnerPort } from "~/ports/shopify-partner";
+import { fromDecimalString } from "~/money";
 
 export interface Clock { readonly now: () => number; }
 export interface ShopIdentity { readonly shop: string; readonly shopifyShopId: string | null; }
-export interface SubscriptionProjectionPort {
-  upsertSubscriptionProjection(shop: string, observation: SubscriptionObservation): Promise<"applied" | "stale" | "duplicate">;
-}
+export interface SubscriptionProjectionPort { upsertSubscriptionProjection(shop: string, observation: SubscriptionObservation): Promise<"applied" | "stale" | "duplicate">; }
 export interface SubscriptionObservation {
   readonly type: "ACTIVE_SUBSCRIPTION";
   readonly subscriptionId: string;
@@ -13,16 +12,33 @@ export interface SubscriptionObservation {
   readonly externalId: string;
   readonly planHandle?: string | null;
   readonly billingInterval?: string | null;
+  readonly trialEndsAt?: number | null;
+  readonly currentPeriodStartsAt?: number | null;
+  readonly currentPeriodEndsAt?: number | null;
+  readonly cancellationEffectiveAt?: number | null;
+  readonly pendingPlanHandle?: string | null;
+  readonly pendingBillingInterval?: string | null;
+  readonly pendingLegacySubscriptionId?: string | null;
+  readonly items?: readonly {
+    readonly itemType: string;
+    readonly priceAmount: number | null;
+    readonly priceCurrency: string | null;
+    readonly cappedAmountAmount?: number | null;
+    readonly cappedAmountCurrency?: string | null;
+  }[];
 }
 export type RefreshResult = { readonly status: "refreshed" } | { readonly status: "failed"; readonly code: string; readonly detail: string };
 
-function object(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === "object" && !Array.isArray(value) ? Object.fromEntries(Object.entries(value)) : null;
-}
-function string(value: unknown): string | null { return typeof value === "string" && value.length > 0 ? value : null; }
-function status(value: unknown): SubscriptionObservation["status"] {
-  const candidate = string(value);
-  return candidate === "NONE" || candidate === "PENDING" || candidate === "ACTIVE" || candidate === "CANCELLATION_SCHEDULED" || candidate === "FROZEN" || candidate === "CANCELED" || candidate === "UNKNOWN" ? candidate : "ACTIVE";
+function subscriptionItems(response: ActiveSubscription | null): SubscriptionObservation["items"] {
+  if (!response) return [];
+  return response.items.flatMap((item) => {
+    const money = item.price?.amount && item.price.currency ? fromDecimalString(item.price.amount, item.price.currency) : null;
+    const capped = item.cappedAmount && item.cappedAmount.amount && item.cappedAmount.currency
+      ? fromDecimalString(item.cappedAmount.amount, item.cappedAmount.currency)
+      : null;
+    if (!money?.ok && !capped?.ok) return [];
+    return [{ itemType: item.handle ?? "subscription", priceAmount: money?.ok ? money.value.amount : null, priceCurrency: item.price?.currency ?? null, cappedAmountAmount: capped?.ok ? capped.value.amount : null, cappedAmountCurrency: capped?.ok ? capped.value.currency : null }];
+  });
 }
 
 export async function refreshSubscription(deps: {
@@ -34,16 +50,28 @@ export async function refreshSubscription(deps: {
   if (!deps.appId || !shop.shopifyShopId) return { status: "failed", code: "MISSING_CREDENTIALS", detail: "Partner app ID, token, or Shopify shop ID unavailable" };
   try {
     const response = await deps.partner.activeSubscription(deps.appId, shop.shopifyShopId);
-    const data = object(response);
-    const subscriptionId = string(data?.id) ?? string(data?.subscriptionId) ?? "active-subscription";
+    const subscriptionId = response?.legacySubscriptionId ?? `active:${shop.shopifyShopId}`;
+    const firstItem = response?.items[0] ?? null;
+    const pendingItem = response?.pendingUpdate?.items[0] ?? null;
+    const trialEndsAt = response?.trialEndsAt ? Date.parse(response.trialEndsAt) : null;
+    const currentPeriodStartsAt = response?.currentBillingCycle ? Date.parse(response.currentBillingCycle.startTime) : null;
+    const currentPeriodEndsAt = response?.currentBillingCycle ? Date.parse(response.currentBillingCycle.endTime) : null;
     await deps.subscriptions.upsertSubscriptionProjection(shop.shop, {
       type: "ACTIVE_SUBSCRIPTION",
       subscriptionId,
-      status: response === null ? "NONE" : status(data?.status ?? data?.state),
+      status: response === null ? "NONE" : response.cancelAtEndOfCycle ? "CANCELLATION_SCHEDULED" : "ACTIVE",
       occurredAt: now,
       externalId: subscriptionId,
-      planHandle: string(data?.planHandle),
-      billingInterval: string(data?.billingPeriod),
+      planHandle: firstItem?.handle ?? null,
+      billingInterval: response?.billingPeriod ?? null,
+      trialEndsAt: Number.isFinite(trialEndsAt) ? trialEndsAt : null,
+      currentPeriodStartsAt: Number.isFinite(currentPeriodStartsAt) ? currentPeriodStartsAt : null,
+      currentPeriodEndsAt: Number.isFinite(currentPeriodEndsAt) ? currentPeriodEndsAt : null,
+      cancellationEffectiveAt: response?.cancelAtEndOfCycle && Number.isFinite(currentPeriodEndsAt) ? currentPeriodEndsAt : null,
+      pendingPlanHandle: pendingItem?.handle ?? null,
+      pendingBillingInterval: response?.pendingUpdate?.billingPeriod ?? null,
+      pendingLegacySubscriptionId: response?.pendingUpdate?.legacySubscriptionId ?? null,
+      items: subscriptionItems(response),
     });
     return { status: "refreshed" };
   } catch (error) {

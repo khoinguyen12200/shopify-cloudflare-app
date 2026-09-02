@@ -39,7 +39,12 @@ export function passwordResetTokens(): PasswordResetTokenPort {
 /** Targeted billing refresh composition. Missing Partner credentials stay observable. */
 export async function refreshShopSubscription(env: Env, shop: string, now = Date.now()) {
   const identity = await new ShopRepo().get(shop);
-  const partner = new ShopifyPartnerAdapter({ token: env.SHOPIFY_PARTNER_API_TOKEN || "", fetch });
+  const partner = new ShopifyPartnerAdapter({
+    token: env.SHOPIFY_PARTNER_API_TOKEN || "",
+    organizationId: env.SHOPIFY_PARTNER_ORGANIZATION_ID || "",
+    apiVersion: env.SHOPIFY_PARTNER_API_VERSION || "",
+    fetch,
+  });
   return refreshSubscription({
     partner,
     subscriptions: { upsertSubscriptionProjection: (tenant, observation) => new ShopSubscriptionRepo().upsertObservation(tenant, observation) },
@@ -109,7 +114,12 @@ export function scheduledDependencies() {
     tokens: new PasswordResetTokenRepo(),
     history: {
       reconcile: (now: number) => reconcileHistory({
-        partner: new ShopifyPartnerAdapter({ token: env.SHOPIFY_PARTNER_API_TOKEN || "", fetch }),
+        partner: new ShopifyPartnerAdapter({
+          token: env.SHOPIFY_PARTNER_API_TOKEN || "",
+          organizationId: env.SHOPIFY_PARTNER_ORGANIZATION_ID || "",
+          apiVersion: env.SHOPIFY_PARTNER_API_VERSION || "",
+          fetch,
+        }),
         checkpoint: new ShopSyncCheckpointRepo(),
         ledger: historyLedger(),
         clock: { now: () => now },

@@ -8,8 +8,12 @@ export type SubscriptionObservationInput = SubscriptionObservation & {
   readonly planHandle?: string | null;
   readonly billingInterval?: string | null;
   readonly trialEndsAt?: number | null;
+  readonly currentPeriodStartsAt?: number | null;
   readonly currentPeriodEndsAt?: number | null;
   readonly cancellationEffectiveAt?: number | null;
+  readonly pendingPlanHandle?: string | null;
+  readonly pendingBillingInterval?: string | null;
+  readonly pendingLegacySubscriptionId?: string | null;
   readonly items?: readonly {
     readonly itemType: string;
     readonly priceAmount?: number | null;
@@ -86,14 +90,27 @@ export class ShopSubscriptionRepo {
     const state = applySubscriptionObservation(current ? { kind: kindByStatus[current.status], occurredAt: current.appliedOccurredAt, externalId: current.appliedExternalId } : null, observation);
     const applied = await db.insert(shopSubscriptions).values({
       shop, subscriptionId: observation.subscriptionId, status: statusByKind[state.kind],
-      planHandle: observation.planHandle ?? current?.planHandle ?? null, billingInterval: observation.billingInterval ?? current?.billingInterval ?? null,
-      trialEndsAt: observation.trialEndsAt ?? current?.trialEndsAt ?? null, currentPeriodEndsAt: observation.currentPeriodEndsAt ?? current?.currentPeriodEndsAt ?? null,
-      cancellationEffectiveAt: observation.cancellationEffectiveAt ?? current?.cancellationEffectiveAt ?? null,
+      planHandle: observation.planHandle === undefined ? current?.planHandle ?? null : observation.planHandle,
+      billingInterval: observation.billingInterval === undefined ? current?.billingInterval ?? null : observation.billingInterval,
+      trialEndsAt: observation.trialEndsAt === undefined ? current?.trialEndsAt ?? null : observation.trialEndsAt,
+      currentPeriodStartsAt: observation.currentPeriodStartsAt === undefined ? current?.currentPeriodStartsAt ?? null : observation.currentPeriodStartsAt,
+      currentPeriodEndsAt: observation.currentPeriodEndsAt === undefined ? current?.currentPeriodEndsAt ?? null : observation.currentPeriodEndsAt,
+      cancellationEffectiveAt: observation.cancellationEffectiveAt === undefined ? current?.cancellationEffectiveAt ?? null : observation.cancellationEffectiveAt,
+      pendingPlanHandle: observation.pendingPlanHandle === undefined ? current?.pendingPlanHandle ?? null : observation.pendingPlanHandle,
+      pendingBillingInterval: observation.pendingBillingInterval === undefined ? current?.pendingBillingInterval ?? null : observation.pendingBillingInterval,
+      pendingLegacySubscriptionId: observation.pendingLegacySubscriptionId === undefined ? current?.pendingLegacySubscriptionId ?? null : observation.pendingLegacySubscriptionId,
       appliedOccurredAt: observation.occurredAt, appliedExternalId: observation.externalId,
     }).onConflictDoUpdate({ target: [shopSubscriptions.shop, shopSubscriptions.subscriptionId], set: {
-      status: statusByKind[state.kind], planHandle: observation.planHandle ?? current?.planHandle ?? null,
-      billingInterval: observation.billingInterval ?? current?.billingInterval ?? null, trialEndsAt: observation.trialEndsAt ?? current?.trialEndsAt ?? null,
-      currentPeriodEndsAt: observation.currentPeriodEndsAt ?? current?.currentPeriodEndsAt ?? null, cancellationEffectiveAt: observation.cancellationEffectiveAt ?? current?.cancellationEffectiveAt ?? null,
+      status: statusByKind[state.kind],
+      planHandle: observation.planHandle === undefined ? current?.planHandle ?? null : observation.planHandle,
+      billingInterval: observation.billingInterval === undefined ? current?.billingInterval ?? null : observation.billingInterval,
+      trialEndsAt: observation.trialEndsAt === undefined ? current?.trialEndsAt ?? null : observation.trialEndsAt,
+      currentPeriodStartsAt: observation.currentPeriodStartsAt === undefined ? current?.currentPeriodStartsAt ?? null : observation.currentPeriodStartsAt,
+      currentPeriodEndsAt: observation.currentPeriodEndsAt === undefined ? current?.currentPeriodEndsAt ?? null : observation.currentPeriodEndsAt,
+      cancellationEffectiveAt: observation.cancellationEffectiveAt === undefined ? current?.cancellationEffectiveAt ?? null : observation.cancellationEffectiveAt,
+      pendingPlanHandle: observation.pendingPlanHandle === undefined ? current?.pendingPlanHandle ?? null : observation.pendingPlanHandle,
+      pendingBillingInterval: observation.pendingBillingInterval === undefined ? current?.pendingBillingInterval ?? null : observation.pendingBillingInterval,
+      pendingLegacySubscriptionId: observation.pendingLegacySubscriptionId === undefined ? current?.pendingLegacySubscriptionId ?? null : observation.pendingLegacySubscriptionId,
       appliedOccurredAt: observation.occurredAt, appliedExternalId: observation.externalId,
     }, where: or(sql`${shopSubscriptions.appliedOccurredAt} < ${observation.occurredAt}`, and(eq(shopSubscriptions.appliedOccurredAt, observation.occurredAt), sql`${shopSubscriptions.appliedExternalId} < ${observation.externalId}`)) }).returning({ subscriptionId: shopSubscriptions.subscriptionId });
     if (applied.length === 0 && !duplicate) return "stale";

@@ -51,6 +51,59 @@ describe("ShopSubscriptionRepo", () => {
     expect(row).toMatchObject({ planHandle: "pro", billingInterval: "EVERY_30_DAYS" });
   });
 
+  it("persists current cycle and pending update metadata", async () => {
+    const row = await inRequest(async () => {
+      const repo = new ShopSubscriptionRepo();
+      const input = {
+        type: "ACTIVE_SUBSCRIPTION" as const,
+        status: "CANCELLATION_SCHEDULED" as const,
+        subscriptionId: "sub-1",
+        occurredAt: 1,
+        externalId: "sub-1",
+        currentPeriodStartsAt: 100,
+        currentPeriodEndsAt: 200,
+        cancellationEffectiveAt: 200,
+        pendingPlanHandle: "plus",
+        pendingBillingInterval: "ANNUAL",
+        pendingLegacySubscriptionId: "gid://shopify/AppSubscription/2",
+      };
+      await repo.upsertObservation("pending.myshopify.com", input);
+      return env.DB.prepare("SELECT current_period_starts_at AS currentPeriodStartsAt, pending_plan_handle AS pendingPlanHandle, pending_billing_interval AS pendingBillingInterval, pending_legacy_subscription_id AS pendingLegacySubscriptionId FROM shop_subscriptions WHERE shop = ?")
+        .bind("pending.myshopify.com").first();
+    });
+    expect(row).toEqual({
+      currentPeriodStartsAt: 100,
+      pendingPlanHandle: "plus",
+      pendingBillingInterval: "ANNUAL",
+      pendingLegacySubscriptionId: "gid://shopify/AppSubscription/2",
+    });
+  });
+
+  it("clears expired active-subscription metadata with explicit nulls", async () => {
+    const row = await inRequest(async () => {
+      const repo = new ShopSubscriptionRepo();
+      await repo.upsertObservation("clear.myshopify.com", {
+        type: "ACTIVE_SUBSCRIPTION", status: "ACTIVE", subscriptionId: "sub-1", occurredAt: 1, externalId: "sub-1",
+        trialEndsAt: 100, currentPeriodStartsAt: 100, currentPeriodEndsAt: 200,
+        pendingPlanHandle: "plus", pendingBillingInterval: "ANNUAL", pendingLegacySubscriptionId: "pending-1",
+      });
+      await repo.upsertObservation("clear.myshopify.com", {
+        type: "ACTIVE_SUBSCRIPTION", status: "ACTIVE", subscriptionId: "sub-1", occurredAt: 2, externalId: "sub-1",
+        trialEndsAt: null, currentPeriodStartsAt: null, currentPeriodEndsAt: null,
+        pendingPlanHandle: null, pendingBillingInterval: null, pendingLegacySubscriptionId: null,
+      });
+      return repo.get("clear.myshopify.com", "sub-1");
+    });
+    expect(row).toMatchObject({
+      trialEndsAt: null,
+      currentPeriodStartsAt: null,
+      currentPeriodEndsAt: null,
+      pendingPlanHandle: null,
+      pendingBillingInterval: null,
+      pendingLegacySubscriptionId: null,
+    });
+  });
+
   it("returns every recurring pricing item for a current subscription", async () => {
     const rows = await inRequest(async () => {
       const repo = new ShopSubscriptionRepo();
