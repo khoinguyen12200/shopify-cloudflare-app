@@ -1,4 +1,4 @@
-import type { ShopifyPartnerPort } from "~/ports/shopify-partner";
+import type { ActiveSubscription, ShopifyPartnerPort } from "~/ports/shopify-partner";
 import { parsePartnerEvent } from "./shopify-partner-events";
 
 const endpoint = "https://partners.shopify.com/";
@@ -57,7 +57,7 @@ export class ShopifyPartnerAdapter implements ShopifyPartnerPort {
     readonly fetch: typeof fetch;
   }) {}
 
-  async activeSubscription(appId: string, shopId: string): Promise<unknown | null> {
+  async activeSubscription(appId: string, shopId: string): Promise<ActiveSubscription | null> {
     const response = await this.dependencies.fetch(endpoint, {
       method: "POST",
       headers: {
@@ -71,7 +71,15 @@ export class ShopifyPartnerAdapter implements ShopifyPartnerPort {
     if (!("activeSubscription" in data)) {
       throw new Error("Partner API response omitted activeSubscription");
     }
-    return data.activeSubscription ?? null;
+    const subscription = object(data.activeSubscription);
+    if (!subscription) return null;
+    return {
+      id: typeof subscription.id === "string" ? subscription.id : undefined,
+      status: typeof subscription.status === "string" ? subscription.status : undefined,
+      state: typeof subscription.state === "string" ? subscription.state : undefined,
+      planHandle: typeof subscription.planHandle === "string" ? subscription.planHandle : undefined,
+      billingPeriod: typeof subscription.billingPeriod === "string" ? subscription.billingPeriod : undefined,
+    };
   }
 
   async listHistoricalEvents(input: {
