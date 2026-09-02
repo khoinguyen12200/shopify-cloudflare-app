@@ -147,7 +147,7 @@ Required source-of-truth rules:
 Latest verified commands:
 
 ```text
-npm run verify                 typecheck + lint + 853 Vitest tests passed
+npm run verify                 typecheck + lint + 856 Vitest tests passed
 npm run db:migrate:local       no migrations pending
 npm run test:agent-setup       12/12 passed
 npm run build                  passed
@@ -155,7 +155,7 @@ git diff --check               passed
 npm run check:placeholders     expected failure: 10 launch contract issues
 ```
 
-`npm run verify` currently reports 92 files and 853 tests passed. Shopify dev and
+`npm run verify` currently reports 92 files and 856 tests passed. Shopify dev and
 production CLI validation remains unrun in this gate because authorized org/app
 linkage is unavailable. Partner query schema validation passed; no live Partner
 API success is implied.
