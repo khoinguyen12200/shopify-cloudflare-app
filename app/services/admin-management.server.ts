@@ -1,6 +1,7 @@
 import { hashPassword, verifyPassword } from "~/lib/password";
 import { validatePasswordStrength } from "~/lib/password-policy";
-import { AdminUserRepo, normalizeEmail } from "~/models/admin-users.server";
+import { normalizeEmail, type AdminUserPort } from "~/ports/admin-users";
+import { adminUsers } from "~/wiring.server";
 import type { AdminRole, SafeAdminUser } from "~/db/schema";
 
 /**
@@ -57,7 +58,7 @@ export async function createAdmin(input: {
   email: string;
   password: string;
   role: AdminRole;
-}): Promise<Result<SafeAdminUser>> {
+}, deps: { users: Pick<AdminUserPort, "findByEmailWithHash" | "create"> } = { users: adminUsers() }): Promise<Result<SafeAdminUser>> {
   const name = input.name.trim();
   const email = normalizeEmail(input.email);
 
@@ -67,7 +68,7 @@ export async function createAdmin(input: {
   const weak = validatePasswordStrength(input.password);
   if (weak) return fail("tooShort");
 
-  const repo = new AdminUserRepo();
+  const repo = deps.users;
   // Checked here for a good error message; the DB's unique index is the real
   // guarantee against a race.
   if (await repo.findByEmailWithHash(email)) return fail("emailTaken");
@@ -99,10 +100,10 @@ export async function setAdminStatus(input: {
   actorId: string;
   targetId: string;
   status: "active" | "disabled";
-}): Promise<Result<SafeAdminUser>> {
+}, deps: { users: Pick<AdminUserPort, "findById" | "countOtherActiveOwners" | "setStatus"> } = { users: adminUsers() }): Promise<Result<SafeAdminUser>> {
   if (input.actorId === input.targetId) return fail("notYourself");
 
-  const repo = new AdminUserRepo();
+  const repo = deps.users;
   const target = await repo.findById(input.targetId);
   if (!target) return fail("notFound");
 
@@ -120,10 +121,10 @@ export async function setAdminRole(input: {
   actorId: string;
   targetId: string;
   role: AdminRole;
-}): Promise<Result<SafeAdminUser>> {
+}, deps: { users: Pick<AdminUserPort, "findById" | "countOtherActiveOwners" | "setRole"> } = { users: adminUsers() }): Promise<Result<SafeAdminUser>> {
   if (input.actorId === input.targetId) return fail("notYourself");
 
-  const repo = new AdminUserRepo();
+  const repo = deps.users;
   const target = await repo.findById(input.targetId);
   if (!target) return fail("notFound");
 
@@ -140,10 +141,10 @@ export async function setAdminRole(input: {
 export async function removeAdmin(input: {
   actorId: string;
   targetId: string;
-}): Promise<Result<SafeAdminUser>> {
+}, deps: { users: Pick<AdminUserPort, "findById" | "countOtherActiveOwners" | "remove"> } = { users: adminUsers() }): Promise<Result<SafeAdminUser>> {
   if (input.actorId === input.targetId) return fail("notYourself");
 
-  const repo = new AdminUserRepo();
+  const repo = deps.users;
   const target = await repo.findById(input.targetId);
   if (!target) return fail("notFound");
 
@@ -177,13 +178,13 @@ export async function resetAdminPassword(input: {
   actorId: string;
   targetId: string;
   newPassword: string;
-}): Promise<Result<{ user: SafeAdminUser }>> {
+}, deps: { users: Pick<AdminUserPort, "findById" | "updatePassword"> } = { users: adminUsers() }): Promise<Result<{ user: SafeAdminUser }>> {
   if (input.actorId === input.targetId) return fail("notYourself");
 
   const weak = validatePasswordStrength(input.newPassword);
   if (weak) return fail("tooShort");
 
-  const repo = new AdminUserRepo();
+  const repo = deps.users;
   const target = await repo.findById(input.targetId);
   if (!target) return fail("notFound");
 
@@ -198,11 +199,11 @@ export async function resetAdminPassword(input: {
 export async function updateOwnProfile(input: {
   userId: string;
   name: string;
-}): Promise<Result<null, ProfileErrorReason>> {
+}, deps: { users: Pick<AdminUserPort, "updateProfile"> } = { users: adminUsers() }): Promise<Result<null, ProfileErrorReason>> {
   const name = input.name.trim();
   if (!name) return fail("nameRequired");
 
-  await new AdminUserRepo().updateProfile(input.userId, {
+  await deps.users.updateProfile(input.userId, {
     name,
     now: Date.now(),
   });
@@ -221,7 +222,7 @@ export async function changeOwnPassword(input: {
   currentPassword: string;
   newPassword: string;
   confirmPassword: string;
-}): Promise<Result<null, ProfileErrorReason>> {
+}, deps: { users: Pick<AdminUserPort, "findByIdWithHash" | "updatePassword"> } = { users: adminUsers() }): Promise<Result<null, ProfileErrorReason>> {
   if (input.newPassword !== input.confirmPassword) return fail("mismatch");
 
   const weak = validatePasswordStrength(input.newPassword);
@@ -229,7 +230,7 @@ export async function changeOwnPassword(input: {
 
   if (input.newPassword === input.currentPassword) return fail("sameAsOld");
 
-  const repo = new AdminUserRepo();
+  const repo = deps.users;
   const user = await repo.findByIdWithHash(input.userId);
   if (!user) return fail("notFound");
 

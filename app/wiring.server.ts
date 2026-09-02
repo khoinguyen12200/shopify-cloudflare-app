@@ -5,7 +5,27 @@ import { ShopifyPartnerAdapter } from "~/adapters/shopify-partner.server";
 import { ShopifyEventRepo } from "~/models/shopify-events.server";
 import { ShopSubscriptionRepo } from "~/models/shop-subscriptions.server";
 import { ShopRepo } from "~/models/shops.server";
+import { AdminUserRepo } from "~/models/admin-users.server";
+import { PasswordResetTokenRepo } from "~/models/password-reset-tokens.server";
 import { refreshSubscription } from "~/services/reconcile-subscription";
+import type { AdminUserPort } from "~/ports/admin-users";
+import type { PasswordResetTokenPort } from "~/ports/password-reset-tokens";
+
+export function adminUsers(): AdminUserPort {
+  return new AdminUserRepo();
+}
+
+export function passwordResetTokens(): PasswordResetTokenPort {
+  const repo = new PasswordResetTokenRepo();
+  return {
+    create: (input) => repo.create(input),
+    findByHash: (hash) => repo.findByHash(hash),
+    markUsed: (hash, now) => repo.markUsed(hash, now),
+    invalidateAllForUser: (id, now) => repo.invalidateAllForUser(id, now),
+    countActiveForUser: (id, now) => repo.countActiveForUser(id, now),
+    cleanup: (cutoff) => repo.deleteExpiredBefore(cutoff),
+  };
+}
 
 /** Targeted billing refresh composition. Missing Partner credentials stay observable. */
 export async function refreshShopSubscription(env: Env, shop: string, now = Date.now()) {

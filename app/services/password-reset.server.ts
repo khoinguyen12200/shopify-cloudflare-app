@@ -1,5 +1,6 @@
-import { AdminUserRepo, normalizeEmail } from "~/models/admin-users.server";
-import { PasswordResetTokenRepo } from "~/models/password-reset-tokens.server";
+import { normalizeEmail, type AdminUserPort } from "~/ports/admin-users";
+import type { PasswordResetTokenPort } from "~/ports/password-reset-tokens";
+import { adminUsers, passwordResetTokens } from "~/wiring.server";
 import { generateToken, hashToken } from "~/lib/token";
 import { hashPassword } from "~/lib/password";
 import { validatePasswordStrength } from "~/lib/password-policy";
@@ -38,11 +39,14 @@ export async function requestPasswordReset(input: {
   email: string;
   /** Origin of the incoming request, so the link points back at this deployment. */
   origin: string;
-}): Promise<RequestResetOutcome> {
+}, deps: {
+  users: Pick<AdminUserPort, "findByEmailWithHash">;
+  tokens: Pick<PasswordResetTokenPort, "countActiveForUser" | "create">;
+} = { users: adminUsers(), tokens: passwordResetTokens() }): Promise<RequestResetOutcome> {
   const email = normalizeEmail(input.email);
   const now = Date.now();
 
-  const user = await new AdminUserRepo().findByEmailWithHash(email);
+  const user = await deps.users.findByEmailWithHash(email);
 
   if (!user || user.status !== "active") {
     console.log(
@@ -56,7 +60,7 @@ export async function requestPasswordReset(input: {
     return { requested: true, emailSent: false };
   }
 
-  const tokens = new PasswordResetTokenRepo();
+  const tokens = deps.tokens;
   if ((await tokens.countActiveForUser(user.id, now)) >= MAX_ACTIVE_TOKENS) {
     console.log(
       JSON.stringify({
@@ -125,8 +129,9 @@ export type CompleteResetResult =
 /** Is this token usable? Checked before rendering the form, and again on submit. */
 export async function checkResetToken(
   token: string,
+  deps: { tokens: Pick<PasswordResetTokenPort, "findByHash"> } = { tokens: passwordResetTokens() },
 ): Promise<{ ok: true; adminUserId: string } | { ok: false; reason: ResetFailure }> {
-  const row = await new PasswordResetTokenRepo().findByHash(await hashToken(token));
+  const row = await deps.tokens.findByHash(await hashToken(token));
 
   if (!row) return { ok: false, reason: "invalidToken" };
   // Used is reported separately from expired so a person who clicks an old link
@@ -147,7 +152,10 @@ export async function completePasswordReset(input: {
   token: string;
   newPassword: string;
   confirmPassword: string;
-}): Promise<CompleteResetResult> {
+}, deps: {
+  users: Pick<AdminUserPort, "updatePassword">;
+  tokens: Pick<PasswordResetTokenPort, "findByHash" | "markUsed" | "invalidateAllForUser">;
+} = { users: adminUsers(), tokens: passwordResetTokens() }): Promise<CompleteResetResult> {
   if (input.newPassword !== input.confirmPassword) {
     return { ok: false, reason: "mismatch" };
   }
@@ -155,13 +163,13 @@ export async function completePasswordReset(input: {
     return { ok: false, reason: "tooShort" };
   }
 
-  const checked = await checkResetToken(input.token);
+  const checked = await checkResetToken(input.token, deps);
   if (!checked.ok) return checked;
 
   const now = Date.now();
-  const tokens = new PasswordResetTokenRepo();
+  const tokens = deps.tokens;
 
-  await new AdminUserRepo().updatePassword(
+  await deps.users.updatePassword(
     checked.adminUserId,
     await hashPassword(input.newPassword),
     now,

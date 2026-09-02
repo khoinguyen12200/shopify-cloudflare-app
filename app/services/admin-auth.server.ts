@@ -1,6 +1,7 @@
 import { createCookieSessionStorage, redirect } from "react-router";
 import { getEnv } from "~/request-context.server";
-import { AdminUserRepo, normalizeEmail } from "~/models/admin-users.server";
+import { normalizeEmail, type AdminUserPort } from "~/ports/admin-users";
+import { adminUsers } from "~/wiring.server";
 import {
   DEFAULT_ITERATIONS,
   hashPassword,
@@ -75,7 +76,7 @@ export async function getAdminUser(
   const id = session.get(USER_ID_KEY);
   if (typeof id !== "string") return undefined;
 
-  const user = await new AdminUserRepo().findById(id);
+  const user = await adminUsers().findById(id);
   // A disabled account must lose access immediately, not at cookie expiry.
   if (!user || user.status !== "active") return undefined;
   return user;
@@ -131,8 +132,9 @@ export type LoginResult =
 export async function verifyAdminCredentials(
   email: string,
   password: string,
+  deps: { users: Pick<AdminUserPort, "findByEmailWithHash" | "recordLogin" | "updatePassword"> } = { users: adminUsers() },
 ): Promise<LoginResult> {
-  const repo = new AdminUserRepo();
+  const repo = deps.users;
   const user = await repo.findByEmailWithHash(normalizeEmail(email));
 
   if (!user) {

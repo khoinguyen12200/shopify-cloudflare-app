@@ -3,6 +3,7 @@ import { env } from "cloudflare:test";
 import { runWithRequestContext } from "~/request-context.server";
 import { setupTestDatabase } from "~/test/db";
 import { AdminUserRepo } from "~/models/admin-users.server";
+import { hashPassword } from "~/lib/password";
 import { createAdmin } from "./admin-management.server";
 import {
   createAdminSession,
@@ -80,6 +81,35 @@ describe("safeRedirectPath — the open-redirect guard", () => {
 });
 
 describe("verifyAdminCredentials", () => {
+  it("records a successful login through its injected user port", async () => {
+    const passwordHash = await hashPassword(PASSWORD);
+    let recorded: { id: string; now: number } | undefined;
+    const result = await verifyAdminCredentials("ada@example.org", PASSWORD, {
+      users: {
+        findByEmailWithHash: async () => ({
+          id: "ada",
+          email: "ada@example.org",
+          name: "Ada",
+          passwordHash,
+          role: "admin",
+          status: "active",
+          notifySupport: true,
+          createdAt: 0,
+          updatedAt: 0,
+          lastLoginAt: null,
+        }),
+        recordLogin: async (id, now) => {
+          recorded = { id, now };
+        },
+        updatePassword: async () => {},
+      },
+    });
+
+    expect(result).toMatchObject({ ok: true, user: { id: "ada" } });
+    expect(recorded?.id).toBe("ada");
+    expect(recorded?.now).toBeTypeOf("number");
+  });
+
   it("accepts the right password", async () => {
     const result = await inRequest(async () => {
       await seed("ok@example.org");
