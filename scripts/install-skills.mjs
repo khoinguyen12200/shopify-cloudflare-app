@@ -33,8 +33,10 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
+  lstatSync,
   openSync,
   readFileSync,
+  realpathSync,
   statSync,
   symlinkSync,
   writeFileSync,
@@ -83,6 +85,18 @@ function destination(name, value, fallback) {
   if ((value || tempRootValue) && outside) {
     console.error(`${name} must be under --temp-root`);
     process.exit(1);
+  }
+  if (existsSync(path) && lstatSync(path).isSymbolicLink()) {
+    console.error(`${name} cannot be a symlink under --temp-root`);
+    process.exit(1);
+  }
+  if (existsSync(path)) {
+    const realPath = realpathSync(path);
+    const realOutside = relative(tempRoot, realPath).startsWith("..") || isAbsolute(relative(tempRoot, realPath));
+    if (realOutside) {
+      console.error(`${name} resolves outside --temp-root`);
+      process.exit(1);
+    }
   }
   return path;
 }
@@ -194,7 +208,9 @@ function verifyInstalledSkills(lock) {
     skillNames
       .filter((name) => {
         const skillPath = join(store, name);
-        return !existsSync(skillPath) || !statSync(skillPath).isDirectory();
+        if (!existsSync(skillPath) || !statSync(skillPath).isDirectory()) return true;
+        const target = realpathSync(skillPath);
+        return relative(tempRoot, target).startsWith("..") || isAbsolute(relative(tempRoot, target));
       })
       .map((name) => `${store}/${name}`),
   );
@@ -216,6 +232,14 @@ function linkClaudeSkills(lock) {
 
   for (const name of Object.keys(lock.skills ?? {})) {
     const target = join(codexDir, name);
+    if (existsSync(target)) {
+      const realTarget = realpathSync(target);
+      const outside = relative(tempRoot, realTarget).startsWith("..") || isAbsolute(relative(tempRoot, realTarget));
+      if (outside) {
+        console.error(`Skill ${name} resolves outside --temp-root`);
+        process.exit(1);
+      }
+    }
     const link = join(claudeStore, name);
     if (existsSync(link)) continue;
 
