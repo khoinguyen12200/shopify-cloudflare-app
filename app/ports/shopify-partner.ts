@@ -12,8 +12,26 @@ export interface ShopifyPartnerPort {
 
 export interface ActiveSubscription {
   readonly id?: string;
+  readonly legacySubscriptionId?: string;
   readonly status?: string;
   readonly state?: string;
   readonly planHandle?: string;
   readonly billingPeriod?: string;
+  readonly trialEndsAt?: string;
+  readonly currentPeriodStart?: string;
+  readonly currentPeriodEnd?: string;
+  readonly pricingItems?: readonly SubscriptionPricingItem[];
+  readonly discounts?: readonly SubscriptionDiscount[];
+  readonly usage?: { readonly billedAmount: string; readonly billedCurrency: string };
+  readonly pendingUpdate?: { readonly status: string; readonly effectiveAt: string | null };
 }
+
+export interface SubscriptionPricingItem {
+  readonly handle: string | null;
+  readonly priceAmount: string | null;
+  readonly priceCurrency: string | null;
+  readonly cappedAmount: string | null;
+  readonly cappedCurrency: string | null;
+}
+
+export interface SubscriptionDiscount { readonly amount: string; readonly currency: string; readonly duration: string | null; }

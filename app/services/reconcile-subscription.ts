@@ -2,7 +2,9 @@ import type { ShopifyPartnerPort } from "~/ports/shopify-partner";
 
 export interface Clock { readonly now: () => number; }
 export interface ShopIdentity { readonly shop: string; readonly shopifyShopId: string | null; }
-export interface SubscriptionProjectionPort { upsertSubscriptionProjection(shop: string, observation: SubscriptionObservation): Promise<unknown>; }
+export interface SubscriptionProjectionPort {
+  upsertSubscriptionProjection(shop: string, observation: SubscriptionObservation): Promise<"applied" | "stale" | "duplicate">;
+}
 export interface SubscriptionObservation {
   readonly type: "ACTIVE_SUBSCRIPTION";
   readonly subscriptionId: string;

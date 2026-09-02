@@ -1,4 +1,4 @@
-import type { ActiveSubscription, ShopifyPartnerPort } from "~/ports/shopify-partner";
+import type { ActiveSubscription, ShopifyPartnerPort, SubscriptionDiscount, SubscriptionPricingItem } from "~/ports/shopify-partner";
 import { parsePartnerEvent } from "./shopify-partner-events";
 
 const endpoint = "https://partners.shopify.com/";
@@ -6,10 +6,11 @@ const endpoint = "https://partners.shopify.com/";
 const activeSubscriptionQuery = `query ActiveSubscription($appId: ID!, $shopId: ID!) {
   activeSubscription(appId: $appId, shopId: $shopId) {
     shop { id myshopifyDomain }
-    billingPeriod
-    cancelAtEndOfCycle
-    trialEndsAt
-    items { handle description }
+    billingPeriod cancelAtEndOfCycle trialEndsAt
+    currentBillingCycle { startTime endTime }
+    items { handle description price { __typename active currency ... on FlatRatePrice { amount } ... on TieredPrice { tiersMode tiers { upTo amountPerUnit amount } } } discount { amount percentage originalDiscountCycles remainingDiscountCycles discountEndsAt } usage { quantity cost { amount currencyCode } } }
+    pendingUpdate { billingPeriod items { handle price { __typename ... on FlatRatePrice { amount } } } legacySubscriptionId }
+    legacySubscriptionId
   }
 }`;
 
@@ -37,6 +38,13 @@ function object(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? Object.fromEntries(Object.entries(value))
     : null;
+}
+function stringValue(value: unknown): string | undefined { return typeof value === "string" ? value : undefined; }
+function money(value: unknown): { amount: string; currency: string } | undefined {
+  const row = object(value);
+  const amount = stringValue(row?.amount);
+  const currency = stringValue(row?.currency) ?? stringValue(row?.currencyCode);
+  return amount && currency ? { amount, currency } : undefined;
 }
 
 function graphqlData(value: unknown): Record<string, unknown> {
@@ -73,12 +81,33 @@ export class ShopifyPartnerAdapter implements ShopifyPartnerPort {
     }
     const subscription = object(data.activeSubscription);
     if (!subscription) return null;
+    const items = Array.isArray(subscription.items) ? subscription.items : [];
+    const pricingItems: SubscriptionPricingItem[] = items.flatMap((item) => {
+      const row = object(item); const price = money(row?.price);
+      if (!row) return [];
+      return [{ handle: stringValue(row.handle) ?? null, priceAmount: price?.amount ?? null, priceCurrency: price?.currency ?? null, cappedAmount: null, cappedCurrency: null }];
+    });
+    const discounts: SubscriptionDiscount[] = items.flatMap((item) => {
+      const row = object(item); const discount = object(row?.discount); const price = money(row?.price);
+      const amount = stringValue(discount?.amount);
+      return amount && price ? [{ amount, currency: price.currency, duration: stringValue(discount?.discountEndsAt) ?? null }] : [];
+    });
+    const usage = items.map((item) => money(object(object(item)?.usage)?.cost)).find((value) => value !== undefined);
+    const pending = object(subscription.pendingUpdate);
     return {
       id: typeof subscription.id === "string" ? subscription.id : undefined,
+      legacySubscriptionId: stringValue(subscription.legacySubscriptionId) ?? stringValue(subscription.legacyId),
       status: typeof subscription.status === "string" ? subscription.status : undefined,
       state: typeof subscription.state === "string" ? subscription.state : undefined,
       planHandle: typeof subscription.planHandle === "string" ? subscription.planHandle : undefined,
       billingPeriod: typeof subscription.billingPeriod === "string" ? subscription.billingPeriod : undefined,
+      trialEndsAt: typeof subscription.trialEndsAt === "string" ? subscription.trialEndsAt : undefined,
+      currentPeriodStart: stringValue(object(subscription.currentBillingCycle)?.startTime),
+      currentPeriodEnd: stringValue(object(subscription.currentBillingCycle)?.endTime),
+      pricingItems,
+      discounts,
+      usage: usage ? { billedAmount: usage.amount, billedCurrency: usage.currency } : undefined,
+      pendingUpdate: pending ? { status: stringValue(pending.status) ?? "PENDING", effectiveAt: stringValue(pending.effectiveAt) ?? null } : undefined,
     };
   }
 

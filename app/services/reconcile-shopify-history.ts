@@ -11,8 +11,8 @@ export interface SyncCheckpointPort {
   markCheckpointFailed(name: string, code: string, detail: string, now: number): Promise<void>;
 }
 export interface LifecycleLedgerPort {
-  recordPartnerRelationship(event: RelationshipLedgerEvent): Promise<unknown>;
-  recordPartnerSubscription(event: SubscriptionLedgerEvent): Promise<unknown>;
+  recordPartnerRelationship(event: RelationshipLedgerEvent): Promise<"inserted" | "duplicate">;
+  recordPartnerSubscription(event: SubscriptionLedgerEvent): Promise<"inserted" | "duplicate">;
 }
 export type RelationshipLedgerEvent = {
   readonly id: string;
