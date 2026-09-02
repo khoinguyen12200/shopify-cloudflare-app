@@ -49,7 +49,8 @@ export default {
   async queue(batch, env) {
     await runWithRequestContext(env, async () => {
       await handleWebhookQueueBatch(batch, {
-        consume: (work) => consumeWebhook({
+        consume: async (work) => {
+          const result = await consumeWebhook({
           deliveries: new WebhookDeliveryRepo(),
           now: Date.now,
           isRedactedShop: async (shop) => (await new ShopRepo().get(shop)) === undefined,
@@ -76,7 +77,9 @@ export default {
               }));
             },
           },
-        }, work),
+          }, work);
+          return result === "redacted" ? { outcome: "missing", topic: null } : result;
+        },
         log: async (entry) => {
           const digest = entry.shop ? await crypto.subtle.digest("SHA-256", new TextEncoder().encode(entry.shop)) : undefined;
           const shopHash = digest ? `sha256:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")}` : undefined;

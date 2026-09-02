@@ -1,4 +1,4 @@
-import { isQueuedWebhook, type QueuedWebhook } from "./webhook-consumer";
+import { isQueuedWebhook, type QueuedWebhook } from "~/ports/webhook-queue";
 
 export interface QueueMessageLike {
   readonly body: unknown;
@@ -43,7 +43,7 @@ export async function processQueuedWebhookMessage(
 ): Promise<void> {
   const started = dependencies.now?.() ?? Date.now();
   if (!isQueuedWebhook(message.body)) {
-    await dependencies.log({ event: "webhook.queue", outcome: "invalid" });
+    await safeLog(dependencies.log, { event: "webhook.queue", outcome: "invalid" });
     message.ack();
     return;
   }
@@ -53,10 +53,18 @@ export async function processQueuedWebhookMessage(
     const outcome = typeof result === "string" ? result : result.outcome;
     const finalOutcome = outcome === "missing" ? "discarded" : outcome;
     const topic = typeof result === "string" ? undefined : result.topic ?? undefined;
-    await dependencies.log({ event: "webhook.queue", id: work.id, shop: work.shop, attempts: message.attempts, outcome: finalOutcome, topic, handler: topic, latencyMs: (dependencies.now?.() ?? Date.now()) - started });
+    await safeLog(dependencies.log, { event: "webhook.queue", id: work.id, shop: work.shop, attempts: message.attempts, outcome: finalOutcome, topic, handler: topic, latencyMs: (dependencies.now?.() ?? Date.now()) - started });
     message.ack();
   } catch {
-    await dependencies.log({ event: "webhook.queue", id: work.id, shop: work.shop, attempts: message.attempts, outcome: "failed", latencyMs: (dependencies.now?.() ?? Date.now()) - started });
+    await safeLog(dependencies.log, { event: "webhook.queue", id: work.id, shop: work.shop, attempts: message.attempts, outcome: "failed", latencyMs: (dependencies.now?.() ?? Date.now()) - started });
     message.retry();
+  }
+}
+
+async function safeLog(log: QueueProcessingDependencies["log"], entry: QueueLogEntry): Promise<void> {
+  try {
+    await log(entry);
+  } catch {
+    // Observability failure must not alter queue delivery semantics.
   }
 }

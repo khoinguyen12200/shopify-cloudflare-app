@@ -1,14 +1,5 @@
-export interface QueuedWebhook {
-  readonly shop: string;
-  readonly id: string;
-  readonly attempts?: number;
-}
-
-const queuedWebhookSchema = z.object({ shop: z.string().min(1), id: z.string().min(1) });
-
-export function isQueuedWebhook(value: unknown): value is QueuedWebhook {
-  return queuedWebhookSchema.safeParse(value).success;
-}
+import type { QueuedWebhook } from "~/ports/webhook-queue";
+export type { QueuedWebhook } from "~/ports/webhook-queue";
 
 export interface ConsumerDelivery {
   readonly id: string;
@@ -35,13 +26,18 @@ export interface WebhookConsumerDependencies {
   readonly log?: (delivery: ConsumerDelivery, outcome: string, attempts: number, latencyMs: number) => Promise<void>;
 }
 
+export interface WebhookConsumerResult {
+  readonly outcome: "processed" | "unavailable" | "missing";
+  readonly topic: string | null;
+}
+
 /** Claim-before-dispatch makes the at-least-once Queue transport exactly-once per delivery. */
 export async function consumeWebhook(
   dependencies: WebhookConsumerDependencies,
   work: QueuedWebhook,
-): Promise<"processed" | "unavailable" | "missing" | "redacted"> {
+): Promise<WebhookConsumerResult | "redacted"> {
   const delivery = await dependencies.deliveries.get(work.shop, work.id);
-  if (!delivery) return "missing";
+  if (!delivery) return { outcome: "missing", topic: null };
   const startedAt = dependencies.now();
   if (await dependencies.isRedactedShop?.(work.shop)) {
     await dependencies.log?.(delivery, "redacted", work.attempts ?? 0, dependencies.now() - startedAt);
@@ -49,7 +45,7 @@ export async function consumeWebhook(
   }
 
   const claimed = await dependencies.deliveries.markProcessing(work.shop, work.id, dependencies.now());
-  if (claimed === "unavailable") return "unavailable";
+  if (claimed === "unavailable") return { outcome: "unavailable", topic: delivery.topic };
 
   const handler = dependencies.handlers[delivery.topic];
   if (!handler) {
@@ -68,7 +64,7 @@ export async function consumeWebhook(
     await handler(delivery);
     await dependencies.deliveries.markProcessed(work.shop, work.id, dependencies.now());
     await dependencies.log?.(delivery, "processed", work.attempts ?? 0, dependencies.now() - startedAt);
-    return "processed";
+    return { outcome: "processed", topic: delivery.topic };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     await dependencies.deliveries.markFailed(work.shop, work.id, {
@@ -83,4 +79,3 @@ export async function consumeWebhook(
     throw error;
   }
 }
-import { z } from "zod";

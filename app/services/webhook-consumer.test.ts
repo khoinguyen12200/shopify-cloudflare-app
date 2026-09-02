@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   consumeWebhook,
-  isQueuedWebhook,
   type WebhookConsumerDependencies,
 } from "./webhook-consumer";
+import { isQueuedWebhook } from "~/ports/webhook-queue";
 
 function dependencies(): WebhookConsumerDependencies & { readonly handled: string[] } {
   const handled: string[] = [];
@@ -37,7 +37,7 @@ describe("consumeWebhook", () => {
     const deps = dependencies();
 
     await expect(consumeWebhook(deps, { shop: "example.myshopify.com", id: "delivery-1" }))
-      .resolves.toBe("processed");
+      .resolves.toEqual({ outcome: "processed", topic: "app/uninstalled" });
     expect(deps.handled).toEqual(["delivery-1"]);
   });
 
@@ -50,7 +50,7 @@ describe("consumeWebhook", () => {
 
     await expect(consumeWebhook({ ...deps, deliveries }, {
       shop: "example.myshopify.com", id: "delivery-1",
-    })).resolves.toBe("unavailable");
+    })).resolves.toEqual({ outcome: "unavailable", topic: "app/uninstalled" });
     expect(deps.handled).toEqual([]);
   });
 
