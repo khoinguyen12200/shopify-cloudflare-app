@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:test";
 import { runWithRequestContext } from "~/request-context.server";
 import { setupTestDatabase } from "~/test/db";
-import { schemaShopColumns, TenantPurgeRepo } from "./tenant-purge.server";
+import { assertTenantPurgeCoverage, schemaShopColumns, TenantPurgeRepo } from "./tenant-purge.server";
 
 setupTestDatabase();
 
@@ -14,6 +14,14 @@ describe("TenantPurgeRepo", () => {
       "shop_subscriptions", "shopify_events", "shops", "support_attachments",
       "support_messages", "support_tickets", "webhook_deliveries", "webhook_scope_observations",
     ]);
+  });
+
+  it("fails coverage check when a new shop-scoped table appears", async () => {
+    await runWithRequestContext(env, async () => {
+      await env.DB.prepare("CREATE TABLE purge_guard_future (id TEXT PRIMARY KEY, shop TEXT NOT NULL)").run();
+      await expect(assertTenantPurgeCoverage()).rejects.toThrow("purge_guard_future");
+      await env.DB.prepare("DROP TABLE purge_guard_future").run();
+    });
   });
 
   it("lists attachment keys and deletes every shop-scoped row", async () => {
