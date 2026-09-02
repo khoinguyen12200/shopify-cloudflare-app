@@ -63,7 +63,7 @@ export async function reconcileHistory(deps: {
   const overlapFrom = (checkpoint?.watermarkAt ?? deps.clock.now()) - OVERLAP_MS;
   const occurredAtMin = new Date(overlapFrom).toISOString();
   const seen = new Set<string>();
-  let cursor = checkpoint?.cursor ?? null;
+  let cursor: string | null = null;
   let pages = 0;
   let events = 0;
   try {
@@ -80,7 +80,7 @@ export async function reconcileHistory(deps: {
         events += 1;
       }
       if (!page.hasNextPage) {
-        await deps.checkpoint.markCheckpointSucceeded(CHECKPOINT, page.endCursor, deps.clock.now(), now);
+        await deps.checkpoint.markCheckpointSucceeded(CHECKPOINT, null, deps.clock.now(), now);
         return { status: "succeeded", pages, events };
       }
       if (!page.endCursor) throw new Error("Partner history page omitted end cursor");

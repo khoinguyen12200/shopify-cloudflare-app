@@ -29,11 +29,43 @@ describe("reconcileHistory", () => {
 
     await expect(reconcileHistory({ partner, checkpoint, ledger, clock: { now: () => 2_000 }, appId: "app" }, 2_000)).resolves.toMatchObject({ status: "succeeded" });
     expect(calls).toEqual([
-      { appId: "app", cursor: "old", occurredAtMin: "1969-12-31T00:00:00.001Z" },
+      { appId: "app", cursor: null, occurredAtMin: "1969-12-31T00:00:00.001Z" },
       { appId: "app", cursor: "next", occurredAtMin: "1969-12-31T00:00:00.001Z" },
     ]);
     expect(recorded).toEqual(["evt-1", "evt-2"]);
     expect(success).toEqual(["partner_history", null, 2000, 2000]);
+  });
+
+  it("starts each completed scan at null cursor and records events added between runs", async () => {
+    const calls: Parameters<ShopifyPartnerPort["listHistoricalEvents"]>[0][] = [];
+    const partner: ShopifyPartnerPort = {
+      activeSubscription: async () => null,
+      listHistoricalEvents: async (input) => {
+        calls.push(input);
+        if (calls.length === 1) return { events: [event("existing")], hasNextPage: false, endCursor: "completed-run-1" };
+        return input.cursor === null
+          ? { events: [event("new")], hasNextPage: false, endCursor: "completed-run-2" }
+          : { events: [], hasNextPage: false, endCursor: "completed-run-2" };
+      },
+    };
+    const recorded: string[] = [];
+    const ledger: LifecycleLedgerPort = {
+      recordPartnerRelationship: async (value) => { recorded.push(value.id); return "inserted"; },
+      recordPartnerSubscription: async () => "inserted",
+    };
+    let checkpoint: { cursor: string | null; watermarkAt: number | null } | null = { cursor: "old-run", watermarkAt: 1 };
+    const checkpointPort: SyncCheckpointPort = {
+      readCheckpoint: async () => checkpoint,
+      markCheckpointSucceeded: async (_name, cursor, watermarkAt) => { checkpoint = { cursor, watermarkAt }; },
+      markCheckpointFailed: async () => { throw new Error("unexpected"); },
+    };
+
+    await reconcileHistory({ partner, checkpoint: checkpointPort, ledger, clock: { now: () => 2_000 }, appId: "app" }, 2_000);
+    await reconcileHistory({ partner, checkpoint: checkpointPort, ledger, clock: { now: () => 3_000 }, appId: "app" }, 3_000);
+
+    expect(calls.map(({ cursor }) => cursor)).toEqual([null, null]);
+    expect(recorded).toEqual(["existing", "new"]);
+    expect(checkpoint).toEqual({ cursor: null, watermarkAt: 3_000 });
   });
 
   it("records bounded failure and does not advance checkpoint when a page fails", async () => {
