@@ -72,6 +72,27 @@ async function openTicket(
 }
 
 describe("opening a ticket", () => {
+  it("uses injected support repository", async () => {
+    const calls: string[] = [];
+    const repo = {
+      open: async () => { calls.push("open"); return { id: "ticket", messageId: "message" }; },
+      reply: async () => false,
+      replyAsStaff: async () => undefined,
+      find: async () => undefined,
+      findForStaff: async () => undefined,
+      listForShop: async () => [],
+      listOpenForStaff: async () => [],
+      closeAsStaff: async () => false,
+      setCcEmails: async () => false,
+      markRead: async () => {},
+      markReadAsStaff: async () => {},
+    };
+    const service = new SupportService({ repo, admins: { supportNotifyRecipients: async () => [] }, clock: { now: () => 1 }, notifier: { send: async () => {} }, appUrl: "https://app.test", withinRateLimit: async () => true, signAttachment: async () => "token" });
+    const result = await service.openTicket({ shop: "shop.myshopify.com", shopName: "Shop", merchantEmail: null, ccEmails: [], category: "bug", subject: "Subject", body: "Body" });
+    expect(result).toEqual({ ok: true, value: { id: "ticket", messageId: "message" } });
+    expect(calls).toEqual(["open"]);
+  });
+
   it("stores the ticket against the shop that opened it", async () => {
     const shop = newShop();
     const thread = await inRequest(async () => {

@@ -29,9 +29,23 @@ const thread: ThreadForPrompt = {
 };
 
 const service = (generator = fakeTextGenerator()) =>
-  new AiService(new AiRepo(), generator, { now: () => AT });
+  new AiService({ repo: new AiRepo(), generator, clock: { now: () => AT }, gate: { async refuse() { return null; } } });
 
 describe("drafting a support reply", () => {
+  it("uses injected repository chain", async () => {
+    const calls: string[] = [];
+    const repo = {
+      chainFor: async () => { calls.push("chain"); return ["model"]; },
+      recordRun: async () => {},
+      markHealth: async () => {},
+    };
+    const result = await new AiService({ repo, generator: fakeTextGenerator({ reply: "Injected." }), clock: { now: () => AT }, gate: { async refuse() { return null; } } }).run(
+      replyTask, { thread, currentText: "", instruction: "", tone: "professional" }, STAFF,
+    );
+    expect(result).toEqual({ ok: true, value: "Injected." });
+    expect(calls).toEqual(["chain"]);
+  });
+
   it("returns the model's draft", async () => {
     const generator = fakeTextGenerator({ reply: "Sorry about that — which browser?" });
     const result = await inRequest(async () => {
@@ -367,7 +381,7 @@ describe("gating AI by who is asking", () => {
 
   const withGate = (gate: AiGate, generator = fakeTextGenerator()) => ({
     generator,
-    service: new AiService(new AiRepo(), generator, { now: () => AT }, gate),
+    service: new AiService({ repo: new AiRepo(), generator, clock: { now: () => AT }, gate }),
   });
 
   it("refuses when the gate says so", async () => {

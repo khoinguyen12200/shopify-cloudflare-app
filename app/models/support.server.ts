@@ -1,22 +1,10 @@
 import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import { getDb } from "~/request-context.server";
-import {
-  supportAttachments,
-  supportMessages,
-  supportTickets,
-  type SupportAttachment,
-  type SupportAuthor,
-  type SupportMessage,
-  type SupportTicket,
-} from "~/db/schema";
+import { supportAttachments, supportMessages, supportTickets, type SupportTicket as DbSupportTicket } from "~/db/schema";
 import type { SupportCategory } from "~/support/categories";
+import type { SupportAttachment, SupportAuthor, SupportThread, SupportTicket } from "~/support/types";
 
-/** A thread: the ticket, its messages oldest-first, and each message's files. */
-export interface SupportThread {
-  readonly ticket: SupportTicket;
-  readonly messages: readonly SupportMessage[];
-  readonly attachments: readonly SupportAttachment[];
-}
+export type { SupportThread } from "~/support/types";
 
 /**
  * The ONLY place the support tables are queried — see @rules/data.md.
@@ -101,7 +89,7 @@ export class SupportRepo {
   }
 
   /** Messages and attachments for one ticket, in two queries — never one per row. */
-  private async hydrate(ticket: SupportTicket): Promise<SupportThread> {
+  private async hydrate(ticket: DbSupportTicket): Promise<SupportThread> {
     const db = getDb();
     const messages = await db
       .select()

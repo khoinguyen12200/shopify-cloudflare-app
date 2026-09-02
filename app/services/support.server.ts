@@ -3,7 +3,7 @@ import type { Notifier } from "~/ports/notifier";
 import type { SupportAdminPort, SupportRepository, SupportThread } from "~/ports/support";
 import { excerpt } from "~/support/excerpt";
 import type { SupportCategory } from "~/support/categories";
-import type { SupportTicket } from "~/db/schema";
+import type { SupportTicket } from "~/support/types";
 import { ATTACHMENT_TOKEN_TTL_MS } from "~/support/file-token";
 
 /**

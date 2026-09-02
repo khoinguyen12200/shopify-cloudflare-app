@@ -1,11 +1,7 @@
-import type { SupportAttachment, SupportAuthor, SupportMessage, SupportTicket } from "~/db/schema";
 import type { SupportCategory } from "~/support/categories";
+import type { SupportAuthor, SupportThread, SupportTicket } from "~/support/types";
 
-export interface SupportThread {
-  readonly ticket: SupportTicket;
-  readonly messages: readonly SupportMessage[];
-  readonly attachments: readonly SupportAttachment[];
-}
+export type { SupportThread } from "~/support/types";
 
 export interface SupportRepository {
   open(input: { shop: string; shopName: string; merchantEmail: string | null; ccEmails: readonly string[]; category: SupportCategory; subject: string; body: string; authorName: string; locale: string | null; at: number }): Promise<{ id: string; messageId: string }>;

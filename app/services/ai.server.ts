@@ -1,7 +1,7 @@
 import { err, ok, type Result } from "~/lib/result";
 import { z } from "zod";
 import type { AiObjectTask, AiTask } from "~/ai/task";
-import { allowAll, type AiCaller, type AiGate } from "~/ai/gate";
+import type { AiCaller, AiGate } from "~/ai/gate";
 import type { ModelRole } from "~/ai/roles";
 import {
   AiError,
@@ -55,7 +55,7 @@ export interface AiStream {
 }
 
 export class AiService {
-  constructor(repo: AiRepository, generator: TextGenerator, clock: Clock, gate: AiGate = allowAll) {
+  constructor({ repo, generator, clock, gate }: AiServiceDependencies) {
     this.repo = repo;
     this.generator = generator;
     this.clock = clock;
