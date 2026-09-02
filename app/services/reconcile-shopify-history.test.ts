@@ -1,12 +1,78 @@
 import { describe, expect, it } from "vitest";
+import { env } from "cloudflare:test";
 import { reconcileHistory, type LifecycleLedgerPort, type SyncCheckpointPort } from "./reconcile-shopify-history";
 import type { ShopifyPartnerPort } from "~/ports/shopify-partner";
+import { ShopifyEventRepo } from "~/models/shopify-events.server";
+import { runWithRequestContext } from "~/request-context.server";
+import { setupTestDatabase } from "~/test/db";
+
+setupTestDatabase();
 
 function event(id: string, occurredAt = "2026-01-01T00:00:00.000Z") {
   return { kind: "relationship" as const, id, occurredAt, shop: "one.myshopify.com", shopId: "gid://shopify/Shop/1", type: "INSTALLED" as const };
 }
 
 describe("reconcileHistory", () => {
+  it("projects CREATED and CANCELED history into one current row while keeping both ledger facts", async () => {
+    await runWithRequestContext(env, async () => {
+      const partner: ShopifyPartnerPort = {
+        activeSubscription: async () => null,
+        listHistoricalEvents: async () => ({
+          events: [
+            {
+              kind: "subscription",
+              id: "created-event",
+              occurredAt: "2026-01-01T00:00:00.000Z",
+              shop: "one.myshopify.com",
+              shopId: "gid://shopify/Shop/1",
+              type: "CREATED",
+              cancelEffectiveOn: null,
+              planHandle: "basic",
+              billingPeriod: "EVERY_30_DAYS",
+            },
+            {
+              kind: "subscription",
+              id: "canceled-event",
+              occurredAt: "2026-01-02T00:00:00.000Z",
+              shop: "one.myshopify.com",
+              shopId: "gid://shopify/Shop/1",
+              type: "CANCELED",
+              cancelEffectiveOn: "2026-01-02T00:00:00.000Z",
+              planHandle: "basic",
+              billingPeriod: "EVERY_30_DAYS",
+            },
+          ],
+          hasNextPage: false,
+          endCursor: null,
+        }),
+      };
+      const checkpoint: SyncCheckpointPort = {
+        readCheckpoint: async () => null,
+        markCheckpointSucceeded: async () => undefined,
+        markCheckpointFailed: async (...args) => { throw new Error(`unexpected checkpoint failure: ${args.join(" ")}`); },
+      };
+
+      await expect(reconcileHistory({
+        partner,
+        checkpoint,
+        ledger: new ShopifyEventRepo(),
+        clock: { now: () => 2_000 },
+        appId: "app",
+      }, 2_000)).resolves.toMatchObject({ status: "succeeded", events: 2 });
+
+      const current = await env.DB.prepare("SELECT subscription_id, status FROM shop_subscriptions WHERE shop = ?")
+        .bind("one.myshopify.com")
+        .all();
+      const history = await env.DB.prepare("SELECT event_id, subscription_id FROM shopify_subscription_events ORDER BY event_id")
+        .all();
+      expect(current.results).toEqual([{ subscription_id: "active:gid://shopify/Shop/1", status: "CANCELED" }]);
+      expect(history.results).toEqual([
+        { event_id: "canceled-event", subscription_id: "active:gid://shopify/Shop/1" },
+        { event_id: "created-event", subscription_id: "active:gid://shopify/Shop/1" },
+      ]);
+    });
+  });
+
   it("pages 250-item history with overlap, dedupes IDs, then advances checkpoint", async () => {
     const calls: Parameters<ShopifyPartnerPort["listHistoricalEvents"]>[0][] = [];
     const partner: ShopifyPartnerPort = {

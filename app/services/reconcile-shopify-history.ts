@@ -44,7 +44,9 @@ function ledgerEvent(event: PartnerHistoryEvent, synchronizedAt: number): Relati
   const occurredAt = Date.parse(event.occurredAt);
   if (event.kind === "relationship") return { id: event.id, shop: event.shop, shopifyShopId: event.shopId, type: event.type, occurredAt, synchronizedAt, reason: null, reasonDescription: null };
   const status = event.type === "CREATED" ? "PENDING" : event.type === "UPDATED" || event.type === "UNFROZEN" ? "ACTIVE" : event.type;
-  return { id: event.id, shop: event.shop, shopifyShopId: event.shopId, type: event.type, occurredAt, synchronizedAt, subscriptionId: event.id, status, planHandle: event.planHandle, billingInterval: event.billingPeriod };
+  // SubscriptionStatus.id identifies this event, not a subscription. Partner
+  // exposes one active subscription per shop, so history uses same projection key.
+  return { id: event.id, shop: event.shop, shopifyShopId: event.shopId, type: event.type, occurredAt, synchronizedAt, subscriptionId: `active:${event.shopId}`, status, planHandle: event.planHandle, billingInterval: event.billingPeriod };
 }
 
 export async function reconcileHistory(deps: {
