@@ -1,6 +1,7 @@
 export interface QueuedWebhook {
   readonly shop: string;
   readonly id: string;
+  readonly attempts?: number;
 }
 
 const queuedWebhookSchema = z.object({ shop: z.string().min(1), id: z.string().min(1) });
@@ -58,11 +59,15 @@ export async function consumeWebhook(
     await dependencies.deliveries.markProcessed(work.shop, work.id, dependencies.now());
     return "processed";
   } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
     await dependencies.deliveries.markFailed(work.shop, work.id, {
       failedAt: dependencies.now(),
       failureCode: "consumer_failed",
-      failureDetail: error instanceof Error ? error.message : String(error),
+      failureDetail: detail,
     });
+    if ((work.attempts ?? 0) >= 8) {
+      await dependencies.deliveries.markDeadLetter?.(work.shop, work.id, dependencies.now(), detail);
+    }
     throw error;
   }
 }

@@ -53,4 +53,20 @@ describe("consumeWebhook", () => {
     })).resolves.toBe("unavailable");
     expect(deps.handled).toEqual([]);
   });
+
+  it("persists dead-letter state after the final queue attempt", async () => {
+    const deps = dependencies();
+    const deadLetters: string[] = [];
+    const deliveries = {
+      ...deps.deliveries,
+      async markDeadLetter(_shop: string, _id: string, _at: number, detail: string) {
+        deadLetters.push(detail);
+      },
+    };
+    const failing = { ...deps, deliveries, handlers: { "app/uninstalled": async () => { throw new Error("broken"); } } };
+
+    await expect(consumeWebhook(failing, { shop: "example.myshopify.com", id: "delivery-1", attempts: 8 }))
+      .rejects.toThrow("broken");
+    expect(deadLetters).toEqual(["broken"]);
+  });
 });

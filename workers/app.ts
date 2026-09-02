@@ -77,7 +77,7 @@ export default {
                 }));
               },
             },
-          }, work);
+          }, { ...work, attempts: message.attempts });
           message.ack();
         } catch (error) {
           console.error(JSON.stringify({ event: "webhook.consumer_failed", id: work.id, error: error instanceof Error ? error.message : String(error) }));
