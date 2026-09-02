@@ -106,7 +106,7 @@
 
 - [x] Run `npm run verify`, `npm run db:migrate:local`, `npm run test:agent-setup`, `npm run build`, and `git diff --check`; each must exit zero.
 - [x] Run `npm run check:placeholders`; expected failure until derived app supplies values. Guard remains strict.
-- [ ] With authorized Shopify org/app linkage, run skill-documented dev and production CLI validation. Record exact failures if access still blocked.
+- [x] Attempted skill-documented Shopify dev/production validation; exact organization-access and missing-linkage blockers recorded in `docs/LIFECYCLE_FOUNDATION_STATUS.md`.
 - [x] Update status only with observed verification. Keep client ID, app URL, resource IDs, Partner credentials, plan handles, legal identity/copy, callback/scopes, and Shopify org access as external inputs.
 - [x] Commit: `git commit -m "docs: record template foundation verification"`.
 
