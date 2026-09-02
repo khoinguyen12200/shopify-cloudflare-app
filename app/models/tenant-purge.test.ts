@@ -41,4 +41,36 @@ describe("TenantPurgeRepo", () => {
     expect(remaining.prepared.attachmentKeys).toEqual(["uploads/purge"]);
     expect(remaining.count).toBe(0);
   });
+
+  it("purges every tenant table without touching another tenant", async () => {
+    const target = "target.myshopify.com";
+    const other = "other.myshopify.com";
+    await runWithRequestContext(env, async () => {
+      for (const shop of [target, other]) {
+        await env.DB.prepare("INSERT INTO shops (shop, installed_at) VALUES (?, ?)").bind(shop, 1).run();
+        await env.DB.prepare("INSERT INTO webhook_deliveries (id,event_id,topic,api_version,shop,triggered_at,received_at,payload_hash) VALUES (?,?,?,?,?,?,?,?)").bind(`delivery-${shop}`, "event", "app/uninstalled", "2025-01", shop, 1, 1, "hash").run();
+        await env.DB.prepare("INSERT INTO webhook_scope_observations (delivery_id,shop,scope) VALUES (?,?,?)").bind(`delivery-${shop}`, shop, "read_products").run();
+        await env.DB.prepare("INSERT INTO shopify_events (source,event_id,event_type,shop,shopify_shop_id,occurred_at,synchronized_at) VALUES (?,?,?,?,?,?,?)").bind("webhook_observation", `event-${shop}`, "installed", shop, "gid", 1, 1).run();
+        await env.DB.prepare("INSERT INTO shop_subscriptions (shop,subscription_id,status,applied_occurred_at,applied_external_id) VALUES (?,?,?,?,?)").bind(shop, "sub", "ACTIVE", 1, "event").run();
+        await env.DB.prepare("INSERT INTO shop_subscription_items (shop,subscription_id,position,item_type) VALUES (?,?,?,?)").bind(shop, "sub", 0, "flat").run();
+        await env.DB.prepare("INSERT INTO shop_granted_scopes (shop,scope,granted_at) VALUES (?,?,?)").bind(shop, "read_products", 1).run();
+        await env.DB.prepare("INSERT INTO shop_scope_changes (id,shop,source,occurred_at) VALUES (?,?,?,?)").bind(`change-${shop}`, shop, "webhook", 1).run();
+        await env.DB.prepare("INSERT INTO ai_runs (id,role,model_id,feature,shop,status,created_at) VALUES (?,?,?,?,?,?,?)").bind(`run-${shop}`, "support_draft", "model", "test", shop, "ok", 1).run();
+        await env.DB.prepare("INSERT INTO notification_logs (id,event,channel,recipient,status,shop,created_at) VALUES (?,?,?,?,?,?,?)").bind(`log-${shop}`, "test", "email", "x@y.com", "sent", shop, 1).run();
+        await env.DB.prepare("INSERT INTO support_tickets (id,shop,shop_name,category,subject,last_author,last_message_at,created_at) VALUES (?,?,?,?,?,?,?,?)").bind(`ticket-${shop}`, shop, "Shop", "other", "Subject", "merchant", 1, 1).run();
+        await env.DB.prepare("INSERT INTO support_messages (id,ticket_id,shop,author,author_name,body,created_at) VALUES (?,?,?,?,?,?,?)").bind(`message-${shop}`, `ticket-${shop}`, shop, "merchant", "M", "Body", 1).run();
+        await env.DB.prepare("INSERT INTO support_attachments (id,message_id,shop,r2_key,filename,content_type,size_bytes,created_at) VALUES (?,?,?,?,?,?,?,?)").bind(`attachment-${shop}`, `message-${shop}`, shop, `uploads/${shop}`, "a.txt", "text/plain", 1, 1).run();
+      }
+      await env.DB.prepare("INSERT INTO shopify_sync_checkpoints (name, last_succeeded_at) VALUES (?, ?)").bind("tenant-purge-proof", 1).run();
+      await new TenantPurgeRepo().deleteTenantRows(target);
+      for (const table of await schemaShopColumns()) {
+        const targetRows = await env.DB.prepare(`SELECT count(*) AS count FROM ${table} WHERE shop = ?`).bind(target).first<{ count: number }>();
+        const otherRows = await env.DB.prepare(`SELECT count(*) AS count FROM ${table} WHERE shop = ?`).bind(other).first<{ count: number }>();
+        expect(Number(targetRows?.count)).toBe(0);
+        expect(Number(otherRows?.count)).toBeGreaterThan(0);
+      }
+      const checkpoint = await env.DB.prepare("SELECT count(*) AS count FROM shopify_sync_checkpoints WHERE name = ?").bind("tenant-purge-proof").first<{ count: number }>();
+      expect(Number(checkpoint?.count)).toBe(1);
+    });
+  });
 });

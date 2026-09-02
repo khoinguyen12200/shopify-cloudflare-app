@@ -63,6 +63,21 @@ describe("KVSessionStorage", () => {
     expect(await storage.findSessionsByShop("deleted.myshopify.com")).toEqual([]);
   });
 
+  it("deletes only sessions belonging to requested shop", async () => {
+    const storage = new KVSessionStorage(env.SESSION);
+    const target = offlineSession("purge-target.myshopify.com");
+    const other = offlineSession("purge-other.myshopify.com");
+    await storage.storeSession(target);
+    await storage.storeSession(other);
+
+    const targetSessions = await storage.findSessionsByShop(target.shop);
+    await storage.deleteSessions(targetSessions.map(({ id }) => id));
+
+    expect(await storage.loadSession(target.id)).toBeUndefined();
+    expect(await storage.loadSession(other.id)).toBeDefined();
+    expect(await storage.findSessionsByShop(other.shop)).toHaveLength(1);
+  });
+
   it("gives an offline session no KV expiry, so its refresh token outlives the access token", async () => {
     const storage = new KVSessionStorage(env.SESSION);
     const session = offlineSession("offline.myshopify.com");

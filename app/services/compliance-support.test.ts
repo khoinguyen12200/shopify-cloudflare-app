@@ -6,6 +6,7 @@ import { SupportRepo } from "~/models/support.server";
 import { TenantPurgeRepo } from "~/models/tenant-purge.server";
 import { KVSessionStorage } from "~/session-storage.server";
 import { handleCompliance } from "./compliance.server";
+import { Session } from "@shopify/shopify-api";
 
 const SHOP = "alpha.myshopify.com";
 const OTHER = "beta.myshopify.com";
@@ -14,6 +15,7 @@ setupTestDatabase();
 
 const run = <T>(fn: () => Promise<T>) => runWithRequestContext(env, fn);
 const dispatch = (shop: string) => handleCompliance("SHOP_REDACT", { shop, payload: { shop_domain: shop } }, { tenantPurge: { d1: { prepare: (tenant) => new TenantPurgeRepo().prepareTenantPurge(tenant), deleteRows: (tenant) => new TenantPurgeRepo().deleteTenantRows(tenant) }, r2: { delete: (keys) => env.UPLOADS.delete([...keys]) }, kv: { deleteSessions: async (tenant) => { const storage = new KVSessionStorage(env.SESSION); const sessions = await storage.findSessionsByShop(tenant); await storage.deleteSessions(sessions.map(({ id }) => id)); return sessions.length; } } } });
+const offlineSession = (shop: string) => new Session({ id: `offline_${shop}`, shop, state: "state", isOnline: false, accessToken: "token", scope: "write_products" });
 
 /** A ticket with one attachment whose blob really exists in the test bucket. */
 async function ticketWithFile(shop: string, key: string) {
@@ -47,6 +49,32 @@ async function ticketWithFile(shop: string, key: string) {
 }
 
 describe("shop/redact and support data", () => {
+  it("erases target D1, R2, and KV resources while preserving other tenant and global checkpoint", async () => {
+    await run(async () => {
+      const targetKey = "support/alpha/full-purge";
+      const otherKey = "support/beta/full-purge";
+      const targetTicket = await ticketWithFile(SHOP, targetKey);
+      const otherTicket = await ticketWithFile(OTHER, otherKey);
+
+      const storage = new KVSessionStorage(env.SESSION);
+      const targetSession = offlineSession(SHOP);
+      const otherSession = offlineSession(OTHER);
+      await storage.storeSession(targetSession);
+      await storage.storeSession(otherSession);
+      await env.DB.prepare("INSERT INTO shopify_sync_checkpoints (name, last_succeeded_at) VALUES (?, ?)").bind("global", 1).run();
+
+      await dispatch(SHOP);
+
+      expect(await new SupportRepo().find(SHOP, targetTicket.id)).toBeUndefined();
+      expect(await env.UPLOADS.head(targetKey)).toBeNull();
+      expect(await storage.loadSession(targetSession.id)).toBeUndefined();
+      expect(await new SupportRepo().find(OTHER, otherTicket.id)).toBeDefined();
+      expect(await env.UPLOADS.head(otherKey)).not.toBeNull();
+      expect(await storage.loadSession(otherSession.id)).toBeDefined();
+      expect(await env.DB.prepare("SELECT count(*) AS count FROM shopify_sync_checkpoints WHERE name = ?").bind("global").first<{ count: number }>()).toMatchObject({ count: 1 });
+    });
+  });
+
   it("deletes the shop's tickets AND their R2 objects", async () => {
     // The blobs are the part that is easy to forget: rows disappear, objects
     // keep being billed and stay readable by anyone holding a key.
