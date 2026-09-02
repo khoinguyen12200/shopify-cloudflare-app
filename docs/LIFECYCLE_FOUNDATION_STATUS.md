@@ -134,8 +134,8 @@ Required source-of-truth rules:
 
 ### Launch validation
 
-- Required Shopify Partner documentation search and 2026-07 schema validation
-  evidence remains incomplete.
+- Shopify Partner queries were searched and schema-validated against `2026-07`;
+  live validation remains blocked by organization credentials.
 - Shopify config validation is externally blocked:
   - production requires non-interactive app linking/client ID;
   - dev returned HTTP `403`, “You are not a member of the requested organization”.
@@ -147,18 +147,18 @@ Required source-of-truth rules:
 Latest verified commands:
 
 ```text
-npm run verify                 typecheck + lint + 846 Vitest tests passed
+npm run verify                 typecheck + lint + 853 Vitest tests passed
 npm run db:migrate:local       no migrations pending
 npm run test:agent-setup       12/12 passed
 npm run build                  passed
 git diff --check               passed
-npm run check:placeholders     expected failure: 9 launch contract issues
+npm run check:placeholders     expected failure: 10 launch contract issues
 ```
 
-`npm run verify` currently reports 92 files and 846 tests passed. Shopify dev and
+`npm run verify` currently reports 92 files and 853 tests passed. Shopify dev and
 production CLI validation remains unrun in this gate because authorized org/app
-linkage is unavailable. Partner query schema validation also remains unverified;
-no external success is implied.
+linkage is unavailable. Partner query schema validation passed; no live Partner
+API success is implied.
 
 ## Intentional Template Blockers
 
@@ -166,7 +166,7 @@ These are not fabricated in base template. Replace them in each derived app:
 
 - Shopify production client ID and application URL.
 - Cloudflare D1, KV, queue, and R2 resource IDs/names.
-- Shopify Partner app ID and API token secret.
+- Shopify Partner organization ID, app ID, API version, and API token secret.
 - Managed Pricing plan handles and customer-facing plan names.
 - Legal entity, privacy contact, address, effective date, and public copy.
 - Production callback URLs and any feature-required access scopes.
