@@ -9,11 +9,9 @@ import { WebhookDeliveryRepo } from "../app/models/webhook-deliveries.server";
 import { WebhookScopeObservationRepo } from "../app/models/webhook-scope-observations.server";
 import { ShopRepo } from "../app/models/shops.server";
 import { KVSessionStorage } from "../app/session-storage.server";
-import {
-  consumeWebhook,
-  isQueuedWebhook,
-} from "../app/services/webhook-consumer";
+import { consumeWebhook } from "../app/services/webhook-consumer";
 import { formatWebhookLog, writeWebhookLog } from "../app/services/webhook-logging";
+import { handleWebhookQueueBatch } from "../app/services/webhook-queue";
 
 /**
  * With `future.v8_middleware`, a loader/action's `context` is a
@@ -50,48 +48,49 @@ export default {
 
   async queue(batch, env) {
     await runWithRequestContext(env, async () => {
-      for (const message of batch.messages) {
-        if (!isQueuedWebhook(message.body)) {
-          console.error(JSON.stringify({ event: "webhook.invalid_queue_message" }));
-          message.ack();
-          continue;
-        }
-        const work = message.body;
-        try {
-          await consumeWebhook({
-            deliveries: new WebhookDeliveryRepo(),
-            now: Date.now,
-            isRedactedShop: async (shop) => (await new ShopRepo().get(shop)) === undefined,
-            log: async (delivery, outcome, attempts, latencyMs) => {
-              writeWebhookLog(await formatWebhookLog({
-                deliveryId: delivery.id, topic: delivery.topic, shop: delivery.shop,
-                handler: delivery.topic, outcome, attempts, latencyMs,
+      await handleWebhookQueueBatch(batch, {
+        consume: (work) => consumeWebhook({
+          deliveries: new WebhookDeliveryRepo(),
+          now: Date.now,
+          isRedactedShop: async (shop) => (await new ShopRepo().get(shop)) === undefined,
+          log: async (delivery, outcome, attempts, latencyMs) => {
+            writeWebhookLog(await formatWebhookLog({
+              deliveryId: delivery.id, topic: delivery.topic, shop: delivery.shop,
+              handler: delivery.topic, outcome, attempts, latencyMs,
+            }));
+          },
+          handlers: {
+            "app/uninstalled": async (delivery) => {
+              await new ShopRepo().recordUninstall(delivery.shop, Date.now());
+              const sessions = await new KVSessionStorage(env.SESSION).findSessionsByShop(delivery.shop);
+              await new KVSessionStorage(env.SESSION).deleteSessions(sessions.map((session) => session.id));
+            },
+            "app/scopes_update": async (delivery) => {
+              const storage = new KVSessionStorage(env.SESSION);
+              const scopes = await new WebhookScopeObservationRepo().list(delivery.id, delivery.shop);
+              await new WebhookScopeObservationRepo().applyScopes(delivery.id, delivery.shop, scopes, Date.now());
+              const sessions = await storage.findSessionsByShop(delivery.shop);
+              await Promise.all(sessions.map(async (session) => {
+                session.scope = scopes.join(",");
+                await storage.storeSession(session);
               }));
             },
-            handlers: {
-              "app/uninstalled": async (delivery) => {
-                await new ShopRepo().recordUninstall(delivery.shop, Date.now());
-                const sessions = await new KVSessionStorage(env.SESSION).findSessionsByShop(delivery.shop);
-                await new KVSessionStorage(env.SESSION).deleteSessions(sessions.map((session) => session.id));
-              },
-              "app/scopes_update": async (delivery) => {
-                const storage = new KVSessionStorage(env.SESSION);
-                const scopes = await new WebhookScopeObservationRepo().list(delivery.id, delivery.shop);
-                await new WebhookScopeObservationRepo().applyScopes(delivery.id, delivery.shop, scopes, Date.now());
-                const sessions = await storage.findSessionsByShop(delivery.shop);
-                await Promise.all(sessions.map(async (session) => {
-                  session.scope = scopes.join(",");
-                  await storage.storeSession(session);
-                }));
-              },
-            },
-          }, { ...work, attempts: message.attempts });
-          message.ack();
-        } catch (error) {
-          console.error(JSON.stringify({ event: "webhook.consumer_failed", id: work.id, error: error instanceof Error ? error.message : String(error) }));
-          message.retry();
-        }
-      }
+          },
+        }, work),
+        log: async (entry) => {
+          const digest = entry.shop ? await crypto.subtle.digest("SHA-256", new TextEncoder().encode(entry.shop)) : undefined;
+          const shopHash = digest ? `sha256:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")}` : undefined;
+          console.error(JSON.stringify({
+            id: entry.id,
+            shop: shopHash,
+            topic: entry.topic,
+            handler: entry.handler,
+            outcome: entry.outcome,
+            attempts: entry.attempts,
+            latencyMs: entry.latencyMs,
+          }));
+        },
+      });
     });
   },
 } satisfies ExportedHandler<Env>;
