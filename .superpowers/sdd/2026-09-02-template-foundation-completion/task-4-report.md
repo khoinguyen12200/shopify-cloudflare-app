@@ -8,3 +8,4 @@
 - Verified: `npm run typecheck`, `npm run lint`, and focused Vitest suite: 6 files, 68 tests passed.
 - Review fixes: AI constructor now requires readonly dependency object; support DTOs moved to `app/support/types.ts`; injected AI, support, and webhook tests added.
 - Reverified focused suite: 4 files, 66 tests passed; typecheck passed.
+- Re-review fix: retry-state webhook test now controls injected `claim`/`get`/`markQueued` and asserts `queued` plus exact call order. RED observed with duplicate short-circuit; GREEN restored.

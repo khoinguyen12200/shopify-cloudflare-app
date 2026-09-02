@@ -21,12 +21,17 @@ function dependencies(): WebhookIngestDependencies & { readonly queued: string[]
 }
 
 describe("ingestWebhook", () => {
-  it("uses injected delivery port state", async () => {
+  it("retries received delivery through injected port", async () => {
     const calls: string[] = [];
     const deps = dependencies();
-    const deliveries = { ...deps.deliveries, async claim() { calls.push("claim"); return "claimed" as const; }, async markQueued() { calls.push("queued"); } };
-    await ingestWebhook({ ...deps, deliveries }, { webhookId: "id", eventId: "event", topic: "topic", shop: "shop.myshopify.com", apiVersion: "2026-10", triggeredAt: 1, receivedAt: 2, payload: {} });
-    expect(calls).toEqual(["claim", "queued"]);
+    const deliveries = {
+      ...deps.deliveries,
+      async claim() { calls.push("claim"); return "duplicate" as const; },
+      async get() { calls.push("get"); return { status: "received" }; },
+      async markQueued() { calls.push("queued"); },
+    };
+    const result = await ingestWebhook({ ...deps, deliveries }, { webhookId: "id", eventId: "event", topic: "topic", shop: "shop.myshopify.com", apiVersion: "2026-10", triggeredAt: 1, receivedAt: 2, payload: {} });
+    expect({ result, calls }).toEqual({ result: "queued", calls: ["claim", "get", "queued"] });
   });
 
   it("claims, hashes, and queues an authenticated delivery", async () => {
