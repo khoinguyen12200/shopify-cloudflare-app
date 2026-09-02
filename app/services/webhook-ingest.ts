@@ -9,6 +9,7 @@ export interface WebhookIngestDependencies {
   readonly queue: { send(message: WebhookQueueMessage): Promise<unknown> };
   readonly hashPayload: (payload: unknown) => Promise<string>;
   readonly beforeEnqueue?: (webhook: AuthenticatedWebhook) => Promise<void>;
+  readonly log?: (webhook: AuthenticatedWebhook, outcome: "queued" | "duplicate", latencyMs: number) => Promise<void>;
 }
 
 export interface WebhookQueueMessage {
@@ -44,12 +45,16 @@ export async function ingestWebhook(
   });
   if (claimed === "duplicate") {
     const existing = await dependencies.deliveries.get(webhook.shop, webhook.webhookId);
-    if (existing?.status !== "received") return "duplicate";
+    if (existing?.status !== "received") {
+      await dependencies.log?.(webhook, "duplicate", Date.now() - webhook.receivedAt);
+      return "duplicate";
+    }
   }
 
   await dependencies.beforeEnqueue?.(webhook);
   await dependencies.queue.send({ shop: webhook.shop, id: webhook.webhookId });
   await dependencies.deliveries.markQueued(webhook.shop, webhook.webhookId);
+  await dependencies.log?.(webhook, "queued", Date.now() - webhook.receivedAt);
   return "queued";
 }
 

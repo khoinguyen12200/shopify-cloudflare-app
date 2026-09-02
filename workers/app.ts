@@ -13,6 +13,7 @@ import {
   consumeWebhook,
   isQueuedWebhook,
 } from "../app/services/webhook-consumer";
+import { formatWebhookLog, writeWebhookLog } from "../app/services/webhook-logging";
 
 /**
  * With `future.v8_middleware`, a loader/action's `context` is a
@@ -60,6 +61,13 @@ export default {
           await consumeWebhook({
             deliveries: new WebhookDeliveryRepo(),
             now: Date.now,
+            isRedactedShop: async (shop) => (await new ShopRepo().get(shop)) === undefined,
+            log: async (delivery, outcome, attempts, latencyMs) => {
+              writeWebhookLog(await formatWebhookLog({
+                deliveryId: delivery.id, topic: delivery.topic, shop: delivery.shop,
+                handler: delivery.topic, outcome, attempts, latencyMs,
+              }));
+            },
             handlers: {
               "app/uninstalled": async (delivery) => {
                 await new ShopRepo().recordUninstall(delivery.shop, Date.now());

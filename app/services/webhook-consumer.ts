@@ -31,15 +31,22 @@ export interface WebhookConsumerDependencies {
   };
   readonly handlers: Record<string, (delivery: ConsumerDelivery) => Promise<void>>;
   readonly now: () => number;
+  readonly isRedactedShop?: (shop: string) => Promise<boolean>;
+  readonly log?: (delivery: ConsumerDelivery, outcome: string, attempts: number, latencyMs: number) => Promise<void>;
 }
 
 /** Claim-before-dispatch makes the at-least-once Queue transport exactly-once per delivery. */
 export async function consumeWebhook(
   dependencies: WebhookConsumerDependencies,
   work: QueuedWebhook,
-): Promise<"processed" | "unavailable" | "missing"> {
+): Promise<"processed" | "unavailable" | "missing" | "redacted"> {
   const delivery = await dependencies.deliveries.get(work.shop, work.id);
   if (!delivery) return "missing";
+  const startedAt = dependencies.now();
+  if (await dependencies.isRedactedShop?.(work.shop)) {
+    await dependencies.log?.(delivery, "redacted", work.attempts ?? 0, dependencies.now() - startedAt);
+    return "redacted";
+  }
 
   const claimed = await dependencies.deliveries.markProcessing(work.shop, work.id, dependencies.now());
   if (claimed === "unavailable") return "unavailable";
@@ -51,12 +58,16 @@ export async function consumeWebhook(
       failureCode: "unsupported_topic",
       failureDetail: `No consumer is registered for ${delivery.topic}.`,
     });
+    if ((work.attempts ?? 0) >= 8) {
+      await dependencies.deliveries.markDeadLetter?.(work.shop, work.id, dependencies.now(), `No consumer is registered for ${delivery.topic}.`);
+    }
     throw new Error(`Unsupported webhook topic: ${delivery.topic}`);
   }
 
   try {
     await handler(delivery);
     await dependencies.deliveries.markProcessed(work.shop, work.id, dependencies.now());
+    await dependencies.log?.(delivery, "processed", work.attempts ?? 0, dependencies.now() - startedAt);
     return "processed";
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
@@ -68,6 +79,7 @@ export async function consumeWebhook(
     if ((work.attempts ?? 0) >= 8) {
       await dependencies.deliveries.markDeadLetter?.(work.shop, work.id, dependencies.now(), detail);
     }
+    await dependencies.log?.(delivery, (work.attempts ?? 0) >= 8 ? "dead_letter" : "failed", work.attempts ?? 0, dependencies.now() - startedAt);
     throw error;
   }
 }

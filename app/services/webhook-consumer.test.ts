@@ -69,4 +69,17 @@ describe("consumeWebhook", () => {
       .rejects.toThrow("broken");
     expect(deadLetters).toEqual(["broken"]);
   });
+
+  it("skips redacted shops without dispatching a projection handler", async () => {
+    const deps = dependencies();
+    const handled: string[] = [];
+    const result = await consumeWebhook({
+      ...deps,
+      isRedactedShop: async () => true,
+      handlers: { "app/uninstalled": async () => { handled.push("written"); } },
+    }, { shop: "example.myshopify.com", id: "delivery-1" });
+
+    expect(result).toBe("redacted");
+    expect(handled).toEqual([]);
+  });
 });
