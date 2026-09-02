@@ -57,10 +57,14 @@ describe("TenantPurgeRepo", () => {
         await env.DB.prepare("INSERT INTO shop_scope_changes (id,shop,source,occurred_at) VALUES (?,?,?,?)").bind(`change-${shop}`, shop, "webhook", 1).run();
         await env.DB.prepare("INSERT INTO ai_runs (id,role,model_id,feature,shop,status,created_at) VALUES (?,?,?,?,?,?,?)").bind(`run-${shop}`, "support_draft", "model", "test", shop, "ok", 1).run();
         await env.DB.prepare("INSERT INTO notification_logs (id,event,channel,recipient,status,shop,created_at) VALUES (?,?,?,?,?,?,?)").bind(`log-${shop}`, "test", "email", "x@y.com", "sent", shop, 1).run();
+        await env.DB.prepare("INSERT INTO notification_preferences (scope,event,channel,enabled,updated_at) VALUES (?,?,?,?,?)").bind(shop, "test", "email", 1, 1).run();
+        await env.DB.prepare("INSERT INTO notification_opt_outs (scope,channel,address,opted_out_at,source) VALUES (?,?,?,?,?)").bind(shop, "email", `${shop}@example.com`, 1, "test").run();
         await env.DB.prepare("INSERT INTO support_tickets (id,shop,shop_name,category,subject,last_author,last_message_at,created_at) VALUES (?,?,?,?,?,?,?,?)").bind(`ticket-${shop}`, shop, "Shop", "other", "Subject", "merchant", 1, 1).run();
         await env.DB.prepare("INSERT INTO support_messages (id,ticket_id,shop,author,author_name,body,created_at) VALUES (?,?,?,?,?,?,?)").bind(`message-${shop}`, `ticket-${shop}`, shop, "merchant", "M", "Body", 1).run();
         await env.DB.prepare("INSERT INTO support_attachments (id,message_id,shop,r2_key,filename,content_type,size_bytes,created_at) VALUES (?,?,?,?,?,?,?,?)").bind(`attachment-${shop}`, `message-${shop}`, shop, `uploads/${shop}`, "a.txt", "text/plain", 1, 1).run();
       }
+      await env.DB.prepare("INSERT INTO notification_preferences (scope,event,channel,enabled,updated_at) VALUES (?,?,?,?,?)").bind("global", "test", "email", 1, 1).run();
+      await env.DB.prepare("INSERT INTO notification_opt_outs (scope,channel,address,opted_out_at,source) VALUES (?,?,?,?,?)").bind("global", "email", "global@example.com", 1, "test").run();
       await env.DB.prepare("INSERT INTO shopify_sync_checkpoints (name, last_succeeded_at) VALUES (?, ?)").bind("tenant-purge-proof", 1).run();
       await new TenantPurgeRepo().deleteTenantRows(target);
       for (const table of await schemaShopColumns()) {
@@ -71,6 +75,10 @@ describe("TenantPurgeRepo", () => {
       }
       const checkpoint = await env.DB.prepare("SELECT count(*) AS count FROM shopify_sync_checkpoints WHERE name = ?").bind("tenant-purge-proof").first<{ count: number }>();
       expect(Number(checkpoint?.count)).toBe(1);
+      const preferences = await env.DB.prepare("SELECT scope FROM notification_preferences WHERE event = ? AND channel = ? ORDER BY scope").bind("test", "email").all<{ scope: string }>();
+      expect(preferences.results.map(({ scope }) => scope)).toEqual(["global", other]);
+      const optOuts = await env.DB.prepare("SELECT scope FROM notification_opt_outs WHERE channel = ? ORDER BY scope").bind("email").all<{ scope: string }>();
+      expect(optOuts.results.map(({ scope }) => scope)).toEqual(["global", other]);
     });
   });
 });
