@@ -279,6 +279,21 @@ describe("changeOwnPassword", () => {
 });
 
 describe("updateOwnProfile", () => {
+  it("uses injected user port without request context", async () => {
+    let saved: { id: string; name: string; now: number } | undefined;
+    const result = await updateOwnProfile(
+      { userId: "user-1", name: "  Renamed  " },
+      {
+        users: {
+          updateProfile: async (id, input) => { saved = { id, ...input }; },
+        },
+      },
+    );
+
+    expect(result).toEqual({ ok: true, value: null });
+    expect(saved).toMatchObject({ id: "user-1", name: "Renamed" });
+  });
+
   it("saves a trimmed name", async () => {
     const after = await inRequest(async () => {
       const owner = await seedOwner();

@@ -139,6 +139,25 @@ describe("throttling", () => {
 });
 
 describe("checkResetToken", () => {
+  it("uses injected token port without request context", async () => {
+    const token = "in-memory-token";
+    const tokenHash = await hashToken(token);
+    let lookedUpHash: string | undefined;
+    const checked = await checkResetToken(token, {
+      tokens: {
+        findByHash: async (hash) => {
+          lookedUpHash = hash;
+          return hash === tokenHash
+            ? { tokenHash, adminUserId: "user-1", expiresAt: Date.now() + 60_000, usedAt: null, createdAt: Date.now() }
+            : undefined;
+        },
+      },
+    });
+
+    expect(checked).toEqual({ ok: true, adminUserId: "user-1" });
+    expect(lookedUpHash).toBe(tokenHash);
+  });
+
   it("accepts a fresh token", async () => {
     const checked = await inRequest(async () => {
       await seedUser();
