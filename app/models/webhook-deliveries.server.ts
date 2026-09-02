@@ -22,6 +22,9 @@ export type WebhookDeliveryInput = Omit<
  * global Shopify idempotency key; every subsequent tenant read is shop scoped.
  */
 export class WebhookDeliveryRepo {
+  async markDeadLetter(shop: string, id: string, failedAt: number, detail: string): Promise<void> {
+    await getDb().update(webhookDeliveries).set({ status: "dead_letter", failedAt, failureCode: "dead_letter", failureDetail: detail.slice(0, 1000) }).where(and(eq(webhookDeliveries.shop, shop), eq(webhookDeliveries.id, id), eq(webhookDeliveries.status, "failed")));
+  }
   async claim(input: WebhookDeliveryInput): Promise<"claimed" | "duplicate"> {
     const inserted = await getDb()
       .insert(webhookDeliveries)

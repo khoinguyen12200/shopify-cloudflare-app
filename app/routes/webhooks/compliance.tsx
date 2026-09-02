@@ -2,6 +2,8 @@ import type { ActionFunctionArgs } from "react-router";
 import { createShopify } from "~/shopify.server";
 import { getEnv } from "~/request-context.server";
 import { handleCompliance } from "~/services/compliance.server";
+import { TenantPurgeRepo } from "~/models/tenant-purge.server";
+import { KVSessionStorage } from "~/session-storage.server";
 
 /**
  * The three MANDATORY compliance webhooks share this one endpoint, matching the
@@ -21,9 +23,26 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   // Throws a 401 Response on a bad HMAC. Deliberately unguarded.
   const { topic, shop, payload } = await shopify.authenticate.webhook(request);
 
+  const env = getEnv();
   const outcome = await handleCompliance(topic, {
     shop,
     payload: payload as Record<string, unknown>,
+  }, {
+    tenantPurge: {
+      d1: {
+        prepare: (tenant) => new TenantPurgeRepo().prepareTenantPurge(tenant),
+        deleteRows: (tenant) => new TenantPurgeRepo().deleteTenantRows(tenant),
+      },
+      r2: { delete: (keys) => env.UPLOADS.delete([...keys]) },
+      kv: {
+        deleteSessions: async (tenant) => {
+          const storage = new KVSessionStorage(env.SESSION);
+          const sessions = await storage.findSessionsByShop(tenant);
+          await storage.deleteSessions(sessions.map(({ id }) => id));
+          return sessions.length;
+        },
+      },
+    },
   });
 
   if (!outcome) {

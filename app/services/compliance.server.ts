@@ -1,6 +1,4 @@
-import { ShopRepo } from "~/models/shops.server";
-import { SupportRepo } from "~/models/support.server";
-import { getEnv } from "~/request-context.server";
+import { purgeTenant, type TenantPurgeD1Port, type TenantPurgeKvPort, type TenantPurgeR2Port } from "~/services/tenant-purge.server";
 
 /**
  * The three mandatory compliance webhook topics. Every app distributed through
@@ -37,9 +35,13 @@ export interface ComplianceOutcome {
    * the work.
    */
   implemented: boolean;
+  noCustomerData?: boolean;
 }
 
-type ComplianceHandler = (ctx: ComplianceContext) => Promise<ComplianceOutcome>;
+export interface ComplianceDependencies {
+  readonly tenantPurge: { readonly d1: TenantPurgeD1Port; readonly r2: TenantPurgeR2Port; readonly kv: TenantPurgeKvPort };
+}
+type ComplianceHandler = (ctx: ComplianceContext, deps: ComplianceDependencies) => Promise<ComplianceOutcome>;
 
 /**
  * ══════════════════════════════════════════════════════════════════════════
@@ -73,7 +75,7 @@ const customersDataRequest: ComplianceHandler = async ({ shop, payload }) => {
 
   console.log(
     JSON.stringify({
-      event: "compliance.customers_data_request.unimplemented",
+      event: "compliance.customers_data_request.no_customer_data",
       shop,
       customerId: customer?.id ?? null,
       ordersRequested: orders.length,
@@ -84,9 +86,10 @@ const customersDataRequest: ComplianceHandler = async ({ shop, payload }) => {
 
   return {
     topic: "CUSTOMERS_DATA_REQUEST",
-    action: "PLACEHOLDER: declares no customer data stored; nothing collected",
+    action: "declares no customer data stored; nothing collected",
     affected: 0,
-    implemented: false,
+    implemented: true,
+    noCustomerData: true,
   };
 };
 
@@ -97,7 +100,7 @@ const customersRedact: ComplianceHandler = async ({ shop, payload }) => {
 
   console.log(
     JSON.stringify({
-      event: "compliance.customers_redact.unimplemented",
+      event: "compliance.customers_redact.no_customer_data",
       shop,
       customerId: customer?.id ?? null,
       ordersToRedact: orders.length,
@@ -108,9 +111,10 @@ const customersRedact: ComplianceHandler = async ({ shop, payload }) => {
 
   return {
     topic: "CUSTOMERS_REDACT",
-    action: "PLACEHOLDER: declares no customer data stored; nothing erased",
+    action: "declares no customer data stored; nothing erased",
     affected: 0,
-    implemented: false,
+    implemented: true,
+    noCustomerData: true,
   };
 };
 
@@ -119,36 +123,26 @@ const customersRedact: ComplianceHandler = async ({ shop, payload }) => {
  * This one does real work, and it is the pattern to copy: every shop-scoped
  * table gets purged here.
  */
-const shopRedact: ComplianceHandler = async ({ shop, payload }) => {
+const shopRedact: ComplianceHandler = async ({ shop, payload }, deps) => {
   const shopDomain = (payload.shop_domain as string | undefined) ?? shop;
 
-  // Support first, because it is the one table family that also owns BLOBS.
-  // purgeShop returns the R2 keys it removed rows for; the objects have to be
-  // deleted here, while something still names them. Rows first would leave the
-  // blobs unreachable, still readable by anyone holding a key, and still billed.
-  const support = await new SupportRepo().purgeShop(shopDomain);
-  const bucket = getEnv().UPLOADS;
-  // R2 delete takes up to 1000 keys per call — one round trip, not one per file.
-  if (bucket && support.r2Keys.length > 0) await bucket.delete(support.r2Keys);
-
-  const shopRows = await new ShopRepo().purge(shopDomain);
-  const affected = shopRows + support.rows;
+  const erased = await purgeTenant(deps.tenantPurge, shopDomain);
 
   console.log(
     JSON.stringify({
       event: "compliance.shop_redact",
       shop: shopDomain,
-      erased: affected,
+      erased: erased.rows,
       // Called out separately: "did the screenshots go too?" is the question
       // a data-deletion request actually has to answer.
-      attachmentsDeleted: support.r2Keys.length,
+      attachmentsDeleted: erased.attachments,
     }),
   );
 
   return {
     topic: "SHOP_REDACT",
     action: "purged all shop-scoped rows and attachment objects",
-    affected,
+    affected: erased.rows,
     implemented: true,
   };
 };
@@ -172,6 +166,7 @@ export function isComplianceTopic(topic: string): topic is ComplianceTopic {
 export async function handleCompliance(
   topic: string,
   ctx: ComplianceContext,
+  deps: ComplianceDependencies,
 ): Promise<ComplianceOutcome | null> {
   if (!isComplianceTopic(topic)) {
     // Stored data outlives code, and Shopify can add topics. Degrade
@@ -185,5 +180,5 @@ export async function handleCompliance(
     );
     return null;
   }
-  return complianceHandlers[topic](ctx);
+  return complianceHandlers[topic](ctx, deps);
 }

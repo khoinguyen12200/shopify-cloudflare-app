@@ -69,6 +69,7 @@ export default {
               "app/scopes_update": async (delivery) => {
                 const storage = new KVSessionStorage(env.SESSION);
                 const scopes = await new WebhookScopeObservationRepo().list(delivery.id, delivery.shop);
+                await new WebhookScopeObservationRepo().applyScopes(delivery.id, delivery.shop, scopes, Date.now());
                 const sessions = await storage.findSessionsByShop(delivery.shop);
                 await Promise.all(sessions.map(async (session) => {
                   session.scope = scopes.join(",");

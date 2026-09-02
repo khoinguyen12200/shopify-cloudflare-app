@@ -2,8 +2,10 @@ import { describe, it, expect } from "vitest";
 import { env } from "cloudflare:test";
 import { runWithRequestContext } from "~/request-context.server";
 import { setupTestDatabase } from "~/test/db";
-import { complianceHandlers } from "./compliance.server";
 import { SupportRepo } from "~/models/support.server";
+import { TenantPurgeRepo } from "~/models/tenant-purge.server";
+import { KVSessionStorage } from "~/session-storage.server";
+import { handleCompliance } from "./compliance.server";
 
 const SHOP = "alpha.myshopify.com";
 const OTHER = "beta.myshopify.com";
@@ -11,6 +13,7 @@ const OTHER = "beta.myshopify.com";
 setupTestDatabase();
 
 const run = <T>(fn: () => Promise<T>) => runWithRequestContext(env, fn);
+const dispatch = (shop: string) => handleCompliance("SHOP_REDACT", { shop, payload: { shop_domain: shop } }, { tenantPurge: { d1: { prepare: (tenant) => new TenantPurgeRepo().prepareTenantPurge(tenant), deleteRows: (tenant) => new TenantPurgeRepo().deleteTenantRows(tenant) }, r2: { delete: (keys) => env.UPLOADS.delete([...keys]) }, kv: { deleteSessions: async (tenant) => { const storage = new KVSessionStorage(env.SESSION); const sessions = await storage.findSessionsByShop(tenant); await storage.deleteSessions(sessions.map(({ id }) => id)); return sessions.length; } } } });
 
 /** A ticket with one attachment whose blob really exists in the test bucket. */
 async function ticketWithFile(shop: string, key: string) {
@@ -52,10 +55,7 @@ describe("shop/redact and support data", () => {
       const created = await ticketWithFile(SHOP, key);
       expect(await env.UPLOADS.head(key)).not.toBeNull();
 
-      await complianceHandlers.SHOP_REDACT({
-        shop: SHOP,
-        payload: { shop_domain: SHOP },
-      });
+      await dispatch(SHOP);
 
       expect(await new SupportRepo().find(SHOP, created.id)).toBeUndefined();
       expect(await env.UPLOADS.head(key)).toBeNull();
@@ -69,10 +69,7 @@ describe("shop/redact and support data", () => {
       await ticketWithFile(SHOP, mineKey);
       const theirs = await ticketWithFile(OTHER, theirsKey);
 
-      await complianceHandlers.SHOP_REDACT({
-        shop: SHOP,
-        payload: { shop_domain: SHOP },
-      });
+      await dispatch(SHOP);
 
       expect(await new SupportRepo().find(OTHER, theirs.id)).toBeDefined();
       expect(await env.UPLOADS.head(theirsKey)).not.toBeNull();
@@ -83,10 +80,8 @@ describe("shop/redact and support data", () => {
     await run(async () => {
       await ticketWithFile(SHOP, "support/alpha/counted");
 
-      const outcome = await complianceHandlers.SHOP_REDACT({
-        shop: SHOP,
-        payload: { shop_domain: SHOP },
-      });
+      const outcome = await dispatch(SHOP);
+      if (!outcome) throw new Error("expected shop redact outcome");
 
       expect(outcome.implemented).toBe(true);
       // 1 ticket + 1 message + 1 attachment on top of the shop row.

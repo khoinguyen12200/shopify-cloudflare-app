@@ -8,12 +8,22 @@ import {
   isComplianceTopic,
   complianceHandlers,
 } from "./compliance.server";
+import { TenantPurgeRepo } from "~/models/tenant-purge.server";
+import { KVSessionStorage } from "~/session-storage.server";
 
 setupTestDatabase();
 
 function inRequest<T>(fn: () => Promise<T>): Promise<T> {
   return runWithRequestContext(env, fn);
 }
+
+const dispatch = (topic: string, ctx: { shop: string; payload: Record<string, unknown> }) => handleCompliance(topic, ctx, {
+  tenantPurge: {
+    d1: { prepare: (shop) => new TenantPurgeRepo().prepareTenantPurge(shop), deleteRows: (shop) => new TenantPurgeRepo().deleteTenantRows(shop) },
+    r2: { delete: (keys) => env.UPLOADS.delete([...keys]) },
+    kv: { deleteSessions: async (shop) => { const storage = new KVSessionStorage(env.SESSION); const sessions = await storage.findSessionsByShop(shop); await storage.deleteSessions(sessions.map(({ id }) => id)); return sessions.length; } },
+  },
+});
 
 describe("compliance topic registry", () => {
   it("covers all three mandatory topics", () => {
@@ -31,7 +41,7 @@ describe("compliance topic registry", () => {
 
   it("degrades predictably on an unknown topic instead of throwing", async () => {
     const outcome = await inRequest(() =>
-      handleCompliance("SOMETHING_NEW", { shop: "s.myshopify.com", payload: {} }),
+      dispatch("SOMETHING_NEW", { shop: "s.myshopify.com", payload: {} }),
     );
     expect(outcome).toBeNull();
   });
@@ -44,7 +54,7 @@ describe("shop/redact", () => {
     const after = await inRequest(async () => {
       const repo = new ShopRepo();
       await repo.recordInstall(shop, 1);
-      await handleCompliance("SHOP_REDACT", {
+      await dispatch("SHOP_REDACT", {
         shop,
         payload: { shop_domain: shop, shop_id: 1 },
       });
@@ -59,7 +69,7 @@ describe("shop/redact", () => {
 
     const outcome = await inRequest(async () => {
       await new ShopRepo().recordInstall(shop, 1);
-      return handleCompliance("SHOP_REDACT", {
+      return dispatch("SHOP_REDACT", {
         shop,
         payload: { shop_domain: shop },
       });
@@ -73,9 +83,9 @@ describe("shop/redact", () => {
 
     const second = await inRequest(async () => {
       await new ShopRepo().recordInstall(shop, 1);
-      await handleCompliance("SHOP_REDACT", { shop, payload: { shop_domain: shop } });
+      await dispatch("SHOP_REDACT", { shop, payload: { shop_domain: shop } });
       // Deliveries are at-least-once; the replay must not throw.
-      return handleCompliance("SHOP_REDACT", { shop, payload: { shop_domain: shop } });
+      return dispatch("SHOP_REDACT", { shop, payload: { shop_domain: shop } });
     });
 
     expect(second).toMatchObject({ affected: 0 });
@@ -86,7 +96,7 @@ describe("shop/redact", () => {
 
     const outcome = await inRequest(async () => {
       await new ShopRepo().recordInstall(shop, 1);
-      return handleCompliance("SHOP_REDACT", { shop, payload: {} });
+      return dispatch("SHOP_REDACT", { shop, payload: {} });
     });
 
     expect(outcome).toMatchObject({ affected: 1 });
@@ -97,7 +107,7 @@ describe("shop/redact", () => {
       const repo = new ShopRepo();
       await repo.recordInstall("victim.myshopify.com", 1);
       await repo.recordInstall("bystander.myshopify.com", 1);
-      await handleCompliance("SHOP_REDACT", {
+      await dispatch("SHOP_REDACT", {
         shop: "victim.myshopify.com",
         payload: { shop_domain: "victim.myshopify.com" },
       });
@@ -108,35 +118,35 @@ describe("shop/redact", () => {
   });
 });
 
-describe("customers/* — placeholders that say so", () => {
-  it("data_request declares itself unimplemented, not that no data exists", async () => {
+describe("customers/* no-customer-data outcomes", () => {
+  it("data_request explicitly declares no customer data", async () => {
     // "no customer data stored; affected: 0" is true for the scaffold and false
     // the moment anyone adds a customer column — and nothing fails when it goes
     // stale, so the app keeps telling a merchant that nothing was held. The
     // outcome carries the placeholder status instead of a bare zero.
     const outcome = await inRequest(() =>
-      handleCompliance("CUSTOMERS_DATA_REQUEST", {
+      dispatch("CUSTOMERS_DATA_REQUEST", {
         shop: "s.myshopify.com",
         payload: { customer: { id: 1 } },
       }),
     );
-    expect(outcome).toMatchObject({ implemented: false });
+    expect(outcome).toMatchObject({ implemented: true, noCustomerData: true });
   });
 
-  it("redact declares itself unimplemented", async () => {
+  it("redact explicitly declares no customer data", async () => {
     const outcome = await inRequest(() =>
-      handleCompliance("CUSTOMERS_REDACT", {
+      dispatch("CUSTOMERS_REDACT", {
         shop: "s.myshopify.com",
         payload: { customer: { id: 1 } },
       }),
     );
-    expect(outcome).toMatchObject({ implemented: false });
+    expect(outcome).toMatchObject({ implemented: true, noCustomerData: true });
   });
 
   it("shop_redact does real work, so it is marked implemented", async () => {
     const outcome = await inRequest(async () => {
       await new ShopRepo().recordInstall("real.myshopify.com", 1);
-      return handleCompliance("SHOP_REDACT", {
+      return dispatch("SHOP_REDACT", {
         shop: "real.myshopify.com",
         payload: { shop_domain: "real.myshopify.com" },
       });
@@ -146,7 +156,7 @@ describe("customers/* — placeholders that say so", () => {
 
   it("data_request reports nothing collected", async () => {
     const outcome = await inRequest(() =>
-      handleCompliance("CUSTOMERS_DATA_REQUEST", {
+      dispatch("CUSTOMERS_DATA_REQUEST", {
         shop: "s.myshopify.com",
         payload: { customer: { id: 1 }, orders_requested: [1, 2] },
       }),
@@ -156,7 +166,7 @@ describe("customers/* — placeholders that say so", () => {
 
   it("redact reports nothing erased", async () => {
     const outcome = await inRequest(() =>
-      handleCompliance("CUSTOMERS_REDACT", {
+      dispatch("CUSTOMERS_REDACT", {
         shop: "s.myshopify.com",
         payload: { customer: { id: 1 }, orders_to_redact: [1] },
       }),

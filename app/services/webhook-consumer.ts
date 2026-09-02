@@ -26,6 +26,7 @@ export interface WebhookConsumerDependencies {
       readonly failureCode: string;
       readonly failureDetail: string;
     }): Promise<void>;
+    markDeadLetter?(shop: string, id: string, failedAt: number, detail: string): Promise<void>;
   };
   readonly handlers: Record<string, (delivery: ConsumerDelivery) => Promise<void>>;
   readonly now: () => number;
