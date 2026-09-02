@@ -19,7 +19,10 @@ describe("reconcileHistory", () => {
       },
     };
     const recorded: string[] = [];
-    const ledger: LifecycleLedgerPort = { recordPartnerRelationship: async (value) => { recorded.push(value.id); return "inserted"; }, recordPartnerSubscription: async (value) => { recorded.push(value.id); return "inserted"; } };
+    const ledger: LifecycleLedgerPort = {
+      recordPartnerRelationship: async (value) => { recorded.push(value.id); return "inserted"; },
+      recordPartnerSubscription: async (value) => { recorded.push(value.id); return "inserted"; },
+    };
     let success: unknown;
     const checkpoint: SyncCheckpointPort = {
       readCheckpoint: async () => ({ cursor: "old", watermarkAt: 1 }),
@@ -79,7 +82,10 @@ describe("reconcileHistory", () => {
       activeSubscription: async () => null,
       listHistoricalEvents: async () => { throw new Error("network down"); },
     };
-    await expect(reconcileHistory({ partner, checkpoint, ledger: { recordPartnerRelationship: async () => "inserted", recordPartnerSubscription: async () => "inserted" }, clock: { now: () => 10 }, appId: "app" }, 10)).resolves.toMatchObject({ status: "failed", code: "HISTORY_SYNC_FAILED" });
+    await expect(reconcileHistory({ partner, checkpoint, ledger: {
+      recordPartnerRelationship: async () => "inserted",
+      recordPartnerSubscription: async () => "inserted",
+    }, clock: { now: () => 10 }, appId: "app" }, 10)).resolves.toMatchObject({ status: "failed", code: "HISTORY_SYNC_FAILED" });
     expect(failure).toEqual(["partner_history", "HISTORY_SYNC_FAILED", "network down", 10]);
   });
 });

@@ -1,5 +1,4 @@
-import type { PartnerHistoryEvent } from "~/adapters/shopify-partner-events";
-import type { ShopifyPartnerPort } from "~/ports/shopify-partner";
+import type { PartnerHistoryEvent, ShopifyPartnerPort } from "~/ports/shopify-partner";
 
 const CHECKPOINT = "partner_history";
 const OVERLAP_MS = 24 * 60 * 60 * 1000;

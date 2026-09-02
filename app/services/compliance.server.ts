@@ -43,6 +43,18 @@ export interface ComplianceDependencies {
 }
 type ComplianceHandler = (ctx: ComplianceContext, deps: ComplianceDependencies) => Promise<ComplianceOutcome>;
 
+function customerId(payload: Record<string, unknown>): number | null {
+  const customer = payload.customer;
+  if (typeof customer !== "object" || customer === null || !("id" in customer)) return null;
+  const id = customer.id;
+  return typeof id === "number" ? id : null;
+}
+
+function orderCount(payload: Record<string, unknown>, key: "orders_requested" | "orders_to_redact"): number {
+  const orders = payload[key];
+  return Array.isArray(orders) && orders.every((order) => typeof order === "number") ? orders.length : 0;
+}
+
 /**
  * ══════════════════════════════════════════════════════════════════════════
  *  READ THIS BEFORE YOU STORE ANY PERSONAL DATA
@@ -70,15 +82,12 @@ type ComplianceHandler = (ctx: ComplianceContext, deps: ComplianceDependencies) 
  * the STORE OWNER directly — the webhook response carries no data.
  */
 const customersDataRequest: ComplianceHandler = async ({ shop, payload }) => {
-  const customer = payload.customer as { id?: number } | undefined;
-  const orders = (payload.orders_requested as number[] | undefined) ?? [];
-
   console.log(
     JSON.stringify({
       event: "compliance.customers_data_request.no_customer_data",
       shop,
-      customerId: customer?.id ?? null,
-      ordersRequested: orders.length,
+      customerId: customerId(payload),
+      ordersRequested: orderCount(payload, "orders_requested"),
       collected: 0,
       note: "placeholder: this app declares it stores no customer data",
     }),
@@ -95,15 +104,12 @@ const customersDataRequest: ComplianceHandler = async ({ shop, payload }) => {
 
 /** The merchant asked, on a customer's behalf, that their data be deleted. */
 const customersRedact: ComplianceHandler = async ({ shop, payload }) => {
-  const customer = payload.customer as { id?: number } | undefined;
-  const orders = (payload.orders_to_redact as number[] | undefined) ?? [];
-
   console.log(
     JSON.stringify({
       event: "compliance.customers_redact.no_customer_data",
       shop,
-      customerId: customer?.id ?? null,
-      ordersToRedact: orders.length,
+      customerId: customerId(payload),
+      ordersToRedact: orderCount(payload, "orders_to_redact"),
       erased: 0,
       note: "placeholder: this app declares it stores no customer data",
     }),
@@ -124,7 +130,7 @@ const customersRedact: ComplianceHandler = async ({ shop, payload }) => {
  * table gets purged here.
  */
 const shopRedact: ComplianceHandler = async ({ shop, payload }, deps) => {
-  const shopDomain = (payload.shop_domain as string | undefined) ?? shop;
+  const shopDomain = typeof payload.shop_domain === "string" ? payload.shop_domain : shop;
 
   const erased = await purgeTenant(deps.tenantPurge, shopDomain);
 

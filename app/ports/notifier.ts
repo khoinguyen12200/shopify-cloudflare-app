@@ -41,5 +41,5 @@ export interface NotifyRequest<E extends NotificationEvent = NotificationEvent> 
 }
 
 export interface Notifier {
-  send<E extends NotificationEvent>(input: NotifyRequest<E>): Promise<unknown>;
+  send<E extends NotificationEvent>(input: NotifyRequest<E>): Promise<void>;
 }

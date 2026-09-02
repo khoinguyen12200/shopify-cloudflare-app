@@ -11,7 +11,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const now = Date.now();
   await ingestWebhook({
     deliveries: webhookDeliveries(),
-    queue: getEnv().WEBHOOK_QUEUE,
+    queue: { send: async (message) => { await getEnv().WEBHOOK_QUEUE.send(message); } },
     hashPayload: sha256Json,
     log: async (webhook, outcome, latencyMs) => writeWebhookLog(await formatWebhookLog({ deliveryId: webhook.webhookId, topic: webhook.topic, shop: webhook.shop, handler: webhook.topic, outcome, attempts: 0, latencyMs })),
   }, {

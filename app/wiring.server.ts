@@ -88,7 +88,7 @@ export function aiGenerator(): TextGenerator {
 }
 
 export function aiService(): AiService {
-  return new AiService(new AiRepo(), aiGenerator(), { now: () => Date.now() }, aiGate());
+  return new AiService({ repo: new AiRepo(), generator: aiGenerator(), clock: { now: () => Date.now() }, gate: aiGate() });
 }
 
 export function supportService(): SupportService {
