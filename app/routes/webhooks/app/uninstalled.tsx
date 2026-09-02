@@ -1,7 +1,7 @@
 import type { ActionFunctionArgs } from "react-router";
 import { createShopify } from "~/shopify.server";
 import { getEnv } from "~/request-context.server";
-import { WebhookDeliveryRepo } from "~/models/webhook-deliveries.server";
+import { webhookDeliveries } from "~/wiring.server";
 import { ingestWebhook, sha256Json } from "~/services/webhook-ingest";
 import { formatWebhookLog, writeWebhookLog } from "~/services/webhook-logging";
 
@@ -10,7 +10,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const authenticated = await shopify.authenticate.webhook(request);
   const now = Date.now();
   await ingestWebhook({
-    deliveries: new WebhookDeliveryRepo(),
+    deliveries: webhookDeliveries(),
     queue: getEnv().WEBHOOK_QUEUE,
     hashPayload: sha256Json,
     log: async (webhook, outcome, latencyMs) => writeWebhookLog(await formatWebhookLog({ deliveryId: webhook.webhookId, topic: webhook.topic, shop: webhook.shop, handler: webhook.topic, outcome, attempts: 0, latencyMs })),

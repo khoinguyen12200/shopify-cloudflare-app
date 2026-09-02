@@ -1,5 +1,3 @@
-import type { PartnerHistoryEvent } from "~/adapters/shopify-partner-events";
-
 export interface ShopifyPartnerPort {
   activeSubscription(appId: string, shopId: string): Promise<ActiveSubscription | null>;
   listHistoricalEvents(input: {
@@ -9,6 +7,10 @@ export interface ShopifyPartnerPort {
     readonly occurredAtMin?: string;
   }): Promise<{ readonly events: PartnerHistoryEvent[]; readonly hasNextPage: boolean; readonly endCursor: string | null }>;
 }
+export type PartnerHistoryEvent =
+  | { readonly kind: "relationship"; readonly id: string; readonly occurredAt: string; readonly shop: string; readonly shopId: string; readonly type: "INSTALLED" | "UNINSTALLED" | "DEACTIVATED" | "REACTIVATED" }
+  | { readonly kind: "subscription"; readonly id: string; readonly occurredAt: string; readonly shop: string; readonly shopId: string; readonly type: "CREATED" | "UPDATED" | "CANCELLATION_SCHEDULED" | "CANCELED" | "FROZEN" | "UNFROZEN"; readonly cancelEffectiveOn: string | null; readonly planHandle: string | null; readonly billingPeriod: string | null }
+  | { readonly kind: "ignored"; readonly id: string };
 
 export interface ActiveSubscription {
   readonly id?: string;

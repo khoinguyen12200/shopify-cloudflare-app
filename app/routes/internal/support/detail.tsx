@@ -22,7 +22,7 @@ import {
 } from "ngk-dashboard";
 import { requireAdminUser } from "~/services/admin-auth.server";
 import { adminUsers } from "~/wiring.server";
-import { SupportService } from "~/services/support.server";
+import { supportService } from "~/wiring.server";
 import { ShopSubscriptionRepo } from "~/models/shop-subscriptions.server";
 import { planForShopifyHandle } from "~/billing/plans";
 import { statusOf, type SupportStatus } from "~/support/status";
@@ -46,7 +46,7 @@ const LOCALE: Locale = "en";
 
 export const loader = async ({ params, request }: LoaderFunctionArgs) => {
   await requireAdminUser(request, { users: adminUsers() });
-  const service = new SupportService();
+  const service = supportService();
 
   const ticketId = params.ticketId ?? "";
   const thread = await service.findForStaff(ticketId);
@@ -103,7 +103,7 @@ export const action = async ({ params, request }: ActionFunctionArgs) => {
   const actor = await requireAdminUser(request, { users: adminUsers() });
   const ticketId = params.ticketId ?? "";
   const form = await request.formData();
-  const service = new SupportService();
+  const service = supportService();
 
   if (String(form.get("intent")) === "close") {
     await service.closeAsStaff(ticketId);

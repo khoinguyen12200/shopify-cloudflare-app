@@ -1,12 +1,8 @@
-import type { WebhookDeliveryInput } from "~/models/webhook-deliveries.server";
+import type { WebhookDeliveriesPort } from "~/ports/webhook-deliveries";
 
 export interface WebhookIngestDependencies {
-  readonly deliveries: {
-    claim(input: WebhookDeliveryInput): Promise<"claimed" | "duplicate">;
-    get(shop: string, id: string): Promise<{ readonly status: string } | undefined>;
-    markQueued(shop: string, id: string): Promise<void>;
-  };
-  readonly queue: { send(message: WebhookQueueMessage): Promise<unknown> };
+  readonly deliveries: WebhookDeliveriesPort;
+  readonly queue: { send(message: WebhookQueueMessage): Promise<void> };
   readonly hashPayload: (payload: unknown) => Promise<string>;
   readonly beforeEnqueue?: (webhook: AuthenticatedWebhook) => Promise<void>;
   readonly log?: (webhook: AuthenticatedWebhook, outcome: "queued" | "duplicate", latencyMs: number) => Promise<void>;

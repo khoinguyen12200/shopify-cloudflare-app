@@ -7,7 +7,7 @@ import { createShopify } from "~/shopify.server";
 import { getEnv } from "~/request-context.server";
 import { useLocale } from "~/i18n/useLocale";
 import { formatDate } from "~/i18n/format";
-import { SupportService } from "~/services/support.server";
+import { supportService } from "~/wiring.server";
 import { isUnreadFor, statusOf, type SupportStatus } from "~/support/status";
 import { CATEGORY_LABEL_KEY } from "~/support/categories";
 
@@ -15,7 +15,7 @@ export const handle = { i18n: ["common", "admin"] };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await createShopify(getEnv()).authenticate.admin(request);
-  const tickets = await new SupportService().listForShop(session.shop);
+  const tickets = await supportService().listForShop(session.shop);
 
   // Derived here, not in the component: the row only renders what it is given,
   // and the status rules live in one pure function (app/support/status.ts).

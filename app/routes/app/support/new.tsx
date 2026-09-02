@@ -11,7 +11,7 @@ import { useTranslation } from "react-i18next";
 import { createShopify } from "~/shopify.server";
 import { getEnv } from "~/request-context.server";
 import { getLocale } from "~/i18n/i18n.server";
-import { SupportService } from "~/services/support.server";
+import { supportService } from "~/wiring.server";
 import { SupportRepo } from "~/models/support.server";
 import {
   createTicketSchema,
@@ -73,7 +73,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const contact = await admin.graphql(SHOP_CONTACT_QUERY);
   const shopName = readShopContact(await contact.json()).name || session.shop;
 
-  const service = new SupportService();
+  const service = supportService();
   const created = await service.openTicket({
     shop: session.shop,
     shopName,

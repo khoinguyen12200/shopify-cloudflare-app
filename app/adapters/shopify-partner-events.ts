@@ -1,3 +1,5 @@
+import type { PartnerHistoryEvent } from "~/ports/shopify-partner";
+
 const relationshipTypes = {
   RELATIONSHIP_INSTALLED: "INSTALLED",
   RELATIONSHIP_UNINSTALLED: "UNINSTALLED",
@@ -5,29 +7,7 @@ const relationshipTypes = {
   RELATIONSHIP_REACTIVATED: "REACTIVATED",
 } as const;
 
-type SubscriptionEvent = {
-  readonly kind: "subscription";
-  readonly id: string;
-  readonly occurredAt: string;
-  readonly shop: string;
-  readonly shopId: string;
-  readonly type: "CREATED" | "UPDATED" | "CANCELLATION_SCHEDULED" | "CANCELED" | "FROZEN" | "UNFROZEN";
-  readonly cancelEffectiveOn: string | null;
-  readonly planHandle: string | null;
-  readonly billingPeriod: string | null;
-};
-
-export type PartnerHistoryEvent =
-  | {
-      readonly kind: "relationship";
-      readonly id: string;
-      readonly occurredAt: string;
-      readonly shop: string;
-      readonly shopId: string;
-      readonly type: (typeof relationshipTypes)[keyof typeof relationshipTypes];
-    }
-  | SubscriptionEvent
-  | { readonly kind: "ignored"; readonly id: string };
+export type { PartnerHistoryEvent } from "~/ports/shopify-partner";
 
 function record(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)

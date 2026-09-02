@@ -7,6 +7,7 @@ import { AdminUserRepo } from "~/models/admin-users.server";
 import { SupportRepo } from "~/models/support.server";
 import { createAdmin } from "~/services/admin-management.server";
 import { SupportService } from "./support.server";
+import { supportService } from "~/wiring.server";
 import { verifyAttachmentToken } from "~/support/file-token";
 import { fakeNotifier } from "~/test/fake-notifier";
 
@@ -74,7 +75,7 @@ describe("opening a ticket", () => {
   it("stores the ticket against the shop that opened it", async () => {
     const shop = newShop();
     const thread = await inRequest(async () => {
-      const service = new SupportService();
+      const service = supportService();
       const created = await openTicket(service, shop);
       return service.find(shop, created.id);
     });
@@ -92,7 +93,7 @@ describe("opening a ticket", () => {
     const shop = newShop();
     const other = newShop();
     const found = await inRequest(async () => {
-      const service = new SupportService();
+      const service = supportService();
       const created = await openTicket(service, shop);
       return service.find(other, created.id);
     });
@@ -103,7 +104,7 @@ describe("opening a ticket", () => {
   it("stores the copy list the merchant gave", async () => {
     const shop = newShop();
     const thread = await inRequest(async () => {
-      const service = new SupportService();
+      const service = supportService();
       const created = await openTicket(service, shop, {
         ccEmails: ["dev@alpha.test", "ops@alpha.test"],
       });
@@ -116,7 +117,7 @@ describe("opening a ticket", () => {
   it("notifies the staff who asked to hear about tickets", async () => {
     const rows = await inRequest(async () => {
       await staffMember();
-      await openTicket(new SupportService(), newShop());
+      await openTicket(supportService(), newShop());
       return new NotificationLogRepo().recent();
     });
 
@@ -134,7 +135,7 @@ describe("opening a ticket", () => {
     const rows = await inRequest(async () => {
       await staffMember("first@example.org");
       await staffMember("second@example.org");
-      await openTicket(new SupportService(), newShop());
+      await openTicket(supportService(), newShop());
       return new NotificationLogRepo().recent();
     });
 
@@ -148,7 +149,7 @@ describe("opening a ticket", () => {
     const rows = await inRequest(async () => {
       const staff = await staffMember();
       await new AdminUserRepo().setNotifySupport(staff.id, false, 2_000);
-      await openTicket(new SupportService(), newShop());
+      await openTicket(supportService(), newShop());
       return new NotificationLogRepo().recent();
     });
 
@@ -160,7 +161,7 @@ describe("opening a ticket", () => {
     // reason a bug report is lost.
     const shop = newShop();
     const thread = await inRequest(async () => {
-      const service = new SupportService();
+      const service = supportService();
       const created = await openTicket(service, shop);
       return service.find(shop, created.id);
     });
@@ -173,7 +174,7 @@ describe("opening a ticket", () => {
     // the limiter — 10 per minute per shop.
     const shop = newShop();
     const reason = await inRequest(async () => {
-      const service = new SupportService();
+      const service = supportService();
       for (let i = 0; i < 10; i += 1) await openTicket(service, shop);
 
       const eleventh = await service.openTicket({
@@ -197,7 +198,7 @@ describe("replying", () => {
     const shop = newShop();
     const { thread, rows } = await inRequest(async () => {
       await staffMember();
-      const service = new SupportService();
+      const service = supportService();
       const created = await openTicket(service, shop);
 
       const replied = await service.replyAsMerchant({
@@ -224,7 +225,7 @@ describe("replying", () => {
     const shop = newShop();
     const other = newShop();
     const replied = await inRequest(async () => {
-      const service = new SupportService();
+      const service = supportService();
       const created = await openTicket(service, shop);
       return service.replyAsMerchant({
         shop: other,
@@ -240,7 +241,7 @@ describe("replying", () => {
   it("emails the merchant when staff answer", async () => {
     const shop = newShop();
     const rows = await inRequest(async () => {
-      const service = new SupportService();
+      const service = supportService();
       const created = await openTicket(service, shop);
 
       const replied = await service.replyAsStaff({
@@ -265,7 +266,7 @@ describe("replying", () => {
     // only" — and it must not become a send to an empty string.
     const shop = newShop();
     const rows = await inRequest(async () => {
-      const service = new SupportService();
+      const service = supportService();
       const created = await openTicket(service, shop, { merchantEmail: null });
       await service.replyAsStaff({ ticketId: created.id, staffName: "Sam", body: "Hi" });
       return new NotificationLogRepo().recent();
@@ -279,7 +280,7 @@ describe("replying", () => {
     // attributed to another.
     const shop = newShop();
     const rows = await inRequest(async () => {
-      const service = new SupportService();
+      const service = supportService();
       const created = await openTicket(service, shop);
       await service.replyAsStaff({ ticketId: created.id, staffName: "Sam", body: "Hi" });
       return new NotificationLogRepo().recent();
@@ -291,7 +292,7 @@ describe("replying", () => {
   it("reopens a closed thread when the merchant replies, but not when staff do", async () => {
     const shop = newShop();
     const { afterStaff, afterMerchant } = await inRequest(async () => {
-      const service = new SupportService();
+      const service = supportService();
       const repo = new SupportRepo();
       const created = await openTicket(service, shop);
       await repo.closeAsStaff(created.id, 2_000);
@@ -316,7 +317,7 @@ describe("replying", () => {
 
   it("reports not_found when staff answer a ticket that no longer exists", async () => {
     const replied = await inRequest(() =>
-      new SupportService().replyAsStaff({
+      supportService().replyAsStaff({
         ticketId: "no-such-ticket",
         staffName: "Sam",
         body: "Hello?",
@@ -331,7 +332,7 @@ describe("the copy list on an existing ticket", () => {
   it("is replaced wholesale by the merchant's edit", async () => {
     const shop = newShop();
     const thread = await inRequest(async () => {
-      const service = new SupportService();
+      const service = supportService();
       const created = await openTicket(service, shop, { ccEmails: ["old@alpha.test"] });
       await service.setCcEmails(shop, created.id, ["new@alpha.test"]);
       return service.find(shop, created.id);
@@ -344,7 +345,7 @@ describe("the copy list on an existing ticket", () => {
     const shop = newShop();
     const other = newShop();
     const thread = await inRequest(async () => {
-      const service = new SupportService();
+      const service = supportService();
       const created = await openTicket(service, shop, { ccEmails: ["old@alpha.test"] });
       await service.setCcEmails(other, created.id, ["attacker@evil.test"]);
       return service.find(shop, created.id);
@@ -358,7 +359,7 @@ describe("read receipts", () => {
   it("marks the merchant's side read without touching the staff side", async () => {
     const shop = newShop();
     const ticket = await inRequest(async () => {
-      const service = new SupportService();
+      const service = supportService();
       const created = await openTicket(service, shop);
       await service.markMerchantRead(shop, created.id);
       return (await service.find(shop, created.id))?.ticket;
@@ -373,7 +374,7 @@ describe("attachment URLs", () => {
   it("mints a URL whose token verifies for that attachment", async () => {
     const shop = newShop();
     const { url, id } = await inRequest(async () => {
-      const service = new SupportService();
+      const service = supportService();
       const created = await openTicket(service, shop);
       const attachmentId = crypto.randomUUID();
 
@@ -405,7 +406,7 @@ describe("attachment URLs", () => {
 
   it("mints a token that does NOT verify for a different attachment", async () => {
     const url = await inRequest(() =>
-      new SupportService().attachmentUrl("attachment-a"),
+      supportService().attachmentUrl("attachment-a"),
     );
 
     const token = new URL(url, "https://example.test").searchParams.get("token") ?? "";
@@ -432,12 +433,15 @@ describe("attachment URLs", () => {
 describe("what the service asks the notifier to send", () => {
   const withFake = () => {
     const notifier = fakeNotifier();
-    const service = new SupportService(
-      new SupportRepo(),
-      new AdminUserRepo(),
-      { now: () => 1_700_000_000_000 },
+    const service = new SupportService({
+      repo: new SupportRepo(),
+      admins: new AdminUserRepo(),
+      clock: { now: () => 1_700_000_000_000 },
       notifier,
-    );
+      appUrl: "https://example.test",
+      withinRateLimit: async () => true,
+      signAttachment: async () => "unused",
+    });
     return { notifier, service };
   };
 

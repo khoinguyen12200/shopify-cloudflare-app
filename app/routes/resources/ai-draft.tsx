@@ -1,9 +1,7 @@
 import type { ActionFunctionArgs } from "react-router";
 import { cloudflareContext } from "../../../workers/app";
 import { requireAdminUser } from "~/services/admin-auth.server";
-import { adminUsers } from "~/wiring.server";
-import { SupportService } from "~/services/support.server";
-import { AiService } from "~/services/ai.server";
+import { adminUsers, aiService, supportService } from "~/wiring.server";
 import type { ThreadForPrompt } from "~/ai/draft-prompt";
 import { toReplyTone } from "~/ai/tones";
 import { replyTask } from "~/ai/tasks/reply";
@@ -34,7 +32,7 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
   const instruction = String(form.get("instruction") ?? "");
   const tone = toReplyTone(String(form.get("tone") ?? ""));
 
-  const support = new SupportService();
+  const support = supportService();
   const found = await support.findForStaff(ticketId);
   if (!found) return new Response("Not found", { status: 404 });
 
@@ -49,7 +47,7 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
     })),
   };
 
-  const started = await new AiService().stream(
+  const started = await aiService().stream(
     replyTask,
     { thread, currentText, instruction, tone },
     // The staff console: our own tooling and our own spend, because the merchant

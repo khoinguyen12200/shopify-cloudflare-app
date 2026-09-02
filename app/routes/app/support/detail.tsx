@@ -21,7 +21,7 @@ import { createShopify } from "~/shopify.server";
 import { getEnv } from "~/request-context.server";
 import { useLocale } from "~/i18n/useLocale";
 import { formatDate, formatDateTime } from "~/i18n/format";
-import { SupportService } from "~/services/support.server";
+import { supportService } from "~/wiring.server";
 import { SupportRepo } from "~/models/support.server";
 import { statusOf, type SupportStatus } from "~/support/status";
 import { CATEGORY_LABEL_KEY } from "~/support/categories";
@@ -37,7 +37,7 @@ export const handle = { i18n: ["common", "admin"] };
 
 export const loader = async ({ params, request }: LoaderFunctionArgs) => {
   const { session } = await createShopify(getEnv()).authenticate.admin(request);
-  const service = new SupportService();
+  const service = supportService();
 
   const thread = await service.find(session.shop, params.ticketId ?? "");
   if (!thread) throw new Response("Not found", { status: 404 });
@@ -98,7 +98,7 @@ export const action = async ({ params, request }: ActionFunctionArgs) => {
   const ticketId = params.ticketId ?? "";
   const form = await request.formData();
   const intent = String(form.get("intent") ?? "reply");
-  const service = new SupportService();
+  const service = supportService();
 
   if (intent === "cc") {
     const parsed = updateCcSchema.safeParse(Object.fromEntries(form));

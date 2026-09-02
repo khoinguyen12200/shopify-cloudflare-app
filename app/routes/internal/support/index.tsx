@@ -21,7 +21,7 @@ import { LifeBuoy } from "lucide-react";
 import { requireAdminUser } from "~/services/admin-auth.server";
 import { adminUsers } from "~/wiring.server";
 import { AdminUserRepo } from "~/models/admin-users.server";
-import { SupportService } from "~/services/support.server";
+import { supportService } from "~/wiring.server";
 import { ShopSubscriptionRepo } from "~/models/shop-subscriptions.server";
 import { planForShopifyHandle } from "~/billing/plans";
 import { isUnreadFor, statusOf, type SupportStatus } from "~/support/status";
@@ -38,7 +38,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const actor = await requireAdminUser(request, { users: adminUsers() });
 
   const [tickets, currentSubscriptions] = await Promise.all([
-    new SupportService().listOpenForStaff(),
+    supportService().listOpenForStaff(),
     new ShopSubscriptionRepo().listCurrent(),
   ]);
   const currentByShop = new Map(currentSubscriptions.map((subscription) => [subscription.shop, subscription]));

@@ -1,16 +1,10 @@
 import { err, ok, type Result } from "~/lib/result";
-import { getEnv } from "~/request-context.server";
-import { AdminUserRepo } from "~/models/admin-users.server";
-import { SupportRepo, type SupportThread } from "~/models/support.server";
-import { notify } from "~/notifications/notify.server";
 import type { Notifier } from "~/ports/notifier";
+import type { SupportAdminPort, SupportRepository, SupportThread } from "~/ports/support";
 import { excerpt } from "~/support/excerpt";
 import type { SupportCategory } from "~/support/categories";
 import type { SupportTicket } from "~/db/schema";
-import {
-  ATTACHMENT_TOKEN_TTL_MS,
-  signAttachmentToken,
-} from "~/support/file-token";
+import { ATTACHMENT_TOKEN_TTL_MS } from "~/support/file-token";
 
 /**
  * Support use cases: the merchant side and the staff side of one thread.
@@ -27,7 +21,15 @@ interface Clock {
   now(): number;
 }
 
-const systemClock: Clock = { now: () => Date.now() };
+export interface SupportServiceDependencies {
+  readonly repo: SupportRepository;
+  readonly admins: SupportAdminPort;
+  readonly clock: Clock;
+  readonly notifier: Notifier;
+  readonly appUrl: string;
+  readonly withinRateLimit: (shop: string) => Promise<boolean>;
+  readonly signAttachment: (attachmentId: string, expiresAt: number) => Promise<string>;
+}
 
 /** Where a thread lives, for the links inside notifications. */
 function threadUrls(appUrl: string, ticketId: string) {
@@ -45,27 +47,8 @@ function threadUrls(appUrl: string, ticketId: string) {
  * FAILS OPEN when the binding is absent: a missing limiter must never be the
  * reason a merchant cannot report a bug (@rules/cloudflare.md).
  */
-async function withinRateLimit(shop: string): Promise<boolean> {
-  const limiter = getEnv().SUPPORT_LIMITER;
-  if (!limiter) return true;
-  const { success } = await limiter.limit({ key: shop });
-  return success;
-}
-
 export class SupportService {
-  constructor(
-    private readonly repo = new SupportRepo(),
-    private readonly admins = new AdminUserRepo(),
-    private readonly clock: Clock = systemClock,
-    /**
-     * The email seam, as a PORT (@rules/design-patterns.md). Defaulted to the
-     * real one so no call site changes, and injectable so a test can prove what
-     * was asked for — an email leaves no database state to assert against, which
-     * is precisely how this service shipped for months sending support replies
-     * with the merchant's copy list silently dropped.
-     */
-    private readonly notifier: Notifier = { send: notify },
-  ) {}
+  constructor(private readonly dependencies: SupportServiceDependencies) {}
 
   /** File a new ticket, then tell the staff who asked to hear about it. */
   async openTicket(input: {
@@ -83,14 +66,14 @@ export class SupportService {
      */
     locale?: string | null;
   }): Promise<Result<{ id: string; messageId: string }, OpenTicketFailure>> {
-    if (!(await withinRateLimit(input.shop))) return err("rate_limited");
+    if (!(await this.dependencies.withinRateLimit(input.shop))) return err("rate_limited");
 
-    const created = await this.repo.open({
+    const created = await this.dependencies.repo.open({
       ...input,
       // The shop is the author of its own first message.
       authorName: input.shopName,
       locale: input.locale ?? null,
-      at: this.clock.now(),
+      at: this.dependencies.clock.now(),
     });
 
     await this.notifyStaff({
@@ -111,19 +94,19 @@ export class SupportService {
     ticketId: string;
     body: string;
   }): Promise<Result<null, OpenTicketFailure | "not_found">> {
-    if (!(await withinRateLimit(input.shop))) return err("rate_limited");
+    if (!(await this.dependencies.withinRateLimit(input.shop))) return err("rate_limited");
 
-    const replied = await this.repo.reply({
+    const replied = await this.dependencies.repo.reply({
       shop: input.shop,
       ticketId: input.ticketId,
       author: "merchant",
       authorName: input.shopName,
       body: input.body,
-      at: this.clock.now(),
+      at: this.dependencies.clock.now(),
     });
     if (!replied) return err("not_found");
 
-    const thread = await this.repo.find(input.shop, input.ticketId);
+    const thread = await this.dependencies.repo.find(input.shop, input.ticketId);
     await this.notifyStaff({
       ticketId: input.ticketId,
       shopName: thread?.ticket.shopName ?? input.shopName,
@@ -141,15 +124,15 @@ export class SupportService {
     staffName: string;
     body: string;
   }): Promise<Result<null, "not_found">> {
-    const replied = await this.repo.replyAsStaff({
+    const replied = await this.dependencies.repo.replyAsStaff({
       ticketId: input.ticketId,
       authorName: input.staffName,
       body: input.body,
-      at: this.clock.now(),
+      at: this.dependencies.clock.now(),
     });
     if (!replied) return err("not_found");
 
-    const thread = await this.repo.findForStaff(input.ticketId);
+    const thread = await this.dependencies.repo.findForStaff(input.ticketId);
     if (thread) await this.notifyMerchant(thread, input.staffName, input.body);
 
     return ok(null);
@@ -167,13 +150,13 @@ export class SupportService {
     body: string;
     isNew: boolean;
   }): Promise<void> {
-    const recipients = await this.admins.supportNotifyRecipients();
+    const recipients = await this.dependencies.admins.supportNotifyRecipients();
     if (recipients.length === 0) return;
 
-    const urls = threadUrls(getEnv().SHOPIFY_APP_URL, input.ticketId);
+    const urls = threadUrls(this.dependencies.appUrl, input.ticketId);
 
     for (const recipient of recipients) {
-      await this.notifier.send({
+      await this.dependencies.notifier.send({
         event: "support_merchant_activity",
         to: { email: recipient.email },
         payload: {
@@ -207,7 +190,7 @@ export class SupportService {
     const { ticket } = thread;
     if (!ticket.merchantEmail) return;
 
-    await this.notifier.send({
+    await this.dependencies.notifier.send({
       event: "support_staff_reply",
       to: { email: ticket.merchantEmail },
       cc: { email: ticket.ccEmails },
@@ -220,30 +203,30 @@ export class SupportService {
         staffName,
         subject: ticket.subject,
         excerpt: excerpt(body),
-        threadUrl: threadUrls(getEnv().SHOPIFY_APP_URL, ticket.id).merchant,
+        threadUrl: threadUrls(this.dependencies.appUrl, ticket.id).merchant,
       },
     });
   }
 
   /** Everything below is a thin pass-through; the repo owns the scoping. */
   listForShop(shop: string): Promise<SupportTicket[]> {
-    return this.repo.listForShop(shop);
+    return this.dependencies.repo.listForShop(shop);
   }
 
   find(shop: string, ticketId: string): Promise<SupportThread | undefined> {
-    return this.repo.find(shop, ticketId);
+    return this.dependencies.repo.find(shop, ticketId);
   }
 
   findForStaff(ticketId: string): Promise<SupportThread | undefined> {
-    return this.repo.findForStaff(ticketId);
+    return this.dependencies.repo.findForStaff(ticketId);
   }
 
   listOpenForStaff(): Promise<SupportTicket[]> {
-    return this.repo.listOpenForStaff();
+    return this.dependencies.repo.listOpenForStaff();
   }
 
   closeAsStaff(ticketId: string): Promise<boolean> {
-    return this.repo.closeAsStaff(ticketId, this.clock.now());
+    return this.dependencies.repo.closeAsStaff(ticketId, this.dependencies.clock.now());
   }
 
   setCcEmails(
@@ -251,15 +234,15 @@ export class SupportService {
     ticketId: string,
     ccEmails: readonly string[],
   ): Promise<boolean> {
-    return this.repo.setCcEmails(shop, ticketId, ccEmails);
+    return this.dependencies.repo.setCcEmails(shop, ticketId, ccEmails);
   }
 
   markMerchantRead(shop: string, ticketId: string): Promise<void> {
-    return this.repo.markRead(shop, ticketId, "merchant", this.clock.now());
+    return this.dependencies.repo.markRead(shop, ticketId, "merchant", this.dependencies.clock.now());
   }
 
   markStaffRead(ticketId: string): Promise<void> {
-    return this.repo.markReadAsStaff(ticketId, this.clock.now());
+    return this.dependencies.repo.markReadAsStaff(ticketId, this.dependencies.clock.now());
   }
 
   /**
@@ -272,11 +255,10 @@ export class SupportService {
    * (see app/support/file-token.ts).
    */
   async attachmentUrl(attachmentId: string): Promise<string> {
-    const token = await signAttachmentToken({
-      secret: getEnv().SHOPIFY_API_SECRET,
+    const token = await this.dependencies.signAttachment(
       attachmentId,
-      expiresAt: this.clock.now() + ATTACHMENT_TOKEN_TTL_MS,
-    });
+      this.dependencies.clock.now() + ATTACHMENT_TOKEN_TTL_MS,
+    );
     return `/support/file/${attachmentId}?token=${token}`;
   }
 }

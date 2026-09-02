@@ -1,9 +1,7 @@
 import { err, ok, type Result } from "~/lib/result";
-import { AiRepo } from "~/models/ai.server";
 import { z } from "zod";
 import type { AiObjectTask, AiTask } from "~/ai/task";
-import type { AiCaller, AiGate } from "~/ai/gate";
-import { aiGate, aiGenerator } from "~/wiring.server";
+import { allowAll, type AiCaller, type AiGate } from "~/ai/gate";
 import type { ModelRole } from "~/ai/roles";
 import {
   AiError,
@@ -13,6 +11,7 @@ import {
   type GeneratedStream,
   type TextGenerator,
 } from "~/ports/ai";
+import type { AiRepository } from "~/ports/ai-repository";
 
 /**
  * RUN AN AI TASK. One method for every feature, and two for streaming.
@@ -41,7 +40,12 @@ interface Clock {
   now(): number;
 }
 
-const systemClock: Clock = { now: () => Date.now() };
+export interface AiServiceDependencies {
+  readonly repo: AiRepository;
+  readonly generator: TextGenerator;
+  readonly clock: Clock;
+  readonly gate: AiGate;
+}
 
 /** A stream, plus the promise that settles the ledger once it drains. */
 export interface AiStream {
@@ -51,22 +55,17 @@ export interface AiStream {
 }
 
 export class AiService {
-  constructor(
-    private readonly repo = new AiRepo(),
-    private readonly generator?: TextGenerator,
-    private readonly clock: Clock = systemClock,
-    /**
-     * Who may use AI. Bound in the composition root, never named here — this
-     * file knows nothing about providers or plans (@rules/architecture.md).
-     */
-    private readonly gate: AiGate = aiGate(),
-  ) {}
-
-  private get ai(): TextGenerator {
-    // Resolved lazily so a caller that only ever hits the gate or an empty chain
-    // never builds a provider it does not use.
-    return this.generator ?? aiGenerator();
+  constructor(repo: AiRepository, generator: TextGenerator, clock: Clock, gate: AiGate = allowAll) {
+    this.repo = repo;
+    this.generator = generator;
+    this.clock = clock;
+    this.gate = gate;
   }
+
+  private readonly repo: AiRepository;
+  private readonly generator: TextGenerator;
+  private readonly clock: Clock;
+  private readonly gate: AiGate;
 
   /** Run a task to completion. */
   async run<Input>(
@@ -90,7 +89,7 @@ export class AiService {
       const startedAt = this.clock.now();
 
       try {
-        const result = await this.ai.generate({
+        const result = await this.generator.generate({
           model,
           messages,
           ...(task.maxTokens === undefined ? {} : { maxTokens: task.maxTokens }),
@@ -150,7 +149,7 @@ export class AiService {
       const startedAt = this.clock.now();
 
       try {
-        const result = await this.ai.generateObject({
+        const result = await this.generator.generateObject({
           model,
           messages,
           schema,
@@ -205,7 +204,7 @@ export class AiService {
 
     for (const candidate of chain) {
       try {
-        opened = await this.ai.stream({
+        opened = await this.generator.stream({
           model: candidate,
           messages,
           ...(task.maxTokens === undefined ? {} : { maxTokens: task.maxTokens }),

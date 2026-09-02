@@ -7,6 +7,16 @@ import { ShopSubscriptionRepo } from "~/models/shop-subscriptions.server";
 import { ShopRepo } from "~/models/shops.server";
 import { AdminUserRepo } from "~/models/admin-users.server";
 import { PasswordResetTokenRepo } from "~/models/password-reset-tokens.server";
+import { AiRepo } from "~/models/ai.server";
+import { SupportRepo } from "~/models/support.server";
+import { WebhookDeliveryRepo } from "~/models/webhook-deliveries.server";
+import { getEnv } from "~/request-context.server";
+import { notify } from "~/notifications/notify.server";
+import { signAttachmentToken } from "~/support/file-token";
+import { AiService } from "~/services/ai.server";
+import { SupportService } from "~/services/support.server";
+import { reconcileHistory } from "~/services/reconcile-shopify-history";
+import { ShopSyncCheckpointRepo } from "~/models/shop-sync-checkpoints.server";
 import { refreshSubscription } from "~/services/reconcile-subscription";
 import type { AdminUserPort } from "~/ports/admin-users";
 import type { PasswordResetTokenPort } from "~/ports/password-reset-tokens";
@@ -70,6 +80,43 @@ export function historyLedger() {
 /** The text generator every AI use case runs on. */
 export function aiGenerator(): TextGenerator {
   return new WorkersAiGenerator({ languageModel: workersAiModelFactory() });
+}
+
+export function aiService(): AiService {
+  return new AiService(new AiRepo(), aiGenerator(), { now: () => Date.now() }, aiGate());
+}
+
+export function supportService(): SupportService {
+  const env = getEnv();
+  return new SupportService({
+    repo: new SupportRepo(),
+    admins: new AdminUserRepo(),
+    clock: { now: () => Date.now() },
+    notifier: { send: async (input) => { await notify(input); } },
+    appUrl: env.SHOPIFY_APP_URL,
+    withinRateLimit: async (shop) => env.SUPPORT_LIMITER ? (await env.SUPPORT_LIMITER.limit({ key: shop })).success : true,
+    signAttachment: async (attachmentId, expiresAt) => signAttachmentToken({ secret: env.SHOPIFY_API_SECRET, attachmentId, expiresAt }),
+  });
+}
+
+export function webhookDeliveries() {
+  return new WebhookDeliveryRepo();
+}
+
+export function scheduledDependencies() {
+  const env = getEnv();
+  return {
+    tokens: new PasswordResetTokenRepo(),
+    history: {
+      reconcile: (now: number) => reconcileHistory({
+        partner: new ShopifyPartnerAdapter({ token: env.SHOPIFY_PARTNER_API_TOKEN || "", fetch }),
+        checkpoint: new ShopSyncCheckpointRepo(),
+        ledger: historyLedger(),
+        clock: { now: () => now },
+        appId: env.SHOPIFY_PARTNER_APP_ID || null,
+      }, now),
+    },
+  };
 }
 
 /**

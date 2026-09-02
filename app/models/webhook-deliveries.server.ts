@@ -1,21 +1,12 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import {
-  type NewWebhookDelivery,
   type WebhookDelivery,
   webhookDeliveries,
 } from "~/db/schema";
 import { getDb } from "~/request-context.server";
+import type { WebhookDeliveryInput } from "~/ports/webhook-deliveries";
 
-export type WebhookDeliveryInput = Omit<
-  NewWebhookDelivery,
-  | "status"
-  | "attempts"
-  | "processingStartedAt"
-  | "processedAt"
-  | "failedAt"
-  | "failureCode"
-  | "failureDetail"
->;
+export type { WebhookDeliveryInput } from "~/ports/webhook-deliveries";
 
 /**
  * The sole D1 adapter for the webhook delivery inbox. A delivery ID is a
