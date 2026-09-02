@@ -49,13 +49,14 @@ export async function consumeWebhook(
 
   const handler = dependencies.handlers[delivery.topic];
   if (!handler) {
+    const detail = `No consumer is registered for ${delivery.topic}.`;
     await dependencies.deliveries.markFailed(work.shop, work.id, {
       failedAt: dependencies.now(),
       failureCode: "unsupported_topic",
-      failureDetail: `No consumer is registered for ${delivery.topic}.`,
+      failureDetail: detail,
     });
     if ((work.attempts ?? 0) >= 8) {
-      await dependencies.deliveries.markDeadLetter?.(work.shop, work.id, dependencies.now(), `No consumer is registered for ${delivery.topic}.`);
+      await dependencies.deliveries.markDeadLetter?.(work.shop, work.id, dependencies.now(), detail);
     }
     throw new Error(`Unsupported webhook topic: ${delivery.topic}`);
   }

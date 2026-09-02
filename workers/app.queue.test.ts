@@ -85,4 +85,27 @@ describe("handleWebhookQueueBatch", () => {
       expect(events).toEqual(["retry"]);
     });
   });
+
+  it("persists unsupported topic as dead letter on attempt eight and retries queue message", async () => {
+    await runWithRequestContext(env, async () => {
+      const shop = "worker-unsupported-topic.myshopify.com";
+      const id = "worker-unsupported-topic-delivery";
+      await env.DB.prepare("INSERT INTO webhook_deliveries (id,event_id,topic,api_version,shop,triggered_at,received_at,payload_hash,status) VALUES (?,?,?,?,?,?,?,?,?)")
+        .bind(id, "event", "orders/created", "2025-01", shop, 1, 1, "hash", "queued").run();
+      const events: string[] = [];
+      await handleWebhookQueueBatch({ messages: [{
+        body: { shop, id }, attempts: 8,
+        ack: () => { events.push("ack"); }, retry: () => { events.push("retry"); },
+      }] }, {
+        consume: (work) => consumeWebhook({
+          deliveries: new WebhookDeliveryRepo(), now: () => 100,
+          handlers: { "app/uninstalled": async () => {} },
+        }, work),
+        log: () => {},
+      });
+      const row = await env.DB.prepare("SELECT status, failure_code FROM webhook_deliveries WHERE id = ?").bind(id).first<{ status: string; failure_code: string }>();
+      expect(row).toEqual({ status: "dead_letter", failure_code: "dead_letter" });
+      expect(events).toEqual(["retry"]);
+    });
+  });
 });
