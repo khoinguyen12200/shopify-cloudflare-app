@@ -1,4 +1,4 @@
-import { and, desc, eq, or, sql } from "drizzle-orm";
+import { and, desc, eq, ne, or, sql } from "drizzle-orm";
 import type { RelationshipEventType } from "~/domain/shop-lifecycle";
 import {
   shopifyEvents,
@@ -151,6 +151,10 @@ export class ShopifyEventRepo {
   async recordPartnerSubscription(event: PartnerSubscriptionEvent): Promise<"inserted" | "duplicate"> {
     const db = getDb();
     const status = event.status;
+    const retireAlternateProjection = event.subscriptionId.startsWith("active:") ? [
+      db.delete(shopSubscriptionItems).where(and(eq(shopSubscriptionItems.shop, event.shop), ne(shopSubscriptionItems.subscriptionId, event.subscriptionId))),
+      db.delete(shopSubscriptions).where(and(eq(shopSubscriptions.shop, event.shop), ne(shopSubscriptions.subscriptionId, event.subscriptionId))),
+    ] : [];
     const itemStatements = event.items ? [
       db.delete(shopSubscriptionItems).where(and(
         eq(shopSubscriptionItems.shop, event.shop),
@@ -164,6 +168,7 @@ export class ShopifyEventRepo {
       db.insert(shopifySubscriptionEvents).values({ eventSource: "partner_history", eventId: event.id, subscriptionId: event.subscriptionId, status, planHandle: event.planHandle ?? null, billingInterval: event.billingInterval ?? null, trialEndsAt: event.trialEndsAt ?? null, currentPeriodEndsAt: event.currentPeriodEndsAt ?? null, cancellationEffectiveAt: event.cancellationEffectiveAt ?? null, priceAmount: event.price?.amount ?? null, priceCurrency: event.price?.currency ?? null }).onConflictDoNothing(),
       db.insert(shopSubscriptions).values({ shop: event.shop, subscriptionId: event.subscriptionId, status, planHandle: event.planHandle ?? null, billingInterval: event.billingInterval ?? null, trialEndsAt: event.trialEndsAt ?? null, currentPeriodEndsAt: event.currentPeriodEndsAt ?? null, cancellationEffectiveAt: event.cancellationEffectiveAt ?? null, appliedOccurredAt: event.occurredAt, appliedExternalId: event.id }).onConflictDoUpdate({ target: [shopSubscriptions.shop, shopSubscriptions.subscriptionId], set: { status, planHandle: event.planHandle ?? sql`${shopSubscriptions.planHandle}`, billingInterval: event.billingInterval ?? sql`${shopSubscriptions.billingInterval}`, trialEndsAt: event.trialEndsAt ?? sql`${shopSubscriptions.trialEndsAt}`, currentPeriodEndsAt: event.currentPeriodEndsAt ?? sql`${shopSubscriptions.currentPeriodEndsAt}`, cancellationEffectiveAt: event.cancellationEffectiveAt ?? sql`${shopSubscriptions.cancellationEffectiveAt}`, appliedOccurredAt: event.occurredAt, appliedExternalId: event.id }, where: or(sql`${shopSubscriptions.appliedOccurredAt} < ${event.occurredAt}`, and(eq(shopSubscriptions.appliedOccurredAt, event.occurredAt), sql`${shopSubscriptions.appliedExternalId} < ${event.id}`)) }),
       ...itemStatements,
+      ...retireAlternateProjection,
     ]);
     return inserted.length === 1 ? "inserted" : "duplicate";
   }

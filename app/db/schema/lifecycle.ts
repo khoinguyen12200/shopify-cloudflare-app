@@ -141,7 +141,7 @@ export const shopifySubscriptionEvents = sqliteTable(
 
 export type ShopifySubscriptionEvent = typeof shopifySubscriptionEvents.$inferSelect;
 
-/** The current Managed Pricing state, keyed by the subscription Shopify identifies. */
+/** The current Managed Pricing state, keyed by the app/shop relationship. */
 export const shopSubscriptions = sqliteTable(
   "shop_subscriptions",
   {

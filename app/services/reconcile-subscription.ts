@@ -54,7 +54,9 @@ export async function refreshSubscription(deps: {
   if (!deps.appId || !shop.shopifyShopId) return { status: "failed", code: "MISSING_CREDENTIALS", detail: "Partner app ID, token, or Shopify shop ID unavailable" };
   try {
     const response = await deps.partner.activeSubscription(deps.appId, shop.shopifyShopId);
-    const subscriptionId = response?.legacySubscriptionId ?? `active:${shop.shopifyShopId}`;
+    // Partner history has no subscription ID, so both reconciliation paths use
+    // the singular app/shop Active Subscription as projection identity.
+    const subscriptionId = `active:${shop.shopifyShopId}`;
     const firstItem = response?.items[0] ?? null;
     const pendingItem = response?.pendingUpdate?.items[0] ?? null;
     const trialEndsAt = response?.trialEndsAt ? Date.parse(response.trialEndsAt) : null;
@@ -65,7 +67,7 @@ export async function refreshSubscription(deps: {
       subscriptionId,
       status: response === null ? "NONE" : response.cancelAtEndOfCycle ? "CANCELLATION_SCHEDULED" : "ACTIVE",
       occurredAt: now,
-      externalId: subscriptionId,
+      externalId: response?.legacySubscriptionId ?? subscriptionId,
       planHandle: firstItem?.handle ?? null,
       billingInterval: response?.billingPeriod ?? null,
       trialEndsAt: Number.isFinite(trialEndsAt) ? trialEndsAt : null,

@@ -16,7 +16,7 @@ describe("refreshSubscription", () => {
     const subscriptions: SubscriptionProjectionPort = { upsertSubscriptionProjection: async (_shop, value) => { observation = value; return "applied"; } };
     await expect(refreshSubscription({ partner, subscriptions, clock: { now: () => 100 }, appId: "app" }, { shop: "one.myshopify.com", shopifyShopId: "gid://shopify/Shop/1" }, 100)).resolves.toMatchObject({ status: "refreshed" });
     expect(calls).toBe(1);
-    expect(observation).toMatchObject({ type: "ACTIVE_SUBSCRIPTION", subscriptionId: "sub-1", status: "ACTIVE", planHandle: "pro", occurredAt: 100 });
+    expect(observation).toMatchObject({ type: "ACTIVE_SUBSCRIPTION", subscriptionId: "active:gid://shopify/Shop/1", status: "ACTIVE", planHandle: "pro", occurredAt: 100 });
   });
 
   it("projects null response as NONE, but missing credentials as failure", async () => {
@@ -28,7 +28,7 @@ describe("refreshSubscription", () => {
     await expect(refreshSubscription({ partner, subscriptions, clock: { now: () => 100 }, appId: null }, { shop: "one.myshopify.com", shopifyShopId: "gid://shopify/Shop/1" }, 100)).resolves.toMatchObject({ status: "failed" });
   });
 
-  it("uses Shopify legacy subscription ID instead of a synthetic shared ID", async () => {
+  it("keeps legacy subscription ID as observation identity on the shop-scoped projection", async () => {
     let observation: unknown;
     const subscriptions: SubscriptionProjectionPort = { upsertSubscriptionProjection: async (_shop, value) => { observation = value; return "applied"; } };
     const partner: ShopifyPartnerPort = {
@@ -36,7 +36,7 @@ describe("refreshSubscription", () => {
       activeSubscription: async () => ({ shop: null, billingPeriod: "EVERY_30_DAYS", cancelAtEndOfCycle: false, trialEndsAt: null, currentBillingCycle: null, legacySubscriptionId: "gid://shopify/AppSubscription/7", items: [], pendingUpdate: null }),
     };
     await refreshSubscription({ partner, subscriptions, clock: { now: () => 100 }, appId: "app" }, { shop: "one.myshopify.com", shopifyShopId: "gid://shopify/Shop/1" }, 100);
-    expect(observation).toMatchObject({ subscriptionId: "gid://shopify/AppSubscription/7", externalId: "gid://shopify/AppSubscription/7" });
+    expect(observation).toMatchObject({ subscriptionId: "active:gid://shopify/Shop/1", externalId: "gid://shopify/AppSubscription/7" });
   });
 
   it("uses shop identity for native managed pricing subscriptions", async () => {
