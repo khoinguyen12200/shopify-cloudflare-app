@@ -56,6 +56,11 @@ Required source-of-truth rules:
 - Scope projection with granted/revoked history.
 - Scope replay protection.
 - Uninstall deletes stored Shopify sessions.
+- Structured webhook logs record delivery ID, topic, hashed shop, handler,
+  outcome, attempts, and latency without payload or token data.
+- Redacted-shop queue messages acknowledge without projection writes.
+- Worker-level Queue/DLQ behavior has malformed, missing, retry, redaction, and
+  final-attempt dead-letter coverage.
 - Compliance endpoint covers `customers/data_request`, `customers/redact`, and
   `shop/redact`.
 
@@ -64,6 +69,8 @@ Required source-of-truth rules:
 - Tenant purge orchestration deletes R2 objects before D1 rows, then KV sessions.
 - D1 purge repository covers current shop-scoped tables.
 - Two-tenant isolation tests.
+- Purge inventory checks fail if future D1 schema tables add a `shop` column
+  without coverage; D1/KV/R2 boundary tests retain another tenant's data.
 - Explicit `implemented: true` and `noCustomerData: true` outcomes for customer
   compliance topics while app stores no customer records.
 - Shop-redaction path uses dependency ports instead of service-level model access.
@@ -87,31 +94,19 @@ Required source-of-truth rules:
   legal/support/pricing copy.
 - Legal template and required secret/deploy documentation exist.
 
+### Partner API normalization
+
+- Active Subscription query validated against Partner API `2026-07` schema.
+- Normalized recurring pricing, discounts, usage cost, pending updates,
+  trial/current-cycle fields, and legacy subscription IDs exposed through typed
+  adapter results.
+
 ## Not Done
-
-### Partner API contract
-
-- Complete typed `ActiveSubscription` normalization is still missing for pricing
-  items, discounts, usage, pending updates, trial/current cycle fields, and legacy
-  subscription IDs.
-- Required Shopify Partner documentation search and schema validation evidence is
-  incomplete.
-
-### Webhook hardening
-
-- Structured webhook logs still need complete delivery ID, topic, hashed shop,
-  handler, outcome, attempts, and latency fields without payload/token data.
-- Redacted-shop queued work needs an explicit production guard and integration test
-  proving zero projection writes.
-- Queue/DLQ behavior needs a dedicated worker-level test, not only consumer tests.
 
 ### Tenant purge
 
-- Inventory coverage needs a stronger automated guard that fails when a future
-  table adds a `shop` column without purge coverage.
 - Full two-tenant fixture still needs rows for every supported table family,
   including checkpoints and all notification variants.
-- KV/R2 purge integration should verify other-tenant data remains after every step.
 
 ### Internal operations UI
 
@@ -141,7 +136,7 @@ Required source-of-truth rules:
 Latest verified commands:
 
 ```text
-npm run verify                 typecheck + lint + 824 Vitest tests passed
+npm run verify                 typecheck + lint + 832 Vitest tests passed
 npm run db:migrate:local       no migrations pending
 npm run test:agent-setup       6/6 passed
 npm run install:skill -- --wait --locked
@@ -150,7 +145,7 @@ npm run build                  passed
 git diff --check               passed
 ```
 
-Latest pushed commit: `e684aad`
+Latest local commits: `4ad0f2c`, `6c99ab2`, `99fb0a3`, `47ac8f0`
 
 Local `HEAD` matches `origin/main`; working tree clean at time of writing.
 
@@ -164,4 +159,3 @@ These are not fabricated in base template. Replace them in each derived app:
 - Managed Pricing plan handles and customer-facing plan names.
 - Legal entity, privacy contact, address, effective date, and public copy.
 - Production callback URLs and any feature-required access scopes.
-
