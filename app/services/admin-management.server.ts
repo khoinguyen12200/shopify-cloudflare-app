@@ -1,7 +1,7 @@
 import { hashPassword, verifyPassword } from "~/lib/password";
 import { validatePasswordStrength } from "~/lib/password-policy";
 import { normalizeEmail, type AdminUserPort } from "~/ports/admin-users";
-import type { AdminRole, SafeAdminUser } from "~/db/schema";
+import type { AdminRole, SafeAdminUser } from "~/ports/admin-users";
 
 /**
  * Staff management use cases. Pure decisions plus repo calls — every guard that

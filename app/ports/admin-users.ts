@@ -1,4 +1,18 @@
-import type { AdminRole, AdminStatus, AdminUser, SafeAdminUser } from "~/db/schema";
+export type AdminRole = "owner" | "admin";
+export type AdminStatus = "active" | "disabled";
+export interface AdminUser {
+  readonly id: string;
+  readonly email: string;
+  readonly name: string;
+  readonly passwordHash: string;
+  readonly role: AdminRole;
+  readonly status: AdminStatus;
+  readonly notifySupport: boolean;
+  readonly createdAt: number;
+  readonly updatedAt: number;
+  readonly lastLoginAt: number | null;
+}
+export type SafeAdminUser = Omit<AdminUser, "passwordHash">;
 
 export interface AdminUserPort {
   findByEmailWithHash(email: string): Promise<AdminUser | undefined>;

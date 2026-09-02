@@ -7,7 +7,7 @@ import {
   needsRehash,
   verifyPassword,
 } from "~/lib/password";
-import type { AdminRole, SafeAdminUser } from "~/db/schema";
+import type { AdminRole, SafeAdminUser } from "~/ports/admin-users";
 
 export const LOGIN_PATH = "/internal/login";
 export const HOME_PATH = "/internal/dashboard";
