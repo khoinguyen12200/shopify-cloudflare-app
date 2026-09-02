@@ -15,6 +15,7 @@ import {
 } from "ngk-dashboard";
 import { Store } from "lucide-react";
 import { requireAdminUser } from "~/services/admin-auth.server";
+import { adminUsers } from "~/wiring.server";
 import { ShopRepo } from "~/models/shops.server";
 import { ShopSubscriptionRepo } from "~/models/shop-subscriptions.server";
 import { planForShopifyHandle } from "~/billing/plans";
@@ -27,7 +28,7 @@ const LOCALE: Locale = "en";
 const PAID_STATUSES = new Set(["ACTIVE", "ACCEPTED"]);
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await requireAdminUser(request);
+  await requireAdminUser(request, { users: adminUsers() });
   const [shops, currentSubscriptions] = await Promise.all([
     new ShopRepo().listAll(),
     new ShopSubscriptionRepo().listCurrent(),

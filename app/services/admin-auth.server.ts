@@ -1,7 +1,6 @@
 import { createCookieSessionStorage, redirect } from "react-router";
 import { getEnv } from "~/request-context.server";
 import { normalizeEmail, type AdminUserPort } from "~/ports/admin-users";
-import { adminUsers } from "~/wiring.server";
 import {
   DEFAULT_ITERATIONS,
   hashPassword,
@@ -70,13 +69,14 @@ export async function destroyAdminSession(request: Request) {
 /** The signed-in staff user, or undefined. Never throws. */
 export async function getAdminUser(
   request: Request,
+  deps: { users: Pick<AdminUserPort, "findById"> },
 ): Promise<SafeAdminUser | undefined> {
   const storage = sessionStorage();
   const session = await storage.getSession(request.headers.get("Cookie"));
   const id = session.get(USER_ID_KEY);
   if (typeof id !== "string") return undefined;
 
-  const user = await adminUsers().findById(id);
+  const user = await deps.users.findById(id);
   // A disabled account must lose access immediately, not at cookie expiry.
   if (!user || user.status !== "active") return undefined;
   return user;
@@ -89,8 +89,9 @@ export async function getAdminUser(
  */
 export async function requireAdminUser(
   request: Request,
+  deps: { users: Pick<AdminUserPort, "findById"> },
 ): Promise<SafeAdminUser> {
-  const user = await getAdminUser(request);
+  const user = await getAdminUser(request, deps);
   if (!user) {
     const url = new URL(request.url);
     const next = `${url.pathname}${url.search}`;
@@ -109,8 +110,8 @@ async function staleCookie(): Promise<string> {
 }
 
 /** Staff management requires the `owner` role. */
-export async function requireOwner(request: Request): Promise<SafeAdminUser> {
-  const user = await requireAdminUser(request);
+export async function requireOwner(request: Request, deps: { users: Pick<AdminUserPort, "findById"> }): Promise<SafeAdminUser> {
+  const user = await requireAdminUser(request, deps);
   if (user.role !== "owner") {
     // 403, not a redirect: they ARE signed in, they simply may not do this.
     throw new Response("Forbidden", { status: 403 });
@@ -132,7 +133,7 @@ export type LoginResult =
 export async function verifyAdminCredentials(
   email: string,
   password: string,
-  deps: { users: Pick<AdminUserPort, "findByEmailWithHash" | "recordLogin" | "updatePassword"> } = { users: adminUsers() },
+  deps: { users: Pick<AdminUserPort, "findByEmailWithHash" | "recordLogin" | "updatePassword"> },
 ): Promise<LoginResult> {
   const repo = deps.users;
   const user = await repo.findByEmailWithHash(normalizeEmail(email));

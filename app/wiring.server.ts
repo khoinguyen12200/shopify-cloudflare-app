@@ -23,7 +23,6 @@ export function passwordResetTokens(): PasswordResetTokenPort {
     markUsed: (hash, now) => repo.markUsed(hash, now),
     invalidateAllForUser: (id, now) => repo.invalidateAllForUser(id, now),
     countActiveForUser: (id, now) => repo.countActiveForUser(id, now),
-    cleanup: (cutoff) => repo.deleteExpiredBefore(cutoff),
   };
 }
 

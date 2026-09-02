@@ -21,12 +21,13 @@ setupTestDatabase();
 
 const inRequest = <T>(fn: () => Promise<T>) => runWithRequestContext(env, fn);
 const PASSWORD = "a-long-enough-password";
+const authDeps = { users: new AdminUserRepo() };
 
 async function seed(
   email: string,
   role: "owner" | "admin" = "owner",
 ) {
-  const created = await createAdmin({ name: "Test", email, password: PASSWORD, role });
+  const created = await createAdmin({ name: "Test", email, password: PASSWORD, role }, authDeps);
   if (!created.ok) throw new Error(`fixture: ${created.reason}`);
   return created.value;
 }
@@ -113,7 +114,7 @@ describe("verifyAdminCredentials", () => {
   it("accepts the right password", async () => {
     const result = await inRequest(async () => {
       await seed("ok@example.org");
-      return verifyAdminCredentials("ok@example.org", PASSWORD);
+      return verifyAdminCredentials("ok@example.org", PASSWORD, authDeps);
     });
     expect(result.ok).toBe(true);
   });
@@ -121,7 +122,7 @@ describe("verifyAdminCredentials", () => {
   it("matches the email case-insensitively", async () => {
     const result = await inRequest(async () => {
       await seed("case@example.org");
-      return verifyAdminCredentials("CASE@Example.ORG", PASSWORD);
+      return verifyAdminCredentials("CASE@Example.ORG", PASSWORD, authDeps);
     });
     expect(result.ok).toBe(true);
   });
@@ -129,7 +130,7 @@ describe("verifyAdminCredentials", () => {
   it("rejects the wrong password", async () => {
     const result = await inRequest(async () => {
       await seed("wrong@example.org");
-      return verifyAdminCredentials("wrong@example.org", "not-the-password");
+      return verifyAdminCredentials("wrong@example.org", "not-the-password", authDeps);
     });
     expect(result).toMatchObject({ ok: false, reason: "invalidCredentials" });
   });
@@ -140,8 +141,8 @@ describe("verifyAdminCredentials", () => {
     const [unknown, wrong] = await inRequest(async () => {
       await seed("real@example.org");
       return [
-        await verifyAdminCredentials("nobody@example.org", PASSWORD),
-        await verifyAdminCredentials("real@example.org", "nope"),
+        await verifyAdminCredentials("nobody@example.org", PASSWORD, authDeps),
+        await verifyAdminCredentials("real@example.org", "nope", authDeps),
       ];
     });
     expect(unknown).toEqual(wrong);
@@ -153,8 +154,8 @@ describe("verifyAdminCredentials", () => {
       const user = await seed("off@example.org");
       await new AdminUserRepo().setStatus(user.id, "disabled", Date.now());
       return [
-        await verifyAdminCredentials("off@example.org", "not-the-password"),
-        await verifyAdminCredentials("off@example.org", PASSWORD),
+        await verifyAdminCredentials("off@example.org", "not-the-password", authDeps),
+        await verifyAdminCredentials("off@example.org", PASSWORD, authDeps),
       ];
     });
     expect(wrongPassword).toMatchObject({ reason: "invalidCredentials" });
@@ -164,7 +165,7 @@ describe("verifyAdminCredentials", () => {
   it("records the sign-in time on success", async () => {
     const after = await inRequest(async () => {
       const user = await seed("stamp@example.org");
-      await verifyAdminCredentials("stamp@example.org", PASSWORD);
+      await verifyAdminCredentials("stamp@example.org", PASSWORD, authDeps);
       return new AdminUserRepo().findById(user.id);
     });
     expect(after?.lastLoginAt).toBeTypeOf("number");
@@ -173,7 +174,7 @@ describe("verifyAdminCredentials", () => {
   it("never returns the password hash", async () => {
     const result = await inRequest(async () => {
       await seed("safe@example.org");
-      return verifyAdminCredentials("safe@example.org", PASSWORD);
+      return verifyAdminCredentials("safe@example.org", PASSWORD, authDeps);
     });
     expect(result.ok && "passwordHash" in result.user).toBe(false);
   });
@@ -184,7 +185,7 @@ describe("sessions round-trip", () => {
     const user = await inRequest(async () => {
       const admin = await seed("session@example.org");
       const response = await createAdminSession(admin.id, HOME_PATH);
-      return getAdminUser(request("/internal/dashboard", cookieFrom(response)));
+      return getAdminUser(request("/internal/dashboard", cookieFrom(response)), authDeps);
     });
     expect(user?.email).toBe("session@example.org");
   });
@@ -220,6 +221,7 @@ describe("sessions round-trip", () => {
         location: destroyed.headers.get("Location"),
         user: await getAdminUser(
           request("/internal/dashboard", cookieFrom(destroyed)),
+          authDeps,
         ),
       };
     });
@@ -228,14 +230,14 @@ describe("sessions round-trip", () => {
   });
 
   it("returns undefined with no cookie at all", async () => {
-    const user = await inRequest(() => getAdminUser(request()));
+    const user = await inRequest(() => getAdminUser(request(), authDeps));
     expect(user).toBeUndefined();
   });
 
   it("returns undefined for a forged cookie", async () => {
     // The cookie is signed, so an invented value must not authenticate.
     const user = await inRequest(() =>
-      getAdminUser(request("/internal/dashboard", "__internal_session=forged")),
+      getAdminUser(request("/internal/dashboard", "__internal_session=forged"), authDeps),
     );
     expect(user).toBeUndefined();
   });
@@ -247,7 +249,7 @@ describe("sessions round-trip", () => {
       const admin = await seed("revoke@example.org");
       const cookie = cookieFrom(await createAdminSession(admin.id, HOME_PATH));
       await new AdminUserRepo().setStatus(admin.id, "disabled", Date.now());
-      return getAdminUser(request("/internal/dashboard", cookie));
+      return getAdminUser(request("/internal/dashboard", cookie), authDeps);
     });
     expect(user).toBeUndefined();
   });
@@ -257,7 +259,7 @@ describe("sessions round-trip", () => {
       const admin = await seed("deleted@example.org");
       const cookie = cookieFrom(await createAdminSession(admin.id, HOME_PATH));
       await new AdminUserRepo().remove(admin.id);
-      return getAdminUser(request("/internal/dashboard", cookie));
+      return getAdminUser(request("/internal/dashboard", cookie), authDeps);
     });
     expect(user).toBeUndefined();
   });
@@ -268,7 +270,7 @@ describe("requireAdminUser", () => {
     const user = await inRequest(async () => {
       const admin = await seed("req@example.org");
       const cookie = cookieFrom(await createAdminSession(admin.id, HOME_PATH));
-      return requireAdminUser(request("/internal/dashboard", cookie));
+      return requireAdminUser(request("/internal/dashboard", cookie), authDeps);
     });
     expect(user.email).toBe("req@example.org");
   });
@@ -276,7 +278,7 @@ describe("requireAdminUser", () => {
   it("throws a redirect to login, carrying where you were going", async () => {
     const thrown = await inRequest(async () => {
       try {
-        await requireAdminUser(request("/internal/admins?page=2"));
+        await requireAdminUser(request("/internal/admins?page=2"), authDeps);
         return null;
       } catch (error) {
         return error;
@@ -295,6 +297,7 @@ describe("requireAdminUser", () => {
       try {
         await requireAdminUser(
           request("/internal/dashboard", "__internal_session=forged"),
+          authDeps,
         );
         return null;
       } catch (error) {
@@ -310,7 +313,7 @@ describe("requireOwner — the only thing gating staff management", () => {
     const user = await inRequest(async () => {
       const admin = await seed("owner@example.org", "owner");
       const cookie = cookieFrom(await createAdminSession(admin.id, HOME_PATH));
-      return requireOwner(request("/internal/admins", cookie));
+      return requireOwner(request("/internal/admins", cookie), authDeps);
     });
     expect(user.role).toBe("owner");
   });
@@ -324,12 +327,12 @@ describe("requireOwner — the only thing gating staff management", () => {
         email: "plain@example.org",
         password: PASSWORD,
         role: "admin",
-      });
+      }, authDeps);
       if (!admin.ok) throw new Error("fixture");
       void owner;
       const cookie = cookieFrom(await createAdminSession(admin.value.id, HOME_PATH));
       try {
-        await requireOwner(request("/internal/admins", cookie));
+        await requireOwner(request("/internal/admins", cookie), authDeps);
         return null;
       } catch (error) {
         return error as Response;
@@ -344,7 +347,7 @@ describe("requireOwner — the only thing gating staff management", () => {
   it("redirects rather than 403s when nobody is signed in", async () => {
     const thrown = await inRequest(async () => {
       try {
-        await requireOwner(request("/internal/admins"));
+        await requireOwner(request("/internal/admins"), authDeps);
         return null;
       } catch (error) {
         return error as Response;

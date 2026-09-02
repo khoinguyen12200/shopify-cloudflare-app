@@ -19,3 +19,12 @@
 - `npx vitest run app/services/password-reset.test.ts` — 19 passed.
 - `npm run typecheck` — passed.
 - `rg '^import .*~/models' app/services/admin-auth.server.ts app/services/admin-management.server.ts app/services/password-reset.server.ts` — no output.
+
+## Review follow-up
+
+- Removed service defaults and `~/wiring.server` imports; all route and integration callsites now pass adapters explicitly.
+- Added explicit `AdminUserPort`/`PasswordResetTokenPort` dependencies to session guards, admin intents, profile, login, and reset flows.
+- Removed unused `PasswordResetTokenPort.cleanup`; scheduled repository cleanup remains adapter-owned until its own port-injection task.
+- `npx vitest run app/services/admin-auth.test.ts app/services/admin-management.test.ts app/services/password-reset.test.ts` — 73 passed.
+- `npx vitest run app/notifications/notify.integration.test.ts app/services/support.test.ts` — 38 passed.
+- `npm run typecheck` — passed.

@@ -10,11 +10,13 @@ import {
 import { createAdmin } from "~/services/admin-management.server";
 import { requestPasswordReset } from "~/services/password-reset.server";
 import { notify } from "./notify.server";
+import { adminUsers, passwordResetTokens } from "~/wiring.server";
 
 setupTestDatabase();
 
 const inRequest = <T>(fn: () => Promise<T>) => runWithRequestContext(env, fn);
 const ORIGIN = "https://example.test";
+const resetDeps = { users: adminUsers(), tokens: passwordResetTokens() };
 
 /**
  * END TO END, through the real call site.
@@ -35,7 +37,7 @@ async function seedAdmin(email = "admin@example.org") {
     email,
     password: "a-long-enough-password",
     role: "owner",
-  });
+  }, resetDeps);
   if (!created.ok) throw new Error(`fixture: ${created.reason}`);
   return created.value;
 }
@@ -44,7 +46,7 @@ describe("the admin forgot-password flow reaches the notification system", () =>
   it("writes a notification_logs row for the reset", async () => {
     const rows = await inRequest(async () => {
       await seedAdmin();
-      await requestPasswordReset({ email: "admin@example.org", origin: ORIGIN });
+      await requestPasswordReset({ email: "admin@example.org", origin: ORIGIN }, resetDeps);
       return new NotificationLogRepo().recent();
     });
 
@@ -62,7 +64,7 @@ describe("the admin forgot-password flow reaches the notification system", () =>
     // was never requested — that is the failure this asserts against.
     const rows = await inRequest(async () => {
       await seedAdmin();
-      await requestPasswordReset({ email: "admin@example.org", origin: ORIGIN });
+      await requestPasswordReset({ email: "admin@example.org", origin: ORIGIN }, resetDeps);
       return new NotificationLogRepo().recent();
     });
 
@@ -77,7 +79,7 @@ describe("the admin forgot-password flow reaches the notification system", () =>
   it("settles the row immediately — nothing is left stuck at queued", async () => {
     const rows = await inRequest(async () => {
       await seedAdmin();
-      await requestPasswordReset({ email: "admin@example.org", origin: ORIGIN });
+      await requestPasswordReset({ email: "admin@example.org", origin: ORIGIN }, resetDeps);
       return new NotificationLogRepo().recent();
     });
     expect(rows[0]!.settledAt).not.toBeNull();
@@ -87,7 +89,7 @@ describe("the admin forgot-password flow reaches the notification system", () =>
     // The flow must stay silent about whether the address exists, and that
     // includes not leaving a trail that reveals it.
     const rows = await inRequest(async () => {
-      await requestPasswordReset({ email: "nobody@example.org", origin: ORIGIN });
+      await requestPasswordReset({ email: "nobody@example.org", origin: ORIGIN }, resetDeps);
       return new NotificationLogRepo().recent();
     });
     expect(rows).toHaveLength(0);
@@ -96,7 +98,7 @@ describe("the admin forgot-password flow reaches the notification system", () =>
   it("still returns the token, so the flow works without a mailer", async () => {
     const result = await inRequest(async () => {
       await seedAdmin();
-      return requestPasswordReset({ email: "admin@example.org", origin: ORIGIN });
+      return requestPasswordReset({ email: "admin@example.org", origin: ORIGIN }, resetDeps);
     });
     expect(result.token).toBeTruthy();
     expect(result.emailSent).toBe(false);

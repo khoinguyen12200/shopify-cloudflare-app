@@ -1,7 +1,6 @@
 import { hashPassword, verifyPassword } from "~/lib/password";
 import { validatePasswordStrength } from "~/lib/password-policy";
 import { normalizeEmail, type AdminUserPort } from "~/ports/admin-users";
-import { adminUsers } from "~/wiring.server";
 import type { AdminRole, SafeAdminUser } from "~/db/schema";
 
 /**
@@ -58,7 +57,7 @@ export async function createAdmin(input: {
   email: string;
   password: string;
   role: AdminRole;
-}, deps: { users: Pick<AdminUserPort, "findByEmailWithHash" | "create"> } = { users: adminUsers() }): Promise<Result<SafeAdminUser>> {
+}, deps: { users: Pick<AdminUserPort, "findByEmailWithHash" | "create"> }): Promise<Result<SafeAdminUser>> {
   const name = input.name.trim();
   const email = normalizeEmail(input.email);
 
@@ -100,7 +99,7 @@ export async function setAdminStatus(input: {
   actorId: string;
   targetId: string;
   status: "active" | "disabled";
-}, deps: { users: Pick<AdminUserPort, "findById" | "countOtherActiveOwners" | "setStatus"> } = { users: adminUsers() }): Promise<Result<SafeAdminUser>> {
+}, deps: { users: Pick<AdminUserPort, "findById" | "countOtherActiveOwners" | "setStatus"> }): Promise<Result<SafeAdminUser>> {
   if (input.actorId === input.targetId) return fail("notYourself");
 
   const repo = deps.users;
@@ -121,7 +120,7 @@ export async function setAdminRole(input: {
   actorId: string;
   targetId: string;
   role: AdminRole;
-}, deps: { users: Pick<AdminUserPort, "findById" | "countOtherActiveOwners" | "setRole"> } = { users: adminUsers() }): Promise<Result<SafeAdminUser>> {
+}, deps: { users: Pick<AdminUserPort, "findById" | "countOtherActiveOwners" | "setRole"> }): Promise<Result<SafeAdminUser>> {
   if (input.actorId === input.targetId) return fail("notYourself");
 
   const repo = deps.users;
@@ -141,7 +140,7 @@ export async function setAdminRole(input: {
 export async function removeAdmin(input: {
   actorId: string;
   targetId: string;
-}, deps: { users: Pick<AdminUserPort, "findById" | "countOtherActiveOwners" | "remove"> } = { users: adminUsers() }): Promise<Result<SafeAdminUser>> {
+}, deps: { users: Pick<AdminUserPort, "findById" | "countOtherActiveOwners" | "remove"> }): Promise<Result<SafeAdminUser>> {
   if (input.actorId === input.targetId) return fail("notYourself");
 
   const repo = deps.users;
@@ -178,7 +177,7 @@ export async function resetAdminPassword(input: {
   actorId: string;
   targetId: string;
   newPassword: string;
-}, deps: { users: Pick<AdminUserPort, "findById" | "updatePassword"> } = { users: adminUsers() }): Promise<Result<{ user: SafeAdminUser }>> {
+}, deps: { users: Pick<AdminUserPort, "findById" | "updatePassword"> }): Promise<Result<{ user: SafeAdminUser }>> {
   if (input.actorId === input.targetId) return fail("notYourself");
 
   const weak = validatePasswordStrength(input.newPassword);
@@ -199,7 +198,7 @@ export async function resetAdminPassword(input: {
 export async function updateOwnProfile(input: {
   userId: string;
   name: string;
-}, deps: { users: Pick<AdminUserPort, "updateProfile"> } = { users: adminUsers() }): Promise<Result<null, ProfileErrorReason>> {
+}, deps: { users: Pick<AdminUserPort, "updateProfile"> }): Promise<Result<null, ProfileErrorReason>> {
   const name = input.name.trim();
   if (!name) return fail("nameRequired");
 
@@ -222,7 +221,7 @@ export async function changeOwnPassword(input: {
   currentPassword: string;
   newPassword: string;
   confirmPassword: string;
-}, deps: { users: Pick<AdminUserPort, "findByIdWithHash" | "updatePassword"> } = { users: adminUsers() }): Promise<Result<null, ProfileErrorReason>> {
+}, deps: { users: Pick<AdminUserPort, "findByIdWithHash" | "updatePassword"> }): Promise<Result<null, ProfileErrorReason>> {
   if (input.newPassword !== input.confirmPassword) return fail("mismatch");
 
   const weak = validatePasswordStrength(input.newPassword);

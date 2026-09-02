@@ -7,6 +7,7 @@ import {
   setAdminStatus,
 } from "~/services/admin-management.server";
 import type { SuccessKey } from "./success-message";
+import { adminUsers } from "~/wiring.server";
 
 /**
  * The admin screen's intent dispatch, beside its route.
@@ -31,45 +32,45 @@ export const INTENTS = {
       email: String(form.get("email") ?? ""),
       password: String(form.get("password") ?? ""),
       role: readRole(form),
-    });
+    }, { users: adminUsers() });
   },
   async disable(form: FormData, actorId: string) {
     return setAdminStatus({
       actorId,
       targetId: String(form.get("id") ?? ""),
       status: "disabled",
-    });
+    }, { users: adminUsers() });
   },
   async enable(form: FormData, actorId: string) {
     return setAdminStatus({
       actorId,
       targetId: String(form.get("id") ?? ""),
       status: "active",
-    });
+    }, { users: adminUsers() });
   },
   async makeOwner(form: FormData, actorId: string) {
     return setAdminRole({
       actorId,
       targetId: String(form.get("id") ?? ""),
       role: "owner",
-    });
+    }, { users: adminUsers() });
   },
   async makeAdmin(form: FormData, actorId: string) {
     return setAdminRole({
       actorId,
       targetId: String(form.get("id") ?? ""),
       role: "admin",
-    });
+    }, { users: adminUsers() });
   },
   async remove(form: FormData, actorId: string) {
-    return removeAdmin({ actorId, targetId: String(form.get("id") ?? "") });
+    return removeAdmin({ actorId, targetId: String(form.get("id") ?? "") }, { users: adminUsers() });
   },
   async resetPassword(form: FormData, actorId: string) {
     const result = await resetAdminPassword({
       actorId,
       targetId: String(form.get("id") ?? ""),
       newPassword: String(form.get("newPassword") ?? ""),
-    });
+    }, { users: adminUsers() });
     // Normalise to the same { name, role } shape the other intents return, so
     // the action stays a thin dispatch.
     return result.ok

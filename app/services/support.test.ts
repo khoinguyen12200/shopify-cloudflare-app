@@ -13,6 +13,7 @@ import { fakeNotifier } from "~/test/fake-notifier";
 setupTestDatabase();
 
 const inRequest = <T>(fn: () => Promise<T>) => runWithRequestContext(env, fn);
+const adminDeps = { users: new AdminUserRepo() };
 
 /**
  * The support service's WIRING, against real D1.
@@ -44,7 +45,7 @@ async function staffMember(email = "support@example.org") {
     email,
     password: "a-long-enough-password",
     role: "owner",
-  });
+  }, adminDeps);
   if (!created.ok) throw new Error(`fixture: ${created.reason}`);
   await new AdminUserRepo().setNotifySupport(created.value.id, true, 1_000);
   return created.value;

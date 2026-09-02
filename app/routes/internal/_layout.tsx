@@ -41,6 +41,7 @@ import {
   type RenderLinkArgs,
 } from "ngk-dashboard";
 import { requireAdminUser } from "~/services/admin-auth.server";
+import { adminUsers } from "~/wiring.server";
 import {
   INTERNAL_FONT_LINKS,
   ThemeToggle,
@@ -66,7 +67,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // The auth guard for the whole console. Child loaders still enforce their own
   // requirements (an owner-only page calls requireOwner), so this is defence in
   // depth, not the only check.
-  const user = await requireAdminUser(request);
+  const user = await requireAdminUser(request, { users: adminUsers() });
   return { user };
 };
 

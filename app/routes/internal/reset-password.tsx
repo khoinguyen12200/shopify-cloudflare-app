@@ -21,6 +21,7 @@ import {
 import { MIN_PASSWORD_LENGTH } from "~/lib/password-policy";
 import { INTERNAL_FONT_LINKS, THEME_INIT_SCRIPT } from "~/internal/components";
 import internalStyles from "~/styles/internal/internal.tailwind.css?url";
+import { adminUsers, passwordResetTokens } from "~/wiring.server";
 
 const RESET_PASSWORD_ERRORS: Record<ResetFailure, string> = {
   invalidToken: "That reset link is not valid. Request a new one.",
@@ -47,7 +48,7 @@ export const meta: MetaFunction = () => [
  */
 export const loader = async ({ params }: LoaderFunctionArgs) => {
   const token = params.token ?? "";
-  const checked = await checkResetToken(token);
+  const checked = await checkResetToken(token, { tokens: passwordResetTokens() });
   return { valid: checked.ok, reason: checked.ok ? undefined : checked.reason };
 };
 
@@ -60,7 +61,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     token: params.token ?? "",
     newPassword: String(form.get("newPassword") ?? ""),
     confirmPassword: String(form.get("confirmPassword") ?? ""),
-  });
+  }, { users: adminUsers(), tokens: passwordResetTokens() });
 
   if (!result.ok) {
     return data({ error: result.reason }, { status: 400 });

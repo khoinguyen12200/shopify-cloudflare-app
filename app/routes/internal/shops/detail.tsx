@@ -14,6 +14,7 @@ import {
   Text,
 } from "ngk-dashboard";
 import { requireAdminUser } from "~/services/admin-auth.server";
+import { adminUsers } from "~/wiring.server";
 import { ShopRepo } from "~/models/shops.server";
 import { ShopifyEventRepo } from "~/models/shopify-events.server";
 import { planForShopifyHandle } from "~/billing/plans";
@@ -54,7 +55,7 @@ const STATUS_TONE: Record<SubscriptionStatus, "success" | "warning" | "destructi
 };
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  await requireAdminUser(request);
+  await requireAdminUser(request, { users: adminUsers() });
   const shopDomain = decodeURIComponent(params.shop ?? "");
 
   const shop = await new ShopRepo().get(shopDomain);

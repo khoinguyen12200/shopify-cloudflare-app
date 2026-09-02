@@ -19,6 +19,7 @@ import {
 } from "ngk-dashboard";
 import { LifeBuoy } from "lucide-react";
 import { requireAdminUser } from "~/services/admin-auth.server";
+import { adminUsers } from "~/wiring.server";
 import { AdminUserRepo } from "~/models/admin-users.server";
 import { SupportService } from "~/services/support.server";
 import { ShopSubscriptionRepo } from "~/models/shop-subscriptions.server";
@@ -34,7 +35,7 @@ const LOCALE: Locale = "en";
 const PAID_STATUSES = new Set(["ACTIVE", "CANCELLATION_SCHEDULED"]);
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const actor = await requireAdminUser(request);
+  const actor = await requireAdminUser(request, { users: adminUsers() });
 
   const [tickets, currentSubscriptions] = await Promise.all([
     new SupportService().listOpenForStaff(),
@@ -66,7 +67,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const actor = await requireAdminUser(request);
+  const actor = await requireAdminUser(request, { users: adminUsers() });
   const form = await request.formData();
 
   // The only action here is the signed-in person's own preference, so there is

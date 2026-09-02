@@ -21,6 +21,7 @@ import {
   Textarea,
 } from "ngk-dashboard";
 import { requireAdminUser } from "~/services/admin-auth.server";
+import { adminUsers } from "~/wiring.server";
 import { SupportService } from "~/services/support.server";
 import { ShopSubscriptionRepo } from "~/models/shop-subscriptions.server";
 import { planForShopifyHandle } from "~/billing/plans";
@@ -44,7 +45,7 @@ import {
 const LOCALE: Locale = "en";
 
 export const loader = async ({ params, request }: LoaderFunctionArgs) => {
-  await requireAdminUser(request);
+  await requireAdminUser(request, { users: adminUsers() });
   const service = new SupportService();
 
   const ticketId = params.ticketId ?? "";
@@ -99,7 +100,7 @@ export const loader = async ({ params, request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ params, request }: ActionFunctionArgs) => {
-  const actor = await requireAdminUser(request);
+  const actor = await requireAdminUser(request, { users: adminUsers() });
   const ticketId = params.ticketId ?? "";
   const form = await request.formData();
   const service = new SupportService();

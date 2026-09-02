@@ -20,6 +20,10 @@ setupTestDatabase();
 const inRequest = <T>(fn: () => Promise<T>) => runWithRequestContext(env, fn);
 const ORIGIN = "https://example.test";
 const OLD_PASSWORD = "the-original-password";
+const resetDeps = {
+  users: new AdminUserRepo(),
+  tokens: new PasswordResetTokenRepo(),
+};
 
 async function seedUser(email = "user@example.com", status: "active" | "disabled" = "active") {
   const created = await createAdmin({
@@ -27,7 +31,7 @@ async function seedUser(email = "user@example.com", status: "active" | "disabled
     email,
     password: OLD_PASSWORD,
     role: "admin",
-  });
+  }, resetDeps);
   if (!created.ok) throw new Error(`fixture: ${created.reason}`);
   if (status === "disabled") {
     await new AdminUserRepo().setStatus(created.value.id, "disabled", Date.now());
@@ -40,7 +44,7 @@ async function seedUser(email = "user@example.com", status: "active" | "disabled
  * see it. Tests read it here so they never depend on that presentation choice.
  */
 async function requestFor(email: string) {
-  return requestPasswordReset({ email, origin: ORIGIN });
+  return requestPasswordReset({ email, origin: ORIGIN }, resetDeps);
 }
 
 describe("requestPasswordReset never reveals whether an account exists", () => {
@@ -139,13 +143,13 @@ describe("checkResetToken", () => {
     const checked = await inRequest(async () => {
       await seedUser();
       const { token } = await requestFor("user@example.com");
-      return checkResetToken(token!);
+      return checkResetToken(token!, resetDeps);
     });
     expect(checked.ok).toBe(true);
   });
 
   it("rejects a token that was never issued", async () => {
-    const checked = await inRequest(() => checkResetToken("not-a-real-token"));
+    const checked = await inRequest(() => checkResetToken("not-a-real-token", resetDeps));
     expect(checked).toMatchObject({ ok: false, reason: "invalidToken" });
   });
 
@@ -160,7 +164,7 @@ describe("checkResetToken", () => {
         expiresAt: Date.now() - 1_000,
         now: Date.now() - TOKEN_TTL_MS,
       });
-      return checkResetToken(token);
+      return checkResetToken(token, resetDeps);
     });
     expect(checked).toMatchObject({ ok: false, reason: "expiredToken" });
   });
@@ -174,8 +178,8 @@ describe("checkResetToken", () => {
         token: token!,
         newPassword: "a-brand-new-password",
         confirmPassword: "a-brand-new-password",
-      });
-      return checkResetToken(token!);
+      }, resetDeps);
+      return checkResetToken(token!, resetDeps);
     });
     expect(checked).toMatchObject({ ok: false, reason: "usedToken" });
   });
@@ -190,7 +194,7 @@ describe("completePasswordReset", () => {
         token: token!,
         newPassword: "a-brand-new-password",
         confirmPassword: "a-brand-new-password",
-      });
+      }, resetDeps);
       const after = await new AdminUserRepo().findByIdWithHash(user.id);
       return { result, hash: after!.passwordHash };
     });
@@ -208,12 +212,12 @@ describe("completePasswordReset", () => {
         token: token!,
         newPassword: "first-new-password",
         confirmPassword: "first-new-password",
-      });
+      }, resetDeps);
       return completePasswordReset({
         token: token!,
         newPassword: "second-new-password",
         confirmPassword: "second-new-password",
-      });
+      }, resetDeps);
     });
     expect(second).toMatchObject({ ok: false, reason: "usedToken" });
   });
@@ -226,12 +230,12 @@ describe("completePasswordReset", () => {
         token: token!,
         newPassword: "first-new-password",
         confirmPassword: "first-new-password",
-      });
+      }, resetDeps);
       await completePasswordReset({
         token: token!,
         newPassword: "second-new-password",
         confirmPassword: "second-new-password",
-      });
+      }, resetDeps);
       const after = await new AdminUserRepo().findByIdWithHash(user.id);
       return after!.passwordHash;
     });
@@ -251,8 +255,8 @@ describe("completePasswordReset", () => {
         token: b,
         newPassword: "chosen-new-password",
         confirmPassword: "chosen-new-password",
-      });
-      return checkResetToken(a);
+      }, resetDeps);
+      return checkResetToken(a, resetDeps);
     });
     expect(first).toMatchObject({ ok: false, reason: "usedToken" });
   });
@@ -271,7 +275,7 @@ describe("completePasswordReset", () => {
         token,
         newPassword: "a-brand-new-password",
         confirmPassword: "a-brand-new-password",
-      });
+      }, resetDeps);
     });
     expect(result).toMatchObject({ ok: false, reason: "expiredToken" });
   });
@@ -286,8 +290,8 @@ describe("completePasswordReset", () => {
         token: token!,
         newPassword: "short",
         confirmPassword: "short",
-      });
-      return checkResetToken(token!);
+      }, resetDeps);
+      return checkResetToken(token!, resetDeps);
     });
     expect(stillValid.ok).toBe(true);
   });
@@ -300,8 +304,8 @@ describe("completePasswordReset", () => {
         token: token!,
         newPassword: "a-brand-new-password",
         confirmPassword: "a-different-password",
-      });
-      return { result, still: await checkResetToken(token!) };
+      }, resetDeps);
+      return { result, still: await checkResetToken(token!, resetDeps) };
     });
     expect(outcome.result).toMatchObject({ ok: false, reason: "mismatch" });
     expect(outcome.still.ok).toBe(true);
@@ -316,7 +320,7 @@ describe("completePasswordReset", () => {
         token: token!,
         newPassword: "a-brand-new-password",
         confirmPassword: "a-brand-new-password",
-      });
+      }, resetDeps);
       const after = await new AdminUserRepo().findByIdWithHash(bystander.id);
       return after!.passwordHash;
     });

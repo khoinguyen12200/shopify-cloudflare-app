@@ -22,6 +22,7 @@ import {
   HOME_PATH,
 } from "~/services/admin-auth.server";
 import { getEnv } from "~/request-context.server";
+import { adminUsers } from "~/wiring.server";
 import { INTERNAL_FONT_LINKS, THEME_INIT_SCRIPT } from "~/internal/components";
 // Login sits OUTSIDE the /internal layout (see app/routes.ts), so it does not
 // inherit that layout's links() and must load the console stylesheet itself —
@@ -47,7 +48,7 @@ export const meta: MetaFunction = () => [
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Already signed in? Skip the form.
-  if (await getAdminUser(request)) throw redirect(HOME_PATH);
+  if (await getAdminUser(request, { users: adminUsers() })) throw redirect(HOME_PATH);
 
   const url = new URL(request.url);
   return {
@@ -67,7 +68,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return data({ error: "missingFields" as const }, { status: 400 });
   }
 
-  const result = await verifyAdminCredentials(email, password);
+  const result = await verifyAdminCredentials(email, password, { users: adminUsers() });
   if (!result.ok) {
     // 401, and the same generic message for a wrong password as for an unknown
     // email — anything else tells an attacker which emails exist.

@@ -1,6 +1,5 @@
 import { normalizeEmail, type AdminUserPort } from "~/ports/admin-users";
 import type { PasswordResetTokenPort } from "~/ports/password-reset-tokens";
-import { adminUsers, passwordResetTokens } from "~/wiring.server";
 import { generateToken, hashToken } from "~/lib/token";
 import { hashPassword } from "~/lib/password";
 import { validatePasswordStrength } from "~/lib/password-policy";
@@ -42,7 +41,7 @@ export async function requestPasswordReset(input: {
 }, deps: {
   users: Pick<AdminUserPort, "findByEmailWithHash">;
   tokens: Pick<PasswordResetTokenPort, "countActiveForUser" | "create">;
-} = { users: adminUsers(), tokens: passwordResetTokens() }): Promise<RequestResetOutcome> {
+}): Promise<RequestResetOutcome> {
   const email = normalizeEmail(input.email);
   const now = Date.now();
 
@@ -129,7 +128,7 @@ export type CompleteResetResult =
 /** Is this token usable? Checked before rendering the form, and again on submit. */
 export async function checkResetToken(
   token: string,
-  deps: { tokens: Pick<PasswordResetTokenPort, "findByHash"> } = { tokens: passwordResetTokens() },
+  deps: { tokens: Pick<PasswordResetTokenPort, "findByHash"> },
 ): Promise<{ ok: true; adminUserId: string } | { ok: false; reason: ResetFailure }> {
   const row = await deps.tokens.findByHash(await hashToken(token));
 
@@ -155,7 +154,7 @@ export async function completePasswordReset(input: {
 }, deps: {
   users: Pick<AdminUserPort, "updatePassword">;
   tokens: Pick<PasswordResetTokenPort, "findByHash" | "markUsed" | "invalidateAllForUser">;
-} = { users: adminUsers(), tokens: passwordResetTokens() }): Promise<CompleteResetResult> {
+}): Promise<CompleteResetResult> {
   if (input.newPassword !== input.confirmPassword) {
     return { ok: false, reason: "mismatch" };
   }

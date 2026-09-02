@@ -23,6 +23,7 @@ import type { ProfileErrorReason } from "~/services/admin-management.server";
 import { MIN_PASSWORD_LENGTH } from "~/lib/password-policy";
 import { formatDateTime } from "~/i18n/format";
 import type { Locale } from "~/i18n/config";
+import { adminUsers } from "~/wiring.server";
 
 const LOCALE: Locale = "en";
 
@@ -41,13 +42,15 @@ const PROFILE_SUCCESS: Record<SuccessKey, string> = {
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  return { user: await requireAdminUser(request) };
+  const users = adminUsers();
+  return { user: await requireAdminUser(request, { users }) };
 };
 
 type SuccessKey = "detailsSaved" | "passwordChanged";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const user = await requireAdminUser(request);
+  const users = adminUsers();
+  const user = await requireAdminUser(request, { users });
   const form = await request.formData();
   const intent = String(form.get("intent") ?? "");
 
@@ -56,7 +59,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const result = await updateOwnProfile({
       userId: user.id,
       name: String(form.get("name") ?? ""),
-    });
+    }, { users });
     return result.ok
       ? data({ success: detailsSaved })
       : data({ error: result.reason }, { status: 400 });
@@ -69,7 +72,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       currentPassword: String(form.get("currentPassword") ?? ""),
       newPassword: String(form.get("newPassword") ?? ""),
       confirmPassword: String(form.get("confirmPassword") ?? ""),
-    });
+    }, { users });
     return result.ok
       ? data({ success: passwordChanged })
       : data({ error: result.reason }, { status: 400 });

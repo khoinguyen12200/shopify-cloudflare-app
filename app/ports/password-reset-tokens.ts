@@ -6,5 +6,4 @@ export interface PasswordResetTokenPort {
   markUsed(tokenHash: string, now: number): Promise<void>;
   invalidateAllForUser(adminUserId: string, now: number): Promise<void>;
   countActiveForUser(adminUserId: string, now: number): Promise<number>;
-  cleanup(cutoff: number): Promise<number>;
 }

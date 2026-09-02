@@ -15,6 +15,7 @@ import {
 } from "ngk-dashboard";
 import { Receipt } from "lucide-react";
 import { requireAdminUser } from "~/services/admin-auth.server";
+import { adminUsers } from "~/wiring.server";
 import { ShopifyEventRepo } from "~/models/shopify-events.server";
 import { planForShopifyHandle } from "~/billing/plans";
 import { formatDateTime } from "~/i18n/format";
@@ -37,7 +38,7 @@ function displayMoney(amount: number | null, currency: string | null): string {
 const RECENT_LIMIT = 200;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await requireAdminUser(request);
+  await requireAdminUser(request, { users: adminUsers() });
   const events = await new ShopifyEventRepo().listRecentSubscriptionEvents(RECENT_LIMIT);
   return { events };
 };

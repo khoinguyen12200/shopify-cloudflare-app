@@ -21,7 +21,7 @@ import {
   Text,
 } from "ngk-dashboard";
 import { requireOwner } from "~/services/admin-auth.server";
-import { AdminUserRepo } from "~/models/admin-users.server";
+import { adminUsers } from "~/wiring.server";
 import {
   resetAdminPassword,
   type AdminErrorReason,
@@ -38,12 +38,13 @@ import { ADMIN_ERRORS } from "~/internal/admin-messages";
  * errors.
  */
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const actor = await requireOwner(request);
+  const users = adminUsers();
+  const actor = await requireOwner(request, { users });
   const targetId = params.adminId ?? "";
 
   // Resolve the target here so the page can name them, and so a bad id is a 404
   // rather than a form that fails on submit.
-  const target = await new AdminUserRepo().findById(targetId);
+  const target = await users.findById(targetId);
   if (!target) throw new Response("Not found", { status: 404 });
 
   // Your own password goes through /internal/profile, which requires the current
@@ -54,7 +55,8 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
-  const actor = await requireOwner(request);
+  const users = adminUsers();
+  const actor = await requireOwner(request, { users });
   const form = await request.formData();
 
   const newPassword = String(form.get("newPassword") ?? "");
@@ -70,7 +72,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     actorId: actor.id,
     targetId: params.adminId ?? "",
     newPassword,
-  });
+  }, { users });
 
   if (!result.ok) {
     const reason: AdminErrorReason = result.reason;

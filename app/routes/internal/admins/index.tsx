@@ -37,6 +37,7 @@ import {
   Text,
 } from "ngk-dashboard";
 import { requireOwner } from "~/services/admin-auth.server";
+import { adminUsers } from "~/wiring.server";
 import { AdminUserRepo } from "~/models/admin-users.server";
 // Type-only: erased at build, so it does not pull the server module into the
 // client bundle.
@@ -63,7 +64,7 @@ const REMOVE_FORM_ID = "remove-admin";
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Owner-only. requireOwner throws 403 for a signed-in non-owner, which the
   // layout's ErrorBoundary renders.
-  const actor = await requireOwner(request);
+  const actor = await requireOwner(request, { users: adminUsers() });
   const url = new URL(request.url);
   return {
     actor,
@@ -75,7 +76,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const actor = await requireOwner(request);
+  const actor = await requireOwner(request, { users: adminUsers() });
   const form = await request.formData();
   const intent = readIntent(form);
 

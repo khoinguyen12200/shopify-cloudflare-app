@@ -1,6 +1,7 @@
 import type { ActionFunctionArgs } from "react-router";
 import { cloudflareContext } from "../../../workers/app";
 import { requireAdminUser } from "~/services/admin-auth.server";
+import { adminUsers } from "~/wiring.server";
 import { SupportService } from "~/services/support.server";
 import { AiService } from "~/services/ai.server";
 import type { ThreadForPrompt } from "~/ai/draft-prompt";
@@ -22,7 +23,7 @@ import { replyTask } from "~/ai/tasks/reply";
  * and bill us for the privilege.
  */
 export const action = async ({ request, context }: ActionFunctionArgs) => {
-  const staff = await requireAdminUser(request);
+  const staff = await requireAdminUser(request, { users: adminUsers() });
   if (!staff) return new Response("Not found", { status: 404 });
 
   const form = await request.formData();

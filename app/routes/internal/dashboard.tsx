@@ -4,6 +4,7 @@ import type { LoaderFunctionArgs } from "react-router";
 import { BlockStack, Card, InlineStack, Page, StatCard } from "ngk-dashboard";
 import { CircleDollarSign, Crown, Store, Users } from "lucide-react";
 import { requireAdminUser } from "~/services/admin-auth.server";
+import { adminUsers } from "~/wiring.server";
 import { AdminUserRepo } from "~/models/admin-users.server";
 import { OperationalHealthRepo } from "~/models/operational-health.server";
 import { ShopRepo } from "~/models/shops.server";
@@ -33,7 +34,7 @@ const TREND_MONTHS = 12;
 const DashboardCharts = lazy(() => import("~/internal/components/DashboardCharts"));
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const user = await requireAdminUser(request);
+  const user = await requireAdminUser(request, { users: adminUsers() });
 
   const [admins, allShops, currentSubscriptions, health] = await Promise.all([
     new AdminUserRepo().countAll(),

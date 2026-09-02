@@ -30,6 +30,7 @@ import {
   Wand2,
 } from "lucide-react";
 import { requireOwner } from "~/services/admin-auth.server";
+import { adminUsers } from "~/wiring.server";
 import { AiRepo } from "~/models/ai.server";
 import {
   MODEL_ROLES,
@@ -53,7 +54,7 @@ const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Owner-only: changing a chain changes what every merchant is answered with,
   // and what we are billed.
-  await requireOwner(request);
+  await requireOwner(request, { users: adminUsers() });
   const repo = new AiRepo();
   const now = Date.now();
 
@@ -129,7 +130,7 @@ function modelNote(model: CatalogueModel): string {
 }
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const actor = await requireOwner(request);
+  const actor = await requireOwner(request, { users: adminUsers() });
   const form = await request.formData();
 
   const role = String(form.get("role") ?? "");

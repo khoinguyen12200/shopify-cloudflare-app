@@ -19,6 +19,7 @@ setupTestDatabase();
 const inRequest = <T>(fn: () => Promise<T>) => runWithRequestContext(env, fn);
 
 const GOOD_PASSWORD = "a-long-enough-password";
+const adminDeps = { users: new AdminUserRepo() };
 
 /** Create an owner directly, bypassing the use case, as a fixture. */
 async function seedOwner(email = "owner@example.com") {
@@ -27,7 +28,7 @@ async function seedOwner(email = "owner@example.com") {
     email,
     password: GOOD_PASSWORD,
     role: "owner",
-  });
+  }, adminDeps);
   if (!result.ok) throw new Error(`fixture failed: ${result.reason}`);
   return result.value;
 }
@@ -40,7 +41,7 @@ describe("createAdmin", () => {
         email: "Ada@Example.COM",
         password: GOOD_PASSWORD,
         role: "admin",
-      });
+      }, adminDeps);
       return new AdminUserRepo().findByEmailWithHash("ada@example.com");
     });
 
@@ -55,7 +56,7 @@ describe("createAdmin", () => {
         email: "ada@example.com",
         password: GOOD_PASSWORD,
         role: "admin",
-      });
+      }, adminDeps);
       return new AdminUserRepo().findByEmailWithHash("ada@example.com");
     });
 
@@ -71,7 +72,7 @@ describe("createAdmin", () => {
         email: "ada@example.com",
         password: GOOD_PASSWORD,
         role: "admin",
-      }),
+      }, adminDeps),
     );
     expect(result.ok && "passwordHash" in result.value).toBe(false);
   });
@@ -84,7 +85,7 @@ describe("createAdmin", () => {
         email: "dupe@example.com",
         password: GOOD_PASSWORD,
         role: "admin",
-      });
+      }, adminDeps);
     });
     expect(result).toMatchObject({ ok: false, reason: "emailTaken" });
   });
@@ -97,16 +98,16 @@ describe("createAdmin", () => {
         email: "CASE@example.com",
         password: GOOD_PASSWORD,
         role: "admin",
-      });
+      }, adminDeps);
     });
     expect(result).toMatchObject({ ok: false, reason: "emailTaken" });
   });
 
   it("rejects a blank name, a bad email, and a short password", async () => {
     const results = await inRequest(async () => [
-      await createAdmin({ name: "  ", email: "a@b.co", password: GOOD_PASSWORD, role: "admin" }),
-      await createAdmin({ name: "N", email: "not-an-email", password: GOOD_PASSWORD, role: "admin" }),
-      await createAdmin({ name: "N", email: "a@b.co", password: "short", role: "admin" }),
+      await createAdmin({ name: "  ", email: "a@b.co", password: GOOD_PASSWORD, role: "admin" }, adminDeps),
+      await createAdmin({ name: "N", email: "not-an-email", password: GOOD_PASSWORD, role: "admin" }, adminDeps),
+      await createAdmin({ name: "N", email: "a@b.co", password: "short", role: "admin" }, adminDeps),
     ]);
     expect(results.map((r) => (r.ok ? "ok" : r.reason))).toEqual([
       "nameRequired",
@@ -126,12 +127,12 @@ describe("lockout guards — the reason this service exists", () => {
         email: "helper@example.com",
         password: GOOD_PASSWORD,
         role: "admin",
-      });
+      }, adminDeps);
       return setAdminStatus({
         actorId: "someone-else",
         targetId: owner.id,
         status: "disabled",
-      });
+      }, adminDeps);
     });
     expect(result).toMatchObject({ ok: false, reason: "lastOwner" });
   });
@@ -143,7 +144,7 @@ describe("lockout guards — the reason this service exists", () => {
         actorId: "someone-else",
         targetId: owner.id,
         role: "admin",
-      });
+      }, adminDeps);
     });
     expect(result).toMatchObject({ ok: false, reason: "lastOwner" });
   });
@@ -151,7 +152,7 @@ describe("lockout guards — the reason this service exists", () => {
   it("refuses to delete the LAST active owner", async () => {
     const result = await inRequest(async () => {
       const owner = await seedOwner();
-      return removeAdmin({ actorId: "someone-else", targetId: owner.id });
+      return removeAdmin({ actorId: "someone-else", targetId: owner.id }, adminDeps);
     });
     expect(result).toMatchObject({ ok: false, reason: "lastOwner" });
   });
@@ -164,8 +165,8 @@ describe("lockout guards — the reason this service exists", () => {
         email: "second@example.com",
         password: GOOD_PASSWORD,
         role: "owner",
-      });
-      return removeAdmin({ actorId: "someone-else", targetId: first.id });
+      }, adminDeps);
+      return removeAdmin({ actorId: "someone-else", targetId: first.id }, adminDeps);
     });
     expect(result.ok).toBe(true);
   });
@@ -180,11 +181,11 @@ describe("lockout guards — the reason this service exists", () => {
         email: "spare@example.com",
         password: GOOD_PASSWORD,
         role: "owner",
-      });
+      }, adminDeps);
       if (!spare.ok) throw new Error("fixture");
       await new AdminUserRepo().setStatus(spare.value.id, "disabled", Date.now());
 
-      return removeAdmin({ actorId: "someone-else", targetId: active.id });
+      return removeAdmin({ actorId: "someone-else", targetId: active.id }, adminDeps);
     });
     expect(result).toMatchObject({ ok: false, reason: "lastOwner" });
   });
@@ -193,9 +194,9 @@ describe("lockout guards — the reason this service exists", () => {
     const results = await inRequest(async () => {
       const owner = await seedOwner();
       return [
-        await setAdminStatus({ actorId: owner.id, targetId: owner.id, status: "disabled" }),
-        await setAdminRole({ actorId: owner.id, targetId: owner.id, role: "admin" }),
-        await removeAdmin({ actorId: owner.id, targetId: owner.id }),
+        await setAdminStatus({ actorId: owner.id, targetId: owner.id, status: "disabled" }, adminDeps),
+        await setAdminRole({ actorId: owner.id, targetId: owner.id, role: "admin" }, adminDeps),
+        await removeAdmin({ actorId: owner.id, targetId: owner.id }, adminDeps),
       ];
     });
     for (const r of results) expect(r).toMatchObject({ ok: false, reason: "notYourself" });
@@ -203,7 +204,7 @@ describe("lockout guards — the reason this service exists", () => {
 
   it("reports notFound for an id that does not exist", async () => {
     const result = await inRequest(() =>
-      removeAdmin({ actorId: "actor", targetId: "no-such-id" }),
+      removeAdmin({ actorId: "actor", targetId: "no-such-id" }, adminDeps),
     );
     expect(result).toMatchObject({ ok: false, reason: "notFound" });
   });
@@ -218,7 +219,7 @@ describe("changeOwnPassword", () => {
         currentPassword: GOOD_PASSWORD,
         newPassword: "a-brand-new-password",
         confirmPassword: "a-brand-new-password",
-      });
+      }, adminDeps);
       const after = await new AdminUserRepo().findByIdWithHash(owner.id);
       return { result, hash: after!.passwordHash };
     });
@@ -236,7 +237,7 @@ describe("changeOwnPassword", () => {
         currentPassword: "not-the-password",
         newPassword: "a-brand-new-password",
         confirmPassword: "a-brand-new-password",
-      });
+      }, adminDeps);
       const after = await new AdminUserRepo().findByIdWithHash(owner.id);
       return { result, hash: after!.passwordHash };
     });
@@ -254,19 +255,19 @@ describe("changeOwnPassword", () => {
           currentPassword: GOOD_PASSWORD,
           newPassword: "a-brand-new-password",
           confirmPassword: "a-different-password",
-        }),
+        }, adminDeps),
         await changeOwnPassword({
           userId: owner.id,
           currentPassword: GOOD_PASSWORD,
           newPassword: "short",
           confirmPassword: "short",
-        }),
+        }, adminDeps),
         await changeOwnPassword({
           userId: owner.id,
           currentPassword: GOOD_PASSWORD,
           newPassword: GOOD_PASSWORD,
           confirmPassword: GOOD_PASSWORD,
-        }),
+        }, adminDeps),
       ];
     });
     expect(results.map((r) => (r.ok ? "ok" : r.reason))).toEqual([
@@ -281,7 +282,7 @@ describe("updateOwnProfile", () => {
   it("saves a trimmed name", async () => {
     const after = await inRequest(async () => {
       const owner = await seedOwner();
-      await updateOwnProfile({ userId: owner.id, name: "  Renamed  " });
+      await updateOwnProfile({ userId: owner.id, name: "  Renamed  " }, adminDeps);
       return new AdminUserRepo().findById(owner.id);
     });
     expect(after?.name).toBe("Renamed");
@@ -290,7 +291,7 @@ describe("updateOwnProfile", () => {
   it("refuses a blank name", async () => {
     const result = await inRequest(async () => {
       const owner = await seedOwner();
-      return updateOwnProfile({ userId: owner.id, name: "   " });
+      return updateOwnProfile({ userId: owner.id, name: "   " }, adminDeps);
     });
     expect(result).toMatchObject({ ok: false, reason: "nameRequired" });
   });
@@ -305,14 +306,14 @@ describe("resetAdminPassword — an owner helping someone who is locked out", ()
         email: "forgetful@example.com",
         password: GOOD_PASSWORD,
         role: "admin",
-      });
+      }, adminDeps);
       if (!created.ok) throw new Error("fixture");
 
       const result = await resetAdminPassword({
         actorId: owner.id,
         targetId: created.value.id,
         newPassword: "a-fresh-temporary-pass",
-      });
+      }, adminDeps);
       const after = await new AdminUserRepo().findByIdWithHash(created.value.id);
       return { result, hash: after!.passwordHash };
     });
@@ -332,13 +333,13 @@ describe("resetAdminPassword — an owner helping someone who is locked out", ()
         email: "locked@example.com",
         password: GOOD_PASSWORD,
         role: "admin",
-      });
+      }, adminDeps);
       if (!created.ok) throw new Error("fixture");
       return resetAdminPassword({
         actorId: owner.id,
         targetId: created.value.id,
         newPassword: "another-long-password",
-      });
+      }, adminDeps);
     });
     expect(result.ok).toBe(true);
   });
@@ -352,7 +353,7 @@ describe("resetAdminPassword — an owner helping someone who is locked out", ()
         actorId: owner.id,
         targetId: owner.id,
         newPassword: "a-long-enough-new-one",
-      });
+      }, adminDeps);
     });
     expect(result).toMatchObject({ ok: false, reason: "notYourself" });
   });
@@ -365,13 +366,13 @@ describe("resetAdminPassword — an owner helping someone who is locked out", ()
         email: "target@example.com",
         password: GOOD_PASSWORD,
         role: "admin",
-      });
+      }, adminDeps);
       if (!created.ok) throw new Error("fixture");
       return resetAdminPassword({
         actorId: owner.id,
         targetId: created.value.id,
         newPassword: "short",
-      });
+      }, adminDeps);
     });
     expect(result).toMatchObject({ ok: false, reason: "tooShort" });
   });
@@ -384,13 +385,13 @@ describe("resetAdminPassword — an owner helping someone who is locked out", ()
         email: "target@example.com",
         password: GOOD_PASSWORD,
         role: "admin",
-      });
+      }, adminDeps);
       if (!created.ok) throw new Error("fixture");
       await resetAdminPassword({
         actorId: owner.id,
         targetId: created.value.id,
         newPassword: "short",
-      });
+      }, adminDeps);
       const after = await new AdminUserRepo().findByIdWithHash(created.value.id);
       return after!.passwordHash;
     });
@@ -403,7 +404,7 @@ describe("resetAdminPassword — an owner helping someone who is locked out", ()
         actorId: "actor",
         targetId: "no-such-id",
         newPassword: "a-long-enough-password-x",
-      }),
+      }, adminDeps),
     );
     expect(result).toMatchObject({ ok: false, reason: "notFound" });
   });
@@ -416,13 +417,13 @@ describe("resetAdminPassword — an owner helping someone who is locked out", ()
         email: "target@example.com",
         password: GOOD_PASSWORD,
         role: "admin",
-      });
+      }, adminDeps);
       if (!created.ok) throw new Error("fixture");
       await resetAdminPassword({
         actorId: owner.id,
         targetId: created.value.id,
         newPassword: "a-fresh-temporary-pass",
-      });
+      }, adminDeps);
       return new AdminUserRepo().findById(created.value.id);
     });
     expect(after).toMatchObject({ role: "admin", status: "active" });
