@@ -1,4 +1,4 @@
-import { and, eq, or, sql } from "drizzle-orm";
+import { and, eq, ne, or, sql } from "drizzle-orm";
 import type { SubscriptionStatus, SubscriptionObservation } from "~/domain/subscription-lifecycle";
 import { shopSubscriptionItems, shopSubscriptions } from "~/db/schema";
 import { getDb } from "~/request-context.server";
@@ -118,6 +118,12 @@ export class ShopSubscriptionRepo {
       const replacement = db.delete(shopSubscriptionItems).where(and(eq(shopSubscriptionItems.shop, shop), eq(shopSubscriptionItems.subscriptionId, observation.subscriptionId)));
       const rows = observation.items.map((item, position) => ({ shop, subscriptionId: observation.subscriptionId, position, itemType: item.itemType, priceAmount: item.priceAmount ?? null, priceCurrency: item.priceCurrency ?? null, cappedAmountAmount: item.cappedAmountAmount ?? null, cappedAmountCurrency: item.cappedAmountCurrency ?? null }));
       await db.batch(rows.length ? [replacement, db.insert(shopSubscriptionItems).values(rows)] : [replacement]);
+    }
+    if (observation.type === "ACTIVE_SUBSCRIPTION" && observation.status === "NONE") {
+      await db.batch([
+        db.delete(shopSubscriptionItems).where(and(eq(shopSubscriptionItems.shop, shop), ne(shopSubscriptionItems.subscriptionId, observation.subscriptionId))),
+        db.delete(shopSubscriptions).where(and(eq(shopSubscriptions.shop, shop), ne(shopSubscriptions.subscriptionId, observation.subscriptionId))),
+      ]);
     }
     return duplicate ? "duplicate" : "applied";
   }

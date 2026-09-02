@@ -14,8 +14,10 @@ const activeSubscriptionQuery = `query ActiveSubscription($appId: ID!, $shopId: 
       description
       price {
         __typename
-        ... on FlatRatePrice { amount currency }
-        ... on TieredPrice { currency }
+        active
+        currency
+        ... on FlatRatePrice { amount }
+        ... on TieredPrice { tiersMode tiers { upTo amountPerUnit amount } }
       }
       usage { quantity cost { amount currencyCode } }
     }
@@ -74,10 +76,17 @@ function subscriptionItem(value: unknown): ActiveSubscription["items"][number] {
   const price = object(item.price);
   const usage = object(item.usage);
   const cost = usage && object(usage.cost);
+  const priceType = string(price?.__typename);
+  const tiers = priceType === "TieredPrice" && Array.isArray(price?.tiers) ? price?.tiers.map((tier) => {
+    const value = object(tier);
+    return { upTo: string(value?.upTo), amountPerUnit: string(value?.amountPerUnit), amount: string(value?.amount) };
+  }) : [];
   return {
     handle: string(item.handle),
     description: string(item.description),
-    price: price ? { amount: string(price.amount), currency: string(price.currency) } : null,
+    price: priceType === "TieredPrice"
+      ? { kind: "tiered", amount: null, currency: string(price?.currency), tiers }
+      : price ? { kind: "flat", amount: string(price.amount), currency: string(price.currency) } : null,
     cappedAmount: cost ? { amount: string(cost.amount), currency: string(cost.currencyCode) } : null,
   };
 }

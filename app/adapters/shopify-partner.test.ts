@@ -36,7 +36,7 @@ describe("ShopifyPartnerAdapter", () => {
       cancelAtEndOfCycle: true,
       trialEndsAt: "2026-05-01T00:00:00Z",
       currentBillingCycle: { startTime: "2026-04-01T00:00:00Z", endTime: "2026-05-01T00:00:00Z" },
-      items: [{ handle: "pro", price: { amount: "29.00", currency: "USD" } }],
+      items: [{ handle: "pro", price: { kind: "flat", amount: "29.00", currency: "USD" } }],
     });
   });
 

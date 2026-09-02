@@ -104,6 +104,23 @@ describe("ShopSubscriptionRepo", () => {
     });
   });
 
+  it("retires prior paid projections when active subscription becomes none", async () => {
+    const rows = await inRequest(async () => {
+      const repo = new ShopSubscriptionRepo();
+      await repo.upsertObservation("retire.myshopify.com", {
+        type: "ACTIVE_SUBSCRIPTION", status: "ACTIVE", subscriptionId: "gid://shopify/AppSubscription/1", occurredAt: 1, externalId: "sub-1",
+        planHandle: "pro", billingInterval: "EVERY_30_DAYS", items: [{ itemType: "pro", priceAmount: 2900, priceCurrency: "USD" }],
+      });
+      await repo.upsertObservation("retire.myshopify.com", {
+        type: "ACTIVE_SUBSCRIPTION", status: "NONE", subscriptionId: "active:gid://shopify/Shop/1", occurredAt: 2, externalId: "none",
+        planHandle: null, billingInterval: null, items: [],
+      });
+      return repo.listCurrent();
+    });
+    expect(rows).toMatchObject([{ shop: "retire.myshopify.com", status: "NONE", priceAmount: null, priceCurrency: null }]);
+    expect(rows).toHaveLength(1);
+  });
+
   it("returns every recurring pricing item for a current subscription", async () => {
     const rows = await inRequest(async () => {
       const repo = new ShopSubscriptionRepo();

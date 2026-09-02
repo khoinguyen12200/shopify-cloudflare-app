@@ -10,7 +10,7 @@ describe("refreshSubscription", () => {
       listHistoricalEvents: async () => ({ events: [], hasNextPage: false, endCursor: null }),
       activeSubscription: async () => {
         calls += 1;
-        return { shop: null, billingPeriod: null, cancelAtEndOfCycle: false, trialEndsAt: null, currentBillingCycle: null, legacySubscriptionId: "sub-1", items: [{ handle: "pro", description: null, price: null, cappedAmount: null }], pendingUpdate: null };
+        return { shop: null, billingPeriod: null, cancelAtEndOfCycle: false, trialEndsAt: null, currentBillingCycle: null, legacySubscriptionId: "sub-1", items: [{ handle: "pro", description: null, price: { kind: "flat", amount: "29.00", currency: "USD" }, cappedAmount: null }], pendingUpdate: null };
       },
     };
     const subscriptions: SubscriptionProjectionPort = { upsertSubscriptionProjection: async (_shop, value) => { observation = value; return "applied"; } };
@@ -55,7 +55,7 @@ describe("refreshSubscription", () => {
     const subscriptions: SubscriptionProjectionPort = { upsertSubscriptionProjection: async (_shop, value) => { observation = value; return "applied"; } };
     const partner: ShopifyPartnerPort = {
       listHistoricalEvents: async () => ({ events: [], hasNextPage: false, endCursor: null }),
-      activeSubscription: async () => ({ shop: null, billingPeriod: "EVERY_30_DAYS", cancelAtEndOfCycle: false, trialEndsAt: null, currentBillingCycle: null, legacySubscriptionId: null, items: [{ handle: "pro", description: "Pro", price: { amount: "29.00", currency: "USD" }, cappedAmount: null }], pendingUpdate: null }),
+      activeSubscription: async () => ({ shop: null, billingPeriod: "EVERY_30_DAYS", cancelAtEndOfCycle: false, trialEndsAt: null, currentBillingCycle: null, legacySubscriptionId: null, items: [{ handle: "pro", description: "Pro", price: { kind: "flat", amount: "29.00", currency: "USD", tiers: [] }, cappedAmount: null }], pendingUpdate: null }),
     };
     await refreshSubscription({ partner, subscriptions, clock: { now: () => 100 }, appId: "app" }, { shop: "one.myshopify.com", shopifyShopId: "gid://shopify/Shop/1" }, 100);
     expect(observation).toMatchObject({ items: [{ itemType: "pro", priceAmount: 2900, priceCurrency: "USD" }] });
@@ -73,8 +73,8 @@ describe("refreshSubscription", () => {
         trialEndsAt: "2026-04-15T00:00:00Z",
         currentBillingCycle: { startTime: "2026-04-01T00:00:00Z", endTime: "2026-05-01T00:00:00Z" },
         legacySubscriptionId: "gid://shopify/AppSubscription/7",
-        items: [{ handle: "pro", description: "Pro", price: { amount: "29.00", currency: "USD" }, cappedAmount: null }],
-        pendingUpdate: { billingPeriod: "ANNUAL", legacySubscriptionId: "gid://shopify/AppSubscription/8", items: [{ handle: "plus", description: "Plus", price: { amount: "299.00", currency: "USD" }, cappedAmount: null }] },
+        items: [{ handle: "pro", description: "Pro", price: { kind: "flat", amount: "29.00", currency: "USD", tiers: [] }, cappedAmount: null }],
+        pendingUpdate: { billingPeriod: "ANNUAL", legacySubscriptionId: "gid://shopify/AppSubscription/8", items: [{ handle: "plus", description: "Plus", price: { kind: "flat", amount: "299.00", currency: "USD", tiers: [] }, cappedAmount: null }] },
       }),
     };
 
@@ -94,17 +94,27 @@ describe("refreshSubscription", () => {
     });
   });
 
-  it("projects tiered usage cost without inventing a flat price", async () => {
-    let observation: unknown;
-    const subscriptions: SubscriptionProjectionPort = { upsertSubscriptionProjection: async (_shop, value) => { observation = value; return "applied"; } };
+  it("fails refresh for malformed flat pricing", async () => {
+    const subscriptions: SubscriptionProjectionPort = { upsertSubscriptionProjection: async () => "applied" };
     const partner: ShopifyPartnerPort = {
       listHistoricalEvents: async () => ({ events: [], hasNextPage: false, endCursor: null }),
       activeSubscription: async () => ({
         shop: null, billingPeriod: "EVERY_30_DAYS", cancelAtEndOfCycle: false, trialEndsAt: null, currentBillingCycle: null, legacySubscriptionId: null,
-        items: [{ handle: "usage", description: "Usage", price: { amount: null, currency: "USD" }, cappedAmount: { amount: "12.34", currency: "USD" } }], pendingUpdate: null,
+        items: [{ handle: "usage", description: "Usage", price: { kind: "flat", amount: null, currency: "USD" }, cappedAmount: null }], pendingUpdate: null,
       }),
     };
-    await refreshSubscription({ partner, subscriptions, clock: { now: () => 100 }, appId: "app" }, { shop: "one.myshopify.com", shopifyShopId: "gid://shopify/Shop/1" }, 100);
-    expect(observation).toMatchObject({ items: [{ itemType: "usage", priceAmount: null, priceCurrency: "USD", cappedAmountAmount: 1234, cappedAmountCurrency: "USD" }] });
+    await expect(refreshSubscription({ partner, subscriptions, clock: { now: () => 100 }, appId: "app" }, { shop: "one.myshopify.com", shopifyShopId: "gid://shopify/Shop/1" }, 100)).resolves.toMatchObject({ status: "failed", code: "SUBSCRIPTION_REFRESH_FAILED" });
+  });
+
+  it("fails refresh explicitly for malformed or tiered Partner pricing", async () => {
+    const subscriptions: SubscriptionProjectionPort = { upsertSubscriptionProjection: async () => "applied" };
+    const partner: ShopifyPartnerPort = {
+      listHistoricalEvents: async () => ({ events: [], hasNextPage: false, endCursor: null }),
+      activeSubscription: async () => ({
+        shop: null, billingPeriod: "EVERY_30_DAYS", cancelAtEndOfCycle: false, trialEndsAt: null, currentBillingCycle: null, legacySubscriptionId: "sub-bad",
+        items: [{ handle: "usage", description: "Usage", price: { kind: "tiered", amount: null, currency: "USD", tiers: [{ upTo: "10", amountPerUnit: "1.00", amount: "10.00" }] }, cappedAmount: null }], pendingUpdate: null,
+      }),
+    };
+    await expect(refreshSubscription({ partner, subscriptions, clock: { now: () => 100 }, appId: "app" }, { shop: "one.myshopify.com", shopifyShopId: "gid://shopify/Shop/1" }, 100)).resolves.toMatchObject({ status: "failed", code: "SUBSCRIPTION_REFRESH_FAILED" });
   });
 });

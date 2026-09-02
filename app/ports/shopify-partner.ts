@@ -27,6 +27,10 @@ export interface ActiveSubscription {
 export interface PartnerSubscriptionItem {
   readonly handle: string | null;
   readonly description: string | null;
-  readonly price: { readonly amount: string | null; readonly currency: string | null } | null;
+  readonly price: PartnerPrice | null;
   readonly cappedAmount: { readonly amount: string | null; readonly currency: string | null } | null;
 }
+
+export type PartnerPrice =
+  | { readonly kind: "flat"; readonly amount: string | null; readonly currency: string | null }
+  | { readonly kind: "tiered"; readonly amount: null; readonly currency: string | null; readonly tiers: readonly { readonly upTo: string | null; readonly amountPerUnit: string | null; readonly amount: string | null }[] };

@@ -3,7 +3,9 @@ import { fromDecimalString } from "~/money";
 
 export interface Clock { readonly now: () => number; }
 export interface ShopIdentity { readonly shop: string; readonly shopifyShopId: string | null; }
-export interface SubscriptionProjectionPort { upsertSubscriptionProjection(shop: string, observation: SubscriptionObservation): Promise<"applied" | "stale" | "duplicate">; }
+export interface SubscriptionProjectionPort {
+  upsertSubscriptionProjection(shop: string, observation: SubscriptionObservation): Promise<"applied" | "stale" | "duplicate">;
+}
 export interface SubscriptionObservation {
   readonly type: "ACTIVE_SUBSCRIPTION";
   readonly subscriptionId: string;
@@ -32,11 +34,13 @@ export type RefreshResult = { readonly status: "refreshed" } | { readonly status
 function subscriptionItems(response: ActiveSubscription | null): SubscriptionObservation["items"] {
   if (!response) return [];
   return response.items.flatMap((item) => {
-    const money = item.price?.amount && item.price.currency ? fromDecimalString(item.price.amount, item.price.currency) : null;
+    if (!item.price) throw new Error(`Missing Partner subscription price for ${item.handle ?? "subscription"}`);
+    const money = item.price?.kind === "flat" && item.price.amount && item.price.currency ? fromDecimalString(item.price.amount, item.price.currency) : null;
     const capped = item.cappedAmount && item.cappedAmount.amount && item.cappedAmount.currency
       ? fromDecimalString(item.cappedAmount.amount, item.cappedAmount.currency)
       : null;
-    if (!money?.ok && !capped?.ok) return [];
+    if (item.price?.kind === "tiered") throw new Error(`Unsupported Partner tiered price for ${item.handle ?? "subscription"}`);
+    if (!money?.ok && !capped?.ok) throw new Error(`Invalid Partner subscription price for ${item.handle ?? "subscription"}`);
     return [{ itemType: item.handle ?? "subscription", priceAmount: money?.ok ? money.value.amount : null, priceCurrency: item.price?.currency ?? null, cappedAmountAmount: capped?.ok ? capped.value.amount : null, cappedAmountCurrency: capped?.ok ? capped.value.currency : null }];
   });
 }
