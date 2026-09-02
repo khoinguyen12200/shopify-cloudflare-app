@@ -45,6 +45,8 @@ Required source-of-truth rules:
 - Active subscription refresh after OAuth and embedded app access.
 - Null active subscription projects `NONE`.
 - Reconciliation failures do not silently become free subscriptions.
+- Active subscription normalization preserves Partner identity, status, periods,
+  pending update fields, pricing items, and integer minor-unit money.
 
 ### Webhooks and queues
 
@@ -53,6 +55,10 @@ Required source-of-truth rules:
 - Queue handoff after inbox persistence.
 - Idempotent delivery claiming and processing.
 - Retry handling and persisted dead-letter status.
+- Queue transport logs delivery ID, hashed shop, topic/handler when known,
+  outcome, attempts, and latency without raw webhook data.
+- Missing inbox work, including work queued before `shop/redact`, is explicitly
+  discarded and acknowledged without dispatch.
 - Scope projection with granted/revoked history.
 - Scope replay protection.
 - Uninstall deletes stored Shopify sessions.
@@ -71,6 +77,8 @@ Required source-of-truth rules:
 - Two-tenant isolation tests.
 - Purge inventory checks fail if future D1 schema tables add a `shop` column
   without coverage; D1/KV/R2 boundary tests retain another tenant's data.
+- Two-tenant fixture proves every current D1 `shop` table is erased for target
+  tenant while same rows for another tenant remain.
 - Explicit `implemented: true` and `noCustomerData: true` outcomes for customer
   compliance topics while app stores no customer records.
 - Shop-redaction path uses dependency ports instead of service-level model access.
@@ -81,12 +89,22 @@ Required source-of-truth rules:
 - Operational health read model exposes webhook failures, dead-letter count,
   lifecycle event count, subscription event count, and last sync checkpoint.
 - Internal subscription/shop/support readers use normalized projections/history.
+- Staff-only `/internal` keeps its current accessible UI system pending an owner
+  decision; no Polaris migration was authorized or performed. Polaris App Home
+  remains scoped to embedded `/app`.
+
+### Architecture
+
+- Admin, AI, support, webhook-ingest, scheduled, and reconciliation services use
+  injected ports; Drizzle/model adapters are assembled at the wiring boundary.
 
 ### Agent setup and launch safety
 
 - `AGENTS.md` is source of truth; `CLAUDE.md` points to it.
 - `npm install` runs agent setup.
 - Locked skills install for Claude Code and Codex.
+- Installer tests use isolated validated destinations and protect committed
+  lockfile bytes from mutation.
 - Shopify MCP configured for Codex.
 - 48 locked skills verified for both hosts.
 - Production placeholder guard checks Cloudflare IDs, Shopify app URL/client ID,
@@ -110,21 +128,14 @@ Required source-of-truth rules:
 
 ### Internal operations UI
 
-- Shop list/detail, subscription, and support pages need the same checkpoint,
-  webhook/DLQ, relationship, subscription, cancellation, paid-status, and MRR
-  presentation.
-- Newly added dashboard health copy needs translation keys and Polaris-compliant
-  rendering instead of hardcoded English/utility styling.
-
-### Architecture cleanup
-
-- Several existing services still import model adapters directly. They need ports
-  and one wiring boundary to satisfy the inward dependency rule completely.
-- Remaining `Promise<unknown>` port returns should become concrete result types.
+- Owner decision remains required before any `/internal` design-system migration.
+  Until then, feature and copy changes must stay within its current accessible,
+  translated staff UI system.
 
 ### Launch validation
 
-- Disposable isolated `HOME`/`CODEX_HOME` setup tests are not complete.
+- Required Shopify Partner documentation search and 2026-07 schema validation
+  evidence remains incomplete.
 - Shopify config validation is externally blocked:
   - production requires non-interactive app linking/client ID;
   - dev returned HTTP `403`, “You are not a member of the requested organization”.
@@ -136,18 +147,18 @@ Required source-of-truth rules:
 Latest verified commands:
 
 ```text
-npm run verify                 typecheck + lint + 832 Vitest tests passed
+npm run verify                 typecheck + lint + 846 Vitest tests passed
 npm run db:migrate:local       no migrations pending
-npm run test:agent-setup       6/6 passed
-npm run install:skill -- --wait --locked
-                              48 locked skills verified for Claude Code and Codex
+npm run test:agent-setup       12/12 passed
 npm run build                  passed
 git diff --check               passed
+npm run check:placeholders     expected failure: 9 launch contract issues
 ```
 
-Latest local commits: `4ad0f2c`, `6c99ab2`, `99fb0a3`, `47ac8f0`
-
-Local `HEAD` matches `origin/main`; working tree clean at time of writing.
+`npm run verify` currently reports 92 files and 846 tests passed. Shopify dev and
+production CLI validation remains unrun in this gate because authorized org/app
+linkage is unavailable. Partner query schema validation also remains unverified;
+no external success is implied.
 
 ## Intentional Template Blockers
 
@@ -159,3 +170,4 @@ These are not fabricated in base template. Replace them in each derived app:
 - Managed Pricing plan handles and customer-facing plan names.
 - Legal entity, privacy contact, address, effective date, and public copy.
 - Production callback URLs and any feature-required access scopes.
+- Authorized Shopify organization and app access for CLI validation.
