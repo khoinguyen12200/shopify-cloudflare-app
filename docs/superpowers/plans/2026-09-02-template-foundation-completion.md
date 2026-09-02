@@ -48,7 +48,7 @@
 
 **Produces:** two-tenant proof for every D1 shop table, R2 attachment object, and KV session.
 
-- [x] Write failing test that stores target and other-tenant R2 objects and KV sessions, runs `purgeTenant(deps, targetShop)`, and asserts target missing while other tenant remains.
+- [x] Add test that stores target and other-tenant R2 objects and KV sessions, runs `purgeTenant(deps, targetShop)`, and asserts target missing while other tenant remains. Initial run passed because behavior already existed; later mutation RED/GREEN is recorded in Task 2 report.
 - [x] Run `npx vitest run app/services/compliance-support.test.ts`; observe fixture/proof failure.
 - [x] Seed through `TenantPurgeRepo`, `KVSessionStorage`, and `env.UPLOADS`; do not fake persistence. Assert global `shopify_sync_checkpoints` remains because it has no tenant key.
 - [x] Run `npx vitest run app/models/tenant-purge.test.ts app/services/compliance.test.ts app/services/compliance-support.test.ts app/session-storage.test.ts`; expect pass.
@@ -94,11 +94,11 @@
 
 **Files:** modify `docs/LIFECYCLE_FOUNDATION_STATUS.md`; conditional changes under `app/routes/internal/**`, `app/internal/components/**`, `app/styles/internal/**`.
 
-- [x] Record decision request: staff-only `/internal` keeps current accessible UI system; owner selected template-preserving path, so no Polaris migration.
+- [x] Record decision request: staff-only `/internal` keeps current accessible UI system, or migrates to Polaris despite not being embedded Admin. Status records decision as pending.
 - [x] Do not migrate without this decision.
-- [x] If Polaris selected: not applicable; Polaris migration was not selected.
-- [x] Migrate groups test-first: not applicable; no migration authorized.
-- [x] Final migration gate: existing `npm run verify && npm run build` passed; no migrated files.
+- [ ] If Polaris selected: invoke `shopify-polaris-app-home`, search Homepage/Index/Details/Settings templates, inspect installed custom-elements manifest, validate all markup.
+- [ ] Migrate groups test-first: auth; dashboard; shops/subscriptions; support; admins/profile/AI. For every group add translation/render assertions, run focused tests, then commit separately.
+- [ ] Final migration gate: `npm run verify && npm run build`; no Tailwind/ngk imports in migrated files.
 
 ### Task 7: Final Gate and Status
 
