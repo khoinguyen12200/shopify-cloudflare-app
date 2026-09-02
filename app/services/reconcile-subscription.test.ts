@@ -117,4 +117,16 @@ describe("refreshSubscription", () => {
     };
     await expect(refreshSubscription({ partner, subscriptions, clock: { now: () => 100 }, appId: "app" }, { shop: "one.myshopify.com", shopifyShopId: "gid://shopify/Shop/1" }, 100)).resolves.toMatchObject({ status: "failed", code: "SUBSCRIPTION_REFRESH_FAILED" });
   });
+
+  it("rejects malformed recurring price even when capped amount is valid", async () => {
+    const subscriptions: SubscriptionProjectionPort = { upsertSubscriptionProjection: async () => "applied" };
+    const partner: ShopifyPartnerPort = {
+      listHistoricalEvents: async () => ({ events: [], hasNextPage: false, endCursor: null }),
+      activeSubscription: async () => ({
+        shop: null, billingPeriod: "EVERY_30_DAYS", cancelAtEndOfCycle: false, trialEndsAt: null, currentBillingCycle: null, legacySubscriptionId: "sub-bad",
+        items: [{ handle: "usage", description: "Usage", price: { kind: "flat", amount: null, currency: "USD" }, cappedAmount: { amount: "100.00", currency: "USD" } }], pendingUpdate: null,
+      }),
+    };
+    await expect(refreshSubscription({ partner, subscriptions, clock: { now: () => 100 }, appId: "app" }, { shop: "one.myshopify.com", shopifyShopId: "gid://shopify/Shop/1" }, 100)).resolves.toMatchObject({ status: "failed", code: "SUBSCRIPTION_REFRESH_FAILED" });
+  });
 });

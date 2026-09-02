@@ -35,13 +35,13 @@ function subscriptionItems(response: ActiveSubscription | null): SubscriptionObs
   if (!response) return [];
   return response.items.flatMap((item) => {
     if (!item.price) throw new Error(`Missing Partner subscription price for ${item.handle ?? "subscription"}`);
-    const money = item.price?.kind === "flat" && item.price.amount && item.price.currency ? fromDecimalString(item.price.amount, item.price.currency) : null;
+    if (item.price.kind === "tiered") throw new Error(`Unsupported Partner tiered price for ${item.handle ?? "subscription"}`);
+    const money = item.price.amount && item.price.currency ? fromDecimalString(item.price.amount, item.price.currency) : null;
     const capped = item.cappedAmount && item.cappedAmount.amount && item.cappedAmount.currency
       ? fromDecimalString(item.cappedAmount.amount, item.cappedAmount.currency)
       : null;
-    if (item.price?.kind === "tiered") throw new Error(`Unsupported Partner tiered price for ${item.handle ?? "subscription"}`);
-    if (!money?.ok && !capped?.ok) throw new Error(`Invalid Partner subscription price for ${item.handle ?? "subscription"}`);
-    return [{ itemType: item.handle ?? "subscription", priceAmount: money?.ok ? money.value.amount : null, priceCurrency: item.price?.currency ?? null, cappedAmountAmount: capped?.ok ? capped.value.amount : null, cappedAmountCurrency: capped?.ok ? capped.value.currency : null }];
+    if (!money?.ok || (item.cappedAmount !== null && !capped?.ok)) throw new Error(`Invalid Partner subscription price for ${item.handle ?? "subscription"}`);
+    return [{ itemType: item.handle ?? "subscription", priceAmount: money.value.amount, priceCurrency: item.price.currency, cappedAmountAmount: capped?.ok ? capped.value.amount : null, cappedAmountCurrency: capped?.ok ? capped.value.currency : null }];
   });
 }
 
