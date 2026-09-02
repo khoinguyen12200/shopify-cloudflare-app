@@ -5,11 +5,13 @@ import { BlockStack, Card, InlineStack, Page, StatCard } from "ngk-dashboard";
 import { CircleDollarSign, Crown, Store, Users } from "lucide-react";
 import { requireAdminUser } from "~/services/admin-auth.server";
 import { AdminUserRepo } from "~/models/admin-users.server";
+import { OperationalHealthRepo } from "~/models/operational-health.server";
 import { ShopRepo } from "~/models/shops.server";
 import { ShopSubscriptionRepo } from "~/models/shop-subscriptions.server";
 import { computeBillingStats } from "~/billing/dashboard-stats";
 import { merchantTrend } from "~/domain/merchant-trend";
 import { formatMoney, toCurrency, zero } from "~/money";
+import { formatDateTime } from "~/i18n/format";
 import { unwrap } from "~/lib/result";
 import type { Locale } from "~/i18n/config";
 
@@ -33,10 +35,11 @@ const DashboardCharts = lazy(() => import("~/internal/components/DashboardCharts
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const user = await requireAdminUser(request);
 
-  const [admins, allShops, currentSubscriptions] = await Promise.all([
+  const [admins, allShops, currentSubscriptions, health] = await Promise.all([
     new AdminUserRepo().countAll(),
     new ShopRepo().listAll(),
     new ShopSubscriptionRepo().listCurrent(),
+    new OperationalHealthRepo().read(),
   ]);
 
   const activeShops = allShops.filter((shop) => shop.uninstalledAt === null);
@@ -62,11 +65,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       }));
     })),
     trend: merchantTrend(allShops, TREND_MONTHS, Date.now()),
+    health,
   };
 };
 
 export default function Dashboard() {
-  const { user, admins, stats, trend } = useLoaderData<typeof loader>();
+  const { user, admins, stats, trend, health } = useLoaderData<typeof loader>();
   const showCharts = useMountedCharts();
 
   return (
@@ -88,6 +92,20 @@ export default function Dashboard() {
           />
         </InlineStack>
 
+        <Card>
+          <div className="grid gap-4 p-6 sm:grid-cols-2 lg:grid-cols-4">
+            <HealthStat label="Webhook failures" value={health.failedWebhooks} />
+            <HealthStat label="Dead-letter webhooks" value={health.deadLetterWebhooks} />
+            <HealthStat label="Lifecycle events" value={health.lifecycleEvents} />
+            <HealthStat label="Subscription events" value={health.subscriptionEvents} />
+          </div>
+          <div className="border-t px-6 py-4 text-sm text-muted-foreground">
+            Last sync: {health.checkpoint?.lastSucceededAt
+              ? formatDateTime(LOCALE, health.checkpoint.lastSucceededAt)
+              : "Not yet completed"}
+          </div>
+        </Card>
+
         {showCharts ? (
           <Suspense fallback={<ChartsSkeleton />}>
             <DashboardCharts trend={trend} period={`Last ${TREND_MONTHS} months`} />
@@ -98,6 +116,10 @@ export default function Dashboard() {
       </BlockStack>
     </Page>
   );
+}
+
+function HealthStat({ label, value }: { label: string; value: number }) {
+  return <div><div className="text-sm text-muted-foreground">{label}</div><div className="text-2xl font-semibold tabular-nums">{value}</div></div>;
 }
 
 /** Never changes, so the subscribe callback is a stable no-op. */

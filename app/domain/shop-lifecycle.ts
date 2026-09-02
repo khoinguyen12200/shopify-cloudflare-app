@@ -71,3 +71,9 @@ export function applyRelationshipEvent(
 export function isOperationalRelationship(state: RelationshipState | null): boolean {
   return state?.kind === "installed" || state?.kind === "reactivated";
 }
+
+export function isOperationalRelationshipStatus(
+  status: "INSTALLED" | "UNINSTALLED" | "DEACTIVATED" | "REACTIVATED" | null,
+): boolean {
+  return status === "INSTALLED" || status === "REACTIVATED";
+}

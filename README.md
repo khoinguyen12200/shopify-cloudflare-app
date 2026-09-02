@@ -180,6 +180,16 @@ point at nothing — which fails on a real request, with an error that says noth
 about the cause. The check runs first, so it costs seconds rather than a full
 build.
 
+The same guard checks production `client_id`, app URL and callback drift against
+`shopify.app.toml`, matching dev/production scopes, Managed Pricing handles,
+legal identity/contact/effective date, and public privacy/support/pricing copy.
+Template TODOs are intentional: replace them before launch. Required secrets are
+`SHOPIFY_API_SECRET`, `SHOPIFY_CUSTOM_DOMAIN`, `INTERNAL_SESSION_SECRET`, and
+`SHOPIFY_PARTNER_API_TOKEN`; set them with `wrangler secret put` in production.
+Create D1/KV/R2 resources first, copy IDs into `wrangler.jsonc`, then run
+migrations before deploy. Keep Shopify Partner app ID and plan handles aligned
+with TOML and billing plan registry.
+
 **Migrations retry on a transient Cloudflare 5xx.** `wrangler d1 migrations apply`
 intermittently fails while querying migration state; in a deploy chain that
 aborts the whole release for no reason. Applying migrations is idempotent, so

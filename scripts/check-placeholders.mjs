@@ -109,6 +109,54 @@ export function configForEnv(config, envName) {
   return config.env?.[envName];
 }
 
+function tomlString(text, key) {
+  return text.match(new RegExp(`^${key}\\s*=\\s*"([^"]*)"`, "m"))?.[1] ?? "";
+}
+
+function tomlStrings(text, key) {
+  const value = text.match(new RegExp(`^${key}\\s*=\\s*\\[([^\\]]*)\\]`, "m"))?.[1] ?? "";
+  return [...value.matchAll(/"([^"]*)"/g)].map((match) => match[1]);
+}
+
+export function validateLaunchContract(files) {
+  const issues = [];
+  const production = configForEnv(files.wrangler, "production");
+  if (!production) return ['No "production" environment in wrangler.jsonc'];
+  if (findPlaceholders(production).length > 0) issues.push("Cloudflare production binding contains placeholder values");
+
+  const vars = production.vars ?? {};
+  for (const key of ["SHOPIFY_API_KEY", "SHOPIFY_APP_URL", "SHOPIFY_PARTNER_APP_ID"]) {
+    if (!vars[key] || PLACEHOLDER.test(vars[key]) || vars[key] === "https://example.com") {
+      issues.push(`${key} is missing or placeholder`);
+    }
+  }
+  if (!(production.secrets?.required ?? []).includes("SHOPIFY_PARTNER_API_TOKEN")) {
+    issues.push("SHOPIFY_PARTNER_API_TOKEN secret is not declared");
+  }
+
+  const clientId = tomlString(files.productionToml, "client_id");
+  const appUrl = tomlString(files.productionToml, "application_url");
+  const redirects = tomlStrings(files.productionToml, "redirect_urls");
+  if (!clientId || PLACEHOLDER.test(clientId)) issues.push("shopify.app.toml client_id is missing or placeholder");
+  if (!appUrl || PLACEHOLDER.test(appUrl) || appUrl === "https://example.com") issues.push("shopify.app.toml application_url is placeholder");
+  if (redirects.length !== 1 || redirects[0] !== `${appUrl}/auth/callback`) issues.push("shopify.app.toml redirect_urls drift from application_url");
+  if (vars.SHOPIFY_APP_URL && appUrl && vars.SHOPIFY_APP_URL !== appUrl) issues.push("SHOPIFY_APP_URL drifts from shopify.app.toml application_url");
+  if (vars.SHOPIFY_API_KEY && clientId && vars.SHOPIFY_API_KEY !== clientId) issues.push("SHOPIFY_API_KEY drifts from shopify.app.toml client_id");
+
+  const productionScopes = tomlString(files.productionToml, "scopes");
+  const developmentScopes = tomlString(files.developmentToml, "scopes");
+  if (productionScopes !== developmentScopes) issues.push("scope drift between production and development configs");
+  for (const scope of productionScopes.split(",").map((scope) => scope.trim()).filter(Boolean)) {
+    issues.push(`unused scope ${scope}; base template must start with no scopes`);
+  }
+  if (PLACEHOLDER.test(files.legal) || !/LAST_UPDATED\s*=\s*"\d{4}-\d{2}-\d{2}"/.test(files.legal)) {
+    issues.push("legal identity/contact/date contains TODO or invalid effective date");
+  }
+  if (PLACEHOLDER.test(files.plans)) issues.push("Managed Pricing plan handle contains placeholder");
+  if (PLACEHOLDER.test(files.publicCopy)) issues.push("public pricing/support/privacy copy contains TODO");
+  return issues;
+}
+
 /**
  * The CLI. Wrapped in a function and guarded below so this module can be
  * IMPORTED by its tests — top-level `process.exit` would otherwise kill the test
@@ -143,12 +191,20 @@ function main() {
     process.exit(2);
   }
 
-  const hits = findPlaceholders(envConfig);
-  if (hits.length > 0) {
+  const files = {
+    wrangler: config,
+    productionToml: readFileSync(join(repoRoot, "shopify.app.toml"), "utf8"),
+    developmentToml: readFileSync(join(repoRoot, "shopify.app.dev.toml"), "utf8"),
+    legal: readFileSync(join(repoRoot, "app/legal/content.ts"), "utf8"),
+    plans: readFileSync(join(repoRoot, "app/billing/plans.ts"), "utf8"),
+    publicCopy: readFileSync(join(repoRoot, "app/i18n/locales/en/public.json"), "utf8"),
+  };
+  const issues = validateLaunchContract(files);
+  if (issues.length > 0) {
     console.error(
-      `\nRefusing to deploy "${envName}": ${hits.length} placeholder value${hits.length === 1 ? "" : "s"} left in wrangler.jsonc\n`,
+      `\nRefusing to deploy "${envName}": ${issues.length} launch contract issue${issues.length === 1 ? "" : "s"}\n`,
     );
-    for (const hit of hits) console.error(`  ${hit.path} = ${JSON.stringify(hit.value)}`);
+    for (const issue of issues) console.error(`  ${issue}`);
     console.error(
       "\nFill these in first:\n" +
         "  npx wrangler d1 create <name>\n" +

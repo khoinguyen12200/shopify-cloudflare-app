@@ -1,7 +1,7 @@
 import { applyRate, fromMinorUnits, sum, toCurrency, type Money } from "~/money";
 import type { Shop } from "~/db/schema";
 import type { SubscriptionStatus } from "~/domain/subscription-lifecycle";
-import { isOperationalRelationship } from "~/domain/shop-lifecycle";
+import { isOperationalRelationshipStatus } from "~/domain/shop-lifecycle";
 
 export interface BillingProjection {
   readonly shop: string;
@@ -49,13 +49,7 @@ export function computeBillingStats(projections: readonly BillingProjection[]): 
   const shops = new Set(projections.map((projection) => projection.shop));
 
   for (const projection of projections) {
-    if (!isOperationalRelationship(projection.relationshipStatus ? {
-      kind: projection.relationshipStatus === "INSTALLED" || projection.relationshipStatus === "REACTIVATED"
-        ? projection.relationshipStatus === "INSTALLED" ? "installed" : "reactivated"
-        : projection.relationshipStatus === "UNINSTALLED" ? "uninstalled" : "deactivated",
-      occurredAt: 0,
-      externalId: "",
-    } : null)) continue;
+    if (!isOperationalRelationshipStatus(projection.relationshipStatus)) continue;
     if (!projection.subscriptionStatus || !PAID_STATUSES.has(projection.subscriptionStatus)) continue;
     paidShops.add(projection.shop);
 
