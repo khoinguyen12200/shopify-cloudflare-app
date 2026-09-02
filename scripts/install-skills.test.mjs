@@ -43,15 +43,19 @@ test("locked install fails when lockfile changes during verification", async () 
   await writeFile(hook, `const fs = require("node:fs");\nconst read = fs.readFileSync.bind(fs);\nlet reads = 0;\nfs.readFileSync = (file, ...args) => { if (String(file).endsWith("skills-lock.json") && reads++ === 1) fs.writeFileSync(file, Buffer.concat([read(file), Buffer.from(" ")])); return read(file, ...args); };\n`);
   const lockPath = path.join(repoRoot, "skills-lock.json");
   const before = await readFile(lockPath);
-  const result = spawnSync(
-    process.execPath,
-    ["--require", hook, installer, "--wait", "--locked", "--temp-root", root],
-    { cwd: repoRoot, encoding: "utf8" },
-  );
-  await writeFile(lockPath, before);
-
-  assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /changed skills-lock\.json/);
+  let result;
+  try {
+    result = spawnSync(
+      process.execPath,
+      ["--require", hook, installer, "--wait", "--locked", "--temp-root", root],
+      { cwd: repoRoot, encoding: "utf8" },
+    );
+    assert.notDeepEqual(await readFile(lockPath), before);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /changed skills-lock\.json/);
+  } finally {
+    await writeFile(lockPath, before);
+  }
 });
 
 test("existing destination symlink cannot escape temporary root", async () => {
@@ -66,4 +70,19 @@ test("existing destination symlink cannot escape temporary root", async () => {
 
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /symlink|under --temp-root/);
+});
+
+test("parent symlink cannot redirect destination writes outside temporary root", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "skills-installer-"));
+  const outside = await mkdtemp(path.join(tmpdir(), "skills-outside-"));
+  await symlink(outside, path.join(root, "nest"));
+  const codexDir = path.join(root, "nest", "codex");
+  const result = spawnSync(
+    process.execPath,
+    [installer, "--wait", "--locked", "--temp-root", root, "--codex-dir", codexDir],
+    { cwd: repoRoot, encoding: "utf8" },
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.equal(await readFile(path.join(outside, "codex", "impeccable", "SKILL.md")).catch(() => null), null);
 });

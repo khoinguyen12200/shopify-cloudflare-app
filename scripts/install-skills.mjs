@@ -78,7 +78,17 @@ if ((explicitCodexDir || explicitClaudeDir) && !tempRootValue) {
   console.error("--codex-dir and --claude-dir require --temp-root");
   process.exit(1);
 }
-const tempRoot = tempRootValue ? resolve(tempRootValue) : repoRoot;
+const tempRoot = tempRootValue ? realpathSync(resolve(tempRootValue)) : repoRoot;
+function hasSymlinkAncestor(path) {
+  let current = path;
+  while (current !== tempRoot && relative(tempRoot, current) !== "") {
+    if (existsSync(current) && lstatSync(current).isSymbolicLink()) return true;
+    const parent = dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  return false;
+}
 function destination(name, value, fallback) {
   const path = resolve(value || fallback);
   const outside = relative(tempRoot, path).startsWith("..") || isAbsolute(relative(tempRoot, path));
@@ -86,8 +96,8 @@ function destination(name, value, fallback) {
     console.error(`${name} must be under --temp-root`);
     process.exit(1);
   }
-  if (existsSync(path) && lstatSync(path).isSymbolicLink()) {
-    console.error(`${name} cannot be a symlink under --temp-root`);
+  if (hasSymlinkAncestor(path)) {
+    console.error(`${name} cannot use symlink under --temp-root`);
     process.exit(1);
   }
   if (existsSync(path)) {
