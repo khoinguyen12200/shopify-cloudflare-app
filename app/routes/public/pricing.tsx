@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { i18nServer } from "~/i18n/i18n.server";
 import { useLocale } from "~/i18n/useLocale";
 import { formatMoney } from "~/money";
-import { FEATURED_PLAN_KEY, PLAN_LIST } from "~/billing/plans";
+import { FEATURED_PLAN_HANDLE, PLAN_LIST } from "~/billing/plans";
 
 export const handle = { i18n: ["common", "public"] };
 
@@ -46,10 +46,10 @@ export default function Pricing() {
 
         <div className="grid">
           {PLAN_LIST.map((plan) => {
-            const popular = plan.key === FEATURED_PLAN_KEY;
+            const popular = plan.handle === FEATURED_PLAN_HANDLE;
             const free = plan.priceMonthly.amount === 0;
             return (
-              <article key={plan.key} className="card stack">
+              <article key={plan.handle} className="card stack">
                 <div className="row">
                   <h3>{plan.name}</h3>
                   {popular && <span className="badge">{t("pricing.popular")}</span>}

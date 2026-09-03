@@ -71,6 +71,13 @@
     },
     "planLabel": "Tu plan",
     "managedNote": "Los planes los gestiona Shopify. Usa el botón de arriba para ver los planes disponibles, mejorar tu plan o cambiar tu suscripción.",
+    "processing": {
+      "heading": "Actualizando tu plan",
+      "body": "Estamos comprobando los últimos detalles de Shopify. Normalmente tarda solo un momento.",
+      "spinnerLabel": "Actualizando tu plan",
+      "failedHeading": "No hemos podido actualizar tu plan",
+      "failedBody": "Inténtalo de nuevo para comprobar los últimos detalles de Shopify."
+    },
     "price": {
       "perMonth": "{{price}}/mes",
       "perYear": "{{price}}/año",
@@ -113,8 +120,9 @@
       "emailHelp": "Responderemos aquí y también en la aplicación. Déjalo vacío para recibir avisos solo en la aplicación.",
       "cc": "Copiar también a",
       "ccHelp": "Reciben todas las respuestas y pueden responder. Hasta {{max}}.",
-      "attachments": "Capturas o un vídeo",
+      "attachments": "Capturas, vídeos o archivos",
       "addFiles": "Añadir archivos",
+      "attachmentLimits": "Hasta 10 MB para imágenes, 100 MB para vídeos y 25 MB para archivos",
       "emailHeading": "Respuestas",
       "ccEmpty": "No hay nadie más en copia.",
       "ccAdd": "Añadir correo",
@@ -145,7 +153,7 @@
       "empty_reply": "Escribe un mensaje o adjunta un archivo.",
       "upload_failed": "No se pudo subir el archivo. Inténtalo de nuevo.",
       "too_large": "El archivo es demasiado grande.",
-      "unsupported_type": "Solo se pueden adjuntar imágenes y vídeos.",
+      "unsupported_type": "Ese tipo de archivo no es compatible.",
       "invalid_cc": "Esa lista de copias no es válida. Usa una dirección por línea.",
       "invalid_cc_email": "Eso no parece un correo electrónico.",
       "duplicate_cc_email": "Esa dirección ya está en la lista.",

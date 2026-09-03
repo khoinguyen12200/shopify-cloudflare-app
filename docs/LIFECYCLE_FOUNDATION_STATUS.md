@@ -45,7 +45,8 @@ Required source-of-truth rules:
 - Duplicate event protection.
 - Checkpoint success only after all pages finish.
 - Bounded checkpoint failure metadata.
-- Active subscription refresh after OAuth and embedded app access.
+- Active subscription refresh after OAuth and the hosted-pricing return; routine
+  embedded navigation reads the local D1 projection.
 - Null active subscription projects `NONE`.
 - Reconciliation failures do not silently become free subscriptions.
 - Active subscription normalization preserves Partner identity, status, periods,
@@ -140,6 +141,9 @@ Required source-of-truth rules:
 - Shopify config validation is externally blocked:
   - production requires non-interactive app linking/client ID;
   - dev returned HTTP `403`, “You are not a member of the requested organization”.
+- Local Partner API smoke test reached Shopify successfully, but Historical Events
+  returned `Partner API client is missing the following permissions: [:list_events]`.
+  Grant the client event-listing access before expecting D1 history reconciliation.
 - Production placeholder check intentionally fails until each new app fills real
   IDs, URLs, legal identity, support/privacy/pricing copy, and plan handles.
 
@@ -156,7 +160,7 @@ git diff --check               passed
 npm run check:placeholders     expected failure: 10 launch contract issues
 ```
 
-`npm run verify` currently reports 92 files and 870 tests passed. Shopify dev and
+`npm run verify` currently reports 95 files and 883 tests passed. Shopify dev and
 production CLI validation remains unrun in this gate because authorized org/app
 linkage is unavailable. Partner query schema validation passed; no live Partner
 API success is implied.

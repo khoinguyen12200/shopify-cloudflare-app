@@ -115,6 +115,7 @@
 **Files:** modify `docs/LIFECYCLE_FOUNDATION_STATUS.md`.
 
 - [x] Run `npm run verify`, `npm run db:migrate:local`, `npm run test:agent-setup`, `npm run build`, and `git diff --check`; all exit zero.
+- [x] Keep routine billing navigation on the D1 projection; refresh Partner subscription data only after a non-empty Shopify `plan_handle` return or during reconciliation.
 - [x] Run `npm run check:placeholders`; expected failure until derived app supplies values. Guard remains strict.
 - [x] Update status with coding results and explicitly record `/internal` no-Polaris decision.
 

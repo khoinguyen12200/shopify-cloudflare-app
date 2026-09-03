@@ -124,7 +124,8 @@ export class ShopifyPartnerAdapter implements ShopifyPartnerPort {
   }
 
   async activeSubscription(appId: string, shopId: string): Promise<ActiveSubscription | null> {
-    const response = await this.dependencies.fetch(this.endpoint(), {
+    const request = this.dependencies.fetch;
+    const response = await request(this.endpoint(), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -147,19 +148,22 @@ export class ShopifyPartnerAdapter implements ShopifyPartnerPort {
     readonly shopId?: string;
     readonly cursor?: string | null;
     readonly occurredAtMin?: string;
+    readonly occurredAtMax?: string;
   }) {
     const filter = {
       subjectType: "APP",
       subjectId: input.appId,
       ...(input.shopId ? { shopId: input.shopId } : {}),
       ...(input.occurredAtMin ? { occurredAtMin: input.occurredAtMin } : {}),
+      ...(input.occurredAtMax ? { occurredAtMax: input.occurredAtMax } : {}),
       eventTypes: [
         "RELATIONSHIP_INSTALLED", "RELATIONSHIP_UNINSTALLED", "RELATIONSHIP_DEACTIVATED", "RELATIONSHIP_REACTIVATED",
         "SUBSCRIPTION_CREATED", "SUBSCRIPTION_UPDATED", "SUBSCRIPTION_CANCELLATION_SCHEDULED", "SUBSCRIPTION_CANCELED",
         "SUBSCRIPTION_FROZEN", "SUBSCRIPTION_UNFROZEN",
       ],
     };
-    const response = await this.dependencies.fetch(this.endpoint(), {
+    const request = this.dependencies.fetch;
+    const response = await request(this.endpoint(), {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": this.dependencies.token },
       body: JSON.stringify({ query: historicalEventsQuery, variables: { filter, cursor: input.cursor ?? null } }),

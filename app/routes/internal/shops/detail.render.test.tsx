@@ -50,7 +50,7 @@ function event(overrides: Partial<SubscriptionHistoryRow> = {}): SubscriptionHis
   };
 }
 
-async function render(data: { shop: Shop; history: SubscriptionHistoryRow[]; events: EventHistoryRow[] }) {
+async function render(data: { shop: Shop; history: SubscriptionHistoryRow[]; events: EventHistoryRow[]; reconciliation?: { lastSucceededAt: number | null; lastFailedAt: number | null; failureCode: string | null; failureDetail: string | null } | null }) {
   const routes: RouteObject[] = [
     { path: "/internal/shops/:shop", Component: ShopDetail, loader: () => data },
   ];
@@ -81,10 +81,11 @@ describe("the internal shop detail page", () => {
     expect(html).toContain("Uninstalled");
   });
 
-  it("shows subscription history with plan, status and price", async () => {
+  it("shows subscription history without implying event prices", async () => {
     const html = await render({ shop: shop(), history: [event()], events: [] });
     expect(html).toContain("todo-pro");
-    expect(html).toContain("$19.00");
+    expect(html).not.toContain(">Price<");
+    expect(html).not.toContain("$19.00");
   });
 
   it("shows all shop event history", async () => {
@@ -96,5 +97,11 @@ describe("the internal shop detail page", () => {
     expect(html).toContain("Event history");
     expect(html).toContain("Webhook: app/uninstalled");
     expect(html).toContain("processed");
+  });
+
+  it("shows the latest Partner reconciliation failure", async () => {
+    const html = await render({ shop: shop(), history: [], events: [], reconciliation: { lastSucceededAt: null, lastFailedAt: 1_700_000_000_000, failureCode: "HISTORY_SYNC_FAILED", failureDetail: "Manage apps required" } });
+    expect(html).toContain("Partner reconciliation failed");
+    expect(html).toContain("Manage apps required");
   });
 });

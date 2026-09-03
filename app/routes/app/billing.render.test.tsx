@@ -12,7 +12,22 @@ import { i18nOptions } from "~/i18n/options";
 import { fromMinorUnits, toCurrency } from "~/money";
 import { unwrap } from "~/lib/result";
 import type { BillingStatus } from "~/billing/subscription-status";
-import Billing from "./billing";
+import Billing, { shouldRefreshSubscription, shouldShowProcessing } from "./billing";
+
+describe("billing refresh trigger", () => {
+  it("does not call Shopify on ordinary billing navigation", () => {
+    expect(shouldRefreshSubscription("https://example.test/app/billing?shop=one.myshopify.com")).toBe(false);
+  });
+
+  it("refreshes after Shopify returns from hosted plan selection", () => {
+    expect(shouldRefreshSubscription("https://example.test/app/billing?plan_handle=pro")).toBe(true);
+  });
+
+  it("shows processing UI while a hosted-pricing return is being reconciled", () => {
+    expect(shouldShowProcessing("https://example.test/app/billing?plan_handle=pro")).toBe(true);
+    expect(shouldShowProcessing("https://example.test/app/billing")).toBe(false);
+  });
+});
 
 const USD = unwrap(toCurrency("USD"));
 const price = (minor: number) => unwrap(fromMinorUnits(minor, USD));
@@ -39,7 +54,7 @@ const subscribed = (
  * particularly the money, where showing a figure the merchant is not being
  * charged is the failure this section's pure helper exists to prevent.
  */
-async function render(status: BillingStatus, locale: "en" | "es" = "en") {
+async function render(status: BillingStatus, locale: "en" | "es" = "en", planHandle: string | null = null) {
   const instance = createInstance();
   await instance.use(initReactI18next).init({ ...i18nOptions, lng: locale });
 
@@ -47,7 +62,7 @@ async function render(status: BillingStatus, locale: "en" | "es" = "en") {
     {
       path: "/app/billing",
       Component: Billing,
-      loader: () => ({ status, pricingPlansUrl: "https://admin.shopify.com/plans" }),
+      loader: () => ({ status, planHandle, pricingPlansUrl: "https://admin.shopify.com/plans" }),
     },
   ];
   const handler = createStaticHandler(routes);
@@ -88,6 +103,11 @@ describe("the current-plan section", () => {
 
     expect(html).toContain("Manage plan");
     expect(html).not.toContain(">Upgrade<");
+  });
+
+  it("marks the card whose immutable Shopify handle is active", async () => {
+    const html = await render(subscribed({ name: "Localized Pro" }), "en", "pro");
+    expect(html).toContain("Current plan");
   });
 
   it("quotes a monthly subscriber a monthly figure", async () => {

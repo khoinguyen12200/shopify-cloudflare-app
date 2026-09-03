@@ -5,6 +5,7 @@ export interface ShopifyPartnerPort {
     readonly shopId?: string;
     readonly cursor?: string | null;
     readonly occurredAtMin?: string;
+    readonly occurredAtMax?: string;
   }): Promise<{ readonly events: PartnerHistoryEvent[]; readonly hasNextPage: boolean; readonly endCursor: string | null }>;
 }
 

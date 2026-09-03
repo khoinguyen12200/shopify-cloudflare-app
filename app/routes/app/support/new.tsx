@@ -204,6 +204,7 @@ export default function NewTicket() {
             <AttachmentPicker
               label={t("support.form.attachments")}
               addLabel={t("support.form.addFiles")}
+              limitsLabel={t("support.form.attachmentLimits")}
               uploads={uploads}
               errorLabel={(reason) => t(supportErrorKey(reason))}
             />

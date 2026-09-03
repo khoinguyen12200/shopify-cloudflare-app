@@ -19,7 +19,8 @@ export interface ThreadMessage {
     filename: string;
     contentType: string;
     url: string;
-    isVideo: boolean;
+    sizeBytes: number;
+    kind: "image" | "video" | "file";
   }[];
 }
 
@@ -67,17 +68,27 @@ export const THREAD_CSS = `
 .sup-msg__files { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-block-start: 0.5rem; }
 .sup-msg__file { display: block; border-radius: 10px; overflow: hidden; max-inline-size: 12rem; }
 .sup-msg__file img, .sup-msg__file video { display: block; inline-size: 100%; block-size: auto; }
+.sup-msg__download { display: flex; align-items: center; gap: 0.625rem; padding: 0.625rem 0.75rem; border: 1px solid var(--sup-theirs-border); border-radius: 10px; text-decoration: none; color: inherit; min-inline-size: 13rem; }
+.sup-msg--mine .sup-msg__download { border-color: var(--sup-mine-border); }
+.sup-msg__download-icon { font-size: 0.7rem; font-weight: 750; letter-spacing: 0.04em; color: var(--sup-meta); }
+.sup-msg__download-copy { min-inline-size: 0; display: flex; flex-direction: column; gap: 0.125rem; }
+.sup-msg__download-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sup-msg__download-meta { font-size: 0.75rem; color: var(--sup-meta); }
 `;
 
 export function Thread({
   messages,
   youLabel,
   formatWhen,
+  formatFileSize,
+  downloadLabel,
 }: {
   messages: readonly ThreadMessage[];
   /** What to call the merchant's own messages — "You", translated. */
   youLabel: string;
   formatWhen: (at: number) => string;
+  formatFileSize: (sizeBytes: number) => string;
+  downloadLabel: string;
 }) {
   return (
     <div className="sup-thread">
@@ -101,7 +112,7 @@ export function Thread({
               {message.attachments.length > 0 && (
                 <div className="sup-msg__files">
                   {message.attachments.map((file) =>
-                    file.isVideo ? (
+                    file.kind === "video" ? (
                       // Playable in place: making someone download a screen
                       // recording to see it defeats the point of attaching one.
                       <video
@@ -111,7 +122,7 @@ export function Thread({
                         controls
                         preload="metadata"
                       />
-                    ) : (
+                    ) : file.kind === "image" ? (
                       <a
                         key={file.id}
                         className="sup-msg__file"
@@ -120,6 +131,14 @@ export function Thread({
                         rel="noreferrer"
                       >
                         <img src={file.url} alt={file.filename} loading="lazy" />
+                      </a>
+                    ) : (
+                      <a key={file.id} className="sup-msg__download" href={file.url} download={file.filename}>
+                        <span className="sup-msg__download-icon">{fileExtensionLabel(file.filename)}</span>
+                        <span className="sup-msg__download-copy">
+                          <span className="sup-msg__download-name">{file.filename}</span>
+                          <span className="sup-msg__download-meta">{formatFileSize(file.sizeBytes)} · {downloadLabel}</span>
+                        </span>
                       </a>
                     ),
                   )}
@@ -131,4 +150,9 @@ export function Thread({
       })}
     </div>
   );
+}
+
+function fileExtensionLabel(filename: string): string {
+  const extension = filename.split(".").pop()?.slice(0, 4).toUpperCase();
+  return extension || "FILE";
 }

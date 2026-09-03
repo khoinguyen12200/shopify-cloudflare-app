@@ -14,26 +14,19 @@ import {
   Text,
 } from "ngk-dashboard";
 import { requireAdminUser } from "~/services/admin-auth.server";
-import { adminUsers } from "~/wiring.server";
+import { adminUsers, refreshShopHistory, refreshShopSubscription } from "~/wiring.server";
+import { getEnv } from "~/request-context.server";
 import { ShopRepo } from "~/models/shops.server";
 import { ShopifyEventRepo } from "~/models/shopify-events.server";
+import { ShopSyncCheckpointRepo } from "~/models/shop-sync-checkpoints.server";
 import { WebhookDeliveryRepo } from "~/models/webhook-deliveries.server";
 import { planForShopifyHandle } from "~/billing/plans";
 import { formatDateTime } from "~/i18n/format";
-import { formatMoney, fromMinorUnits, toCurrency } from "~/money";
 import type { Locale } from "~/i18n/config";
 import type { SubscriptionStatus } from "~/domain/subscription-lifecycle";
 
 /** The internal console is staff-only and English-only — no i18n here. */
 const LOCALE: Locale = "en";
-
-function displayMoney(amount: number | null, currency: string | null): string {
-  if (amount === null || currency === null) return "—";
-  const code = toCurrency(currency);
-  if (!code.ok) return "—";
-  const money = fromMinorUnits(amount, code.value);
-  return money.ok ? formatMoney(LOCALE, money.value) : "—";
-}
 
 const STATUS_LABEL: Record<SubscriptionStatus, string> = {
   ACTIVE: "Active",
@@ -70,11 +63,19 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const shop = await new ShopRepo().get(shopDomain);
   if (!shop) throw new Response("Not found", { status: 404 });
 
+  if (shop.shopifyShopId === null || shop.lastReconciledAt === null || Date.now() - shop.lastReconciledAt > 5 * 60 * 1000) {
+    await Promise.all([
+      refreshShopHistory(getEnv(), shopDomain),
+      refreshShopSubscription(getEnv(), shopDomain),
+    ]);
+  }
+
   const eventsRepo = new ShopifyEventRepo();
-  const [history, relationshipEvents, deliveries] = await Promise.all([
+  const [history, relationshipEvents, deliveries, reconciliation] = await Promise.all([
     eventsRepo.listSubscriptionEvents(shopDomain),
     eventsRepo.listRelationshipEvents(shopDomain),
     new WebhookDeliveryRepo().listForShop(shopDomain),
+    new ShopSyncCheckpointRepo().read(`partner_history:${shopDomain}`),
   ]);
   const events: EventHistoryRow[] = [
     ...relationshipEvents.map((event) => ({
@@ -100,15 +101,25 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     })),
   ].sort((left, right) => right.occurredAt - left.occurredAt);
 
-  return { shop, history, events };
+  return { shop, history, events, reconciliation };
 };
 
 export default function ShopDetail() {
-  const { shop, history, events } = useLoaderData<typeof loader>();
+  const { shop, history, events, reconciliation } = useLoaderData<typeof loader>();
 
   return (
     <Page title={shop.shop} subtitle="Install history and subscription activity." fullWidth>
       <div className="flex flex-col gap-4">
+        {reconciliation?.lastFailedAt && (
+          <Card>
+            <CardContent className="pt-6">
+              <Text as="p" className="font-medium text-destructive">Partner reconciliation failed</Text>
+              <Text as="p" className="mt-1 text-sm text-muted-foreground">
+                {reconciliation.failureDetail ?? reconciliation.failureCode ?? "Unknown Partner API failure"}
+              </Text>
+            </CardContent>
+          </Card>
+        )}
         <Card>
           <CardContent className="grid gap-4 pt-6 sm:grid-cols-3">
             <div>
@@ -188,7 +199,6 @@ export default function ShopDetail() {
                 <TableRow>
                   <TableHead>Plan</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Price</TableHead>
                   <TableHead>Changed</TableHead>
                 </TableRow>
               </TableHeader>
@@ -207,9 +217,6 @@ export default function ShopDetail() {
                         <Badge variant={STATUS_TONE[event.status]}>
                           {STATUS_LABEL[event.status]}
                         </Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {displayMoney(event.priceAmount, event.priceCurrency)}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {formatDateTime(LOCALE, event.occurredAt)}

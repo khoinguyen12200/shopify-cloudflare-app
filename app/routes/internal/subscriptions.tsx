@@ -20,19 +20,10 @@ import { ShopifyEventRepo } from "~/models/shopify-events.server";
 import { planForShopifyHandle } from "~/billing/plans";
 import { formatDateTime } from "~/i18n/format";
 import type { Locale } from "~/i18n/config";
-import { formatMoney, fromMinorUnits, toCurrency } from "~/money";
 import type { SubscriptionStatus } from "~/domain/subscription-lifecycle";
 
 /** The internal console is staff-only and English-only — no i18n here. */
 const LOCALE: Locale = "en";
-
-function displayMoney(amount: number | null, currency: string | null): string {
-  if (amount === null || currency === null) return "—";
-  const code = toCurrency(currency);
-  if (!code.ok) return "—";
-  const money = fromMinorUnits(amount, code.value);
-  return money.ok ? formatMoney(LOCALE, money.value) : "—";
-}
 
 /** How many rows of history to show before this needs its own pagination. */
 const RECENT_LIMIT = 200;
@@ -88,7 +79,6 @@ export default function Subscriptions() {
                   <TableHead>Shop</TableHead>
                   <TableHead>Plan</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Price</TableHead>
                   <TableHead>Changed</TableHead>
                 </TableRow>
               </TableHeader>
@@ -101,9 +91,6 @@ export default function Subscriptions() {
                       <Badge variant={STATUS_TONE[event.status]}>
                         {STATUS_LABEL[event.status]}
                       </Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                        {displayMoney(event.priceAmount, event.priceCurrency)}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {formatDateTime(LOCALE, event.occurredAt)}

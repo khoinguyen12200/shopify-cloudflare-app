@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
-  cheapestPaidPlanKey,
-  FEATURED_PLAN_KEY,
+  cheapestPaidPlanHandle,
+  FEATURED_PLAN_HANDLE,
   PLANS,
   planForShopifyHandle,
   priceFor,
@@ -32,19 +32,19 @@ describe("PLANS", () => {
   });
 });
 
-describe("FEATURED_PLAN_KEY", () => {
+describe("FEATURED_PLAN_HANDLE", () => {
   it("names a plan that actually exists in the catalogue", () => {
-    expect(PLANS[FEATURED_PLAN_KEY]).toBeDefined();
+    expect(PLANS[FEATURED_PLAN_HANDLE]).toBeDefined();
   });
 
   it("is a paid plan — a free plan is never what a pricing page features", () => {
-    expect(PLANS[FEATURED_PLAN_KEY].priceMonthly.amount).toBeGreaterThan(0);
+    expect(PLANS[FEATURED_PLAN_HANDLE].priceMonthly.amount).toBeGreaterThan(0);
   });
 });
 
-describe("cheapestPaidPlanKey", () => {
-  const plan = (key: string, monthly: number) => ({
-    key,
+describe("cheapestPaidPlanHandle", () => {
+  const plan = (handle: string, monthly: number) => ({
+    handle,
     priceMonthly: { amount: monthly },
   });
 
@@ -52,18 +52,18 @@ describe("cheapestPaidPlanKey", () => {
     // Derived from the ladder, so adding a tier below the current entry plan
     // moves the highlight on its own.
     expect(
-      cheapestPaidPlanKey([plan("free", 0), plan("starter", 900), plan("pro", 1900)]),
+      cheapestPaidPlanHandle([plan("free", 0), plan("starter", 900), plan("pro", 1900)]),
     ).toBe("starter");
   });
 
   it("ignores free plans when choosing", () => {
-    expect(cheapestPaidPlanKey([plan("free", 0), plan("pro", 1900)])).toBe("pro");
+    expect(cheapestPaidPlanHandle([plan("free", 0), plan("pro", 1900)])).toBe("pro");
   });
 
   it("falls back to the first plan when every plan is free", () => {
     // Nothing is for sale, so there is nothing to upsell — but the UI still
     // needs a key rather than undefined.
-    expect(cheapestPaidPlanKey([plan("free", 0), plan("also-free", 0)])).toBe("free");
+    expect(cheapestPaidPlanHandle([plan("free", 0), plan("also-free", 0)])).toBe("free");
   });
 });
 
@@ -79,7 +79,7 @@ describe("priceFor", () => {
 
 describe("planForShopifyHandle", () => {
   it("resolves a known handle to its plan", () => {
-    expect(planForShopifyHandle(PLANS.pro.shopifyPlanHandle)?.key).toBe("pro");
+    expect(planForShopifyHandle(PLANS.pro.handle)?.handle).toBe("pro");
   });
 
   it("returns null for an unrecognised handle", () => {

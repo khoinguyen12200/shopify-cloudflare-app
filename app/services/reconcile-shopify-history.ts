@@ -39,6 +39,12 @@ export type ReconcileResult =
   | { readonly status: "succeeded"; readonly pages: number; readonly events: number }
   | { readonly status: "failed"; readonly code: string; readonly detail: string };
 
+export interface ShopifyShopIdentity {
+  readonly shop: string;
+  readonly shopifyShopId: string | null;
+  readonly installedAt?: number | null;
+}
+
 function ledgerEvent(event: PartnerHistoryEvent, synchronizedAt: number): RelationshipLedgerEvent | SubscriptionLedgerEvent | null {
   if (event.kind === "ignored") return null;
   const occurredAt = Date.parse(event.occurredAt);
@@ -95,6 +101,49 @@ export async function reconcileHistory(deps: {
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     await deps.checkpoint.markCheckpointFailed(CHECKPOINT, "HISTORY_SYNC_FAILED", detail, now);
+    return { status: "failed", code: "HISTORY_SYNC_FAILED", detail: detail.slice(0, 1000) };
+  }
+}
+
+/** Fetch one shop's Partner event stream for a staff-requested D1 refresh. */
+export async function reconcileShopHistory(deps: {
+  readonly partner: ShopifyPartnerPort;
+  readonly ledger: LifecycleLedgerPort;
+  readonly clock: Clock;
+  readonly appId: string | null;
+}, shop: ShopifyShopIdentity, now: number): Promise<ReconcileResult> {
+  if (!deps.appId || !shop.shopifyShopId) {
+    return { status: "failed", code: "MISSING_CREDENTIALS", detail: "Partner app ID, token, or Shopify shop ID unavailable" };
+  }
+  let pages = 0;
+  let events = 0;
+  try {
+    const start = shop.installedAt ?? now - OVERLAP_MS;
+    const windows: { min: number; max: number }[] = [];
+    for (let min = start; min < now; min = Math.min(now, min + 365 * 24 * 60 * 60 * 1000)) {
+      windows.push({ min, max: Math.min(now, min + 365 * 24 * 60 * 60 * 1000) });
+    }
+    if (windows.length === 0) windows.push({ min: now - OVERLAP_MS, max: now });
+    for (const window of windows) {
+      let cursor: string | null = null;
+      for (;;) {
+      const page = await deps.partner.listHistoricalEvents({ appId: deps.appId, shopId: shop.shopifyShopId, cursor, occurredAtMin: new Date(window.min).toISOString(), occurredAtMax: new Date(window.max).toISOString() });
+      pages += 1;
+      for (const event of page.events) {
+        const normalized = ledgerEvent(event, deps.clock.now());
+        if (!normalized) continue;
+        if ("subscriptionId" in normalized) await deps.ledger.recordPartnerSubscription(normalized);
+        else await deps.ledger.recordPartnerRelationship(normalized);
+        events += 1;
+      }
+      if (!page.hasNextPage) break;
+      if (!page.endCursor) throw new Error("Partner history page omitted end cursor");
+      cursor = page.endCursor;
+      }
+    }
+    return { status: "succeeded", pages, events };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
     return { status: "failed", code: "HISTORY_SYNC_FAILED", detail: detail.slice(0, 1000) };
   }
 }

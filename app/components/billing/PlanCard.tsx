@@ -87,6 +87,7 @@ export const PLAN_CARD_CSS = `
   flex-direction: column;
   gap: 0.5rem;
   margin: 0;
+  padding-inline-start: 0;
   padding-block-start: 1.25rem;
   border-block-start: 1px solid var(--bp-border);
   list-style: none;

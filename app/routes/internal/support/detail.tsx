@@ -29,10 +29,12 @@ import { statusOf, type SupportStatus } from "~/support/status";
 import { CATEGORY_LABEL_EN } from "~/support/categories";
 import { BODY_MAX } from "~/schemas/support";
 import { Thread, THREAD_CSS, type ThreadMessage } from "~/components/support/Thread";
-import { formatDateTime } from "~/i18n/format";
+import { formatDateTime, formatNumber } from "~/i18n/format";
 import type { Locale } from "~/i18n/config";
 import { Sparkles } from "lucide-react";
 import { useReplyDraft } from "~/internal/use-reply-draft";
+import { usePendingUploads } from "~/components/support/AttachmentPicker";
+import { InternalAttachmentPicker } from "~/components/support/InternalAttachmentPicker";
 import {
   DEFAULT_TONE,
   REPLY_TONES,
@@ -73,7 +75,8 @@ export const loader = async ({ params, request }: LoaderFunctionArgs) => {
         filename: file.filename,
         contentType: file.contentType,
         url: `/support/file/${file.id}`,
-        isVideo: file.contentType.startsWith("video/"),
+        sizeBytes: file.sizeBytes,
+        kind: file.contentType.startsWith("video/") ? "video" : file.contentType.startsWith("image/") ? "image" : "file",
       })),
   }));
 
@@ -111,7 +114,8 @@ export const action = async ({ params, request }: ActionFunctionArgs) => {
   }
 
   const body = String(form.get("body") ?? "").trim();
-  if (!body) return { error: "Write a reply first." as const };
+  const uploadIds = String(form.get("uploadIds") ?? "").split(",").filter(Boolean);
+  if (!body && uploadIds.length === 0) return { error: "Write a reply or attach a file first." as const };
   if (body.length > BODY_MAX) return { error: "That reply is too long." as const };
 
   // The staff member's own name is the author snapshot — never a form field.
@@ -120,9 +124,17 @@ export const action = async ({ params, request }: ActionFunctionArgs) => {
     staffName: actor.name,
     body,
   });
-  return replied.ok
-    ? { success: "replied" as const }
-    : { error: "That ticket no longer exists." as const };
+  if (!replied.ok) return { error: "That ticket no longer exists." as const };
+
+  const attachments = uploadIds.flatMap((uploadId) => {
+    const meta = form.get(`upload:${uploadId}`);
+    if (typeof meta !== "string") return [];
+    const [r2Key, filename, contentType, size] = meta.split("|");
+    if (!r2Key || !filename || !contentType) return [];
+    return [{ id: uploadId, r2Key, filename, contentType, sizeBytes: Number(size ?? 0) }];
+  });
+  await service.adoptAttachments(replied.value.shop, replied.value.messageId, attachments);
+  return { success: "replied" as const };
 };
 
 const STATUS_LABEL: Record<SupportStatus, string> = {
@@ -159,6 +171,7 @@ export default function InternalSupportThread() {
   const isClosed = ticket.status === "closed";
   // Targets the composer's textarea by id and rewrites what is in it.
   const draft = useReplyDraft("body");
+  const uploads = usePendingUploads(ticket.id);
   const [tone, setTone] = useState<ReplyTone>(DEFAULT_TONE);
   const [instruction, setInstruction] = useState("");
 
@@ -200,6 +213,8 @@ export default function InternalSupportThread() {
                 <Thread
                   messages={messages}
                   youLabel="You"
+                  downloadLabel="Download file"
+                  formatFileSize={(sizeBytes) => `${formatNumber(LOCALE, Math.max(1, Math.round(sizeBytes / 1024)))} KB`}
                   formatWhen={(at) => formatDateTime(LOCALE, at)}
                 />
               </CardContent>
@@ -274,8 +289,9 @@ export default function InternalSupportThread() {
                     rows={5}
                     maxLength={BODY_MAX}
                     placeholder="This reply is emailed to the merchant and their copy list."
-                    required
                   />
+
+                  <InternalAttachmentPicker uploads={uploads} />
 
                   <div className="flex flex-wrap items-center gap-2">
                     <Button type="submit" disabled={busy}>

@@ -12,6 +12,21 @@ const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as co
 /** mp4/webm cover every browser recorder; quicktime is what macOS and iOS produce. */
 const VIDEO_TYPES = ["video/mp4", "video/webm", "video/quicktime"] as const;
 
+const FILE_TYPES = [
+  "text/csv",
+  "text/plain",
+  "text/markdown",
+  "text/xml",
+  "application/json",
+  "application/pdf",
+  "application/zip",
+  "application/gzip",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+] as const;
+
 /** A screenshot. Generous enough for a retina full-page grab. */
 export const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 
@@ -23,7 +38,10 @@ export const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
  */
 export const VIDEO_MAX_BYTES = 100 * 1024 * 1024;
 
-export type AttachmentKind = "image" | "video";
+/** Diagnostic exports and documents can be substantial, but never recording-sized. */
+export const FILE_MAX_BYTES = 25 * 1024 * 1024;
+
+export type AttachmentKind = "image" | "video" | "file";
 
 export type UploadRejection = "unsupported_type" | "too_large" | "empty";
 
@@ -35,6 +53,7 @@ function kindOf(contentType: string): AttachmentKind | null {
   const type = contentType.split(";")[0]?.trim().toLowerCase() ?? "";
   if ((IMAGE_TYPES as readonly string[]).includes(type)) return "image";
   if ((VIDEO_TYPES as readonly string[]).includes(type)) return "video";
+  if ((FILE_TYPES as readonly string[]).includes(type)) return "file";
   return null;
 }
 
@@ -52,7 +71,7 @@ export function validateUpload(upload: {
   if (!kind) return err("unsupported_type", upload.contentType);
   if (upload.sizeBytes <= 0) return err("empty");
 
-  const maxBytes = kind === "video" ? VIDEO_MAX_BYTES : IMAGE_MAX_BYTES;
+  const maxBytes = kind === "video" ? VIDEO_MAX_BYTES : kind === "file" ? FILE_MAX_BYTES : IMAGE_MAX_BYTES;
   if (upload.sizeBytes > maxBytes) {
     return err("too_large", `${upload.sizeBytes} > ${maxBytes}`);
   }

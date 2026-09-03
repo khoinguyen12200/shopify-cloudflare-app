@@ -1,9 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import {
-  IMAGE_MAX_BYTES,
-  VIDEO_MAX_BYTES,
-  validateUpload,
-} from "~/support/attachment";
+import { validateUpload } from "~/support/attachment";
 
 /**
  * One file already streamed into R2 and waiting to be adopted by a message.
@@ -19,7 +15,7 @@ export interface PendingUpload {
   contentType: string;
   sizeBytes: number;
   previewUrl: string;
-  kind: "image" | "video";
+  kind: "image" | "video" | "file";
 }
 
 export interface UploadState {
@@ -155,6 +151,9 @@ const PICKER_CSS = `
   object-fit: cover;
   display: block;
 }
+.sup-file--document { display: flex; flex-direction: column; justify-content: center; gap: 0.25rem; padding: 0.5rem; }
+.sup-file__icon { font-size: 0.7rem; font-weight: 750; letter-spacing: 0.04em; }
+.sup-file__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.6875rem; }
 .sup-file__remove {
   position: absolute;
   inset-block-start: 3px;
@@ -185,8 +184,6 @@ const PICKER_CSS = `
 }
 `;
 
-const MB = 1024 * 1024;
-
 /**
  * The picker: a button, a hidden file input, and a grid of what is staged.
  *
@@ -200,11 +197,13 @@ export function AttachmentPicker({
   addLabel,
   uploads,
   errorLabel,
+  limitsLabel,
 }: {
   label: string;
   addLabel: string;
   uploads: UploadState;
   errorLabel?: (reason: string) => string;
+  limitsLabel: string;
 }) {
   const input = useRef<HTMLInputElement>(null);
 
@@ -217,7 +216,12 @@ export function AttachmentPicker({
         <div className="sup-files">
           {uploads.files.map((file) => (
             <div key={file.uploadId} className="sup-file">
-              {file.kind === "video" ? (
+              {file.kind === "file" ? (
+                <div className="sup-file--document" title={file.filename}>
+                  <span className="sup-file__icon">{fileExtensionLabel(file.filename)}</span>
+                  <span className="sup-file__name">{file.filename}</span>
+                </div>
+              ) : file.kind === "video" ? (
                 <video src={file.previewUrl} muted playsInline preload="metadata" />
               ) : (
                 <img src={file.previewUrl} alt={file.filename} />
@@ -249,7 +253,7 @@ export function AttachmentPicker({
       <input
         ref={input}
         type="file"
-        accept="image/png,image/jpeg,image/gif,image/webp,video/mp4,video/webm,video/quicktime"
+        accept="image/*,video/*,.csv,.txt,.md,.json,.xml,.pdf,.zip,.gz,.xls,.xlsx,.doc,.docx"
         multiple
         hidden
         onChange={(event) => {
@@ -271,7 +275,7 @@ export function AttachmentPicker({
           {addLabel}
         </s-button>
         <s-text color="subdued">
-          {`≤ ${IMAGE_MAX_BYTES / MB} MB images · ≤ ${VIDEO_MAX_BYTES / MB} MB video`}
+          {limitsLabel}
         </s-text>
       </s-stack>
 
@@ -282,4 +286,9 @@ export function AttachmentPicker({
       )}
     </s-stack>
   );
+}
+
+function fileExtensionLabel(filename: string): string {
+  const extension = filename.split(".").pop()?.slice(0, 4).toUpperCase();
+  return extension || "FILE";
 }

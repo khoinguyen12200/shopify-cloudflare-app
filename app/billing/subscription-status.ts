@@ -1,4 +1,4 @@
-import { currencyDecimals, fromDecimalString, toCurrency, type Money } from "~/money";
+import { currencyDecimals, fromDecimalString, fromMinorUnits, toCurrency, type Money } from "~/money";
 export type SubscriptionStatus = "ACTIVE" | "CANCELLED" | "PENDING" | "DECLINED" | "EXPIRED" | "FROZEN" | "ACCEPTED";
 
 /** The parts of `billing.check()`'s `AppSubscription` this module actually reads. */
@@ -66,6 +66,17 @@ function pricingOf(sub: AppSubscriptionLike): { price: Money | null; interval: S
   };
 }
 
+/** Current state projected from Partner Active Subscription, never Billing API. */
+export interface PartnerSubscriptionProjection {
+  readonly status: "NONE" | "PENDING" | "ACTIVE" | "CANCELLATION_SCHEDULED" | "FROZEN" | "CANCELED" | "UNKNOWN";
+  readonly planHandle: string | null;
+  readonly billingInterval: string | null;
+  readonly priceAmount: number | null;
+  readonly priceCurrency: string | null;
+  readonly trialEndsAt: number | null;
+  readonly currentPeriodEndsAt: number | null;
+}
+
 /** `null` once the trial (if any) has already ended by `now`. */
 function trialEndsAt(sub: AppSubscriptionLike, now: number): number | null {
   if (sub.trialDays <= 0) return null;
@@ -97,5 +108,35 @@ export function resolveBillingStatus(
     interval,
     trialEndsAt: trialEndsAt(sub, now),
     periodEnd: Date.parse(sub.currentPeriodEnd),
+  };
+}
+
+/** Convert the durable Partner projection into billing-page data. */
+export function resolveProjectionBillingStatus(
+  projection: PartnerSubscriptionProjection | undefined,
+  planName: string,
+  now: number,
+): BillingStatus {
+  if (!projection || projection.status === "NONE") return { kind: "free" };
+  const currency = projection.priceCurrency ? toCurrency(projection.priceCurrency) : null;
+  const parsedPrice = projection.priceAmount !== null && currency?.ok
+    ? fromMinorUnits(projection.priceAmount, currency.value)
+    : null;
+  const price = parsedPrice?.ok ? parsedPrice.value : null;
+  const interval = projection.billingInterval === "EVERY_30_DAYS"
+    ? "every_30_days"
+    : projection.billingInterval === "ANNUAL" ? "annual" : null;
+  const status: SubscriptionStatus = projection.status === "CANCELED" ? "CANCELLED"
+    : projection.status === "UNKNOWN" ? "EXPIRED"
+      : projection.status === "CANCELLATION_SCHEDULED" ? "ACTIVE" : projection.status;
+  return {
+    kind: "subscribed",
+    name: planName,
+    status,
+    test: false,
+    price,
+    interval,
+    trialEndsAt: projection.trialEndsAt !== null && projection.trialEndsAt > now ? projection.trialEndsAt : null,
+    periodEnd: projection.currentPeriodEndsAt ?? now,
   };
 }

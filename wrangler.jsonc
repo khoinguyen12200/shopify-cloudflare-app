@@ -15,9 +15,9 @@
   },
   "observability": { "enabled": true },
 
-  // Daily housekeeping. workers/app.ts `scheduled` prunes password-reset tokens
-  // that expired long ago; add your own sweeps to the same handler.
-  "triggers": { "crons": ["30 3 * * *"] },
+  // Local development: reconcile Partner history every five minutes.
+  // Production keeps the lower-frequency schedule declared below.
+  "triggers": { "crons": ["*/5 * * * *"] },
 
   // Authenticated Shopify webhooks are acknowledged only after their durable
   // inbox row and Queue handoff succeed. The DLQ preserves exhausted work for

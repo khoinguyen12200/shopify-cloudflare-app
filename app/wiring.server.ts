@@ -20,11 +20,40 @@ import type { PasswordResetNotifier } from "~/services/password-reset.server";
 import { signAttachmentToken } from "~/support/file-token";
 import { AiService } from "~/services/ai.server";
 import { SupportService } from "~/services/support.server";
-import { reconcileHistory } from "~/services/reconcile-shopify-history";
+import { reconcileHistory, reconcileShopHistory } from "~/services/reconcile-shopify-history";
 import { ShopSyncCheckpointRepo } from "~/models/shop-sync-checkpoints.server";
 import { refreshSubscription } from "~/services/reconcile-subscription";
 import type { AdminUserPort } from "~/ports/admin-users";
 import type { PasswordResetTokenPort } from "~/ports/password-reset-tokens";
+import { recordShopifyIdentity } from "~/services/record-shopify-identity";
+import { reconcileAfterUninstall } from "~/services/reconcile-after-uninstall";
+
+const SHOP_IDENTITY_QUERY = `#graphql
+  query AuthenticatedShopIdentity {
+    shop { id myshopifyDomain }
+  }
+`;
+
+export async function persistShopIdentity(admin: { graphql: (query: string) => Promise<Response> }, shop: string, now = Date.now()) {
+  const shops = new ShopRepo();
+  const existing = await shops.get(shop);
+  if (existing?.shopifyShopId) {
+    return { status: "recorded" as const, shopifyShopId: existing.shopifyShopId };
+  }
+  const response = await admin.graphql(SHOP_IDENTITY_QUERY);
+  const body: unknown = await response.json();
+  const data = body !== null && typeof body === "object" && "data" in body ? body.data : null;
+  const value = data !== null && typeof data === "object" && "shop" in data ? data.shop : null;
+  const identity = value !== null && typeof value === "object" && "id" in value && "myshopifyDomain" in value
+    && typeof value.id === "string" && typeof value.myshopifyDomain === "string"
+    ? { id: value.id, myshopifyDomain: value.myshopifyDomain }
+    : null;
+  return recordShopifyIdentity({
+    shop,
+    queryShop: async () => identity,
+    record: (tenant, shopifyShopId, at) => shops.recordAuthenticatedIdentity(tenant, shopifyShopId, at),
+  }, now);
+}
 
 export function adminUsers(): AdminUserPort {
   return new AdminUserRepo();
@@ -59,7 +88,28 @@ export async function refreshShopSubscription(env: Env, shop: string, now = Date
     subscriptions: { upsertSubscriptionProjection: (tenant, observation) => new ShopSubscriptionRepo().upsertObservation(tenant, observation) },
     clock: { now: () => now },
     appId: env.SHOPIFY_PARTNER_APP_ID || null,
-  }, { shop, shopifyShopId: identity?.shopifyShopId ?? null }, now);
+  }, { shop, shopifyShopId: identity?.shopifyShopId ?? null, installedAt: identity?.installedAt ?? null }, now);
+}
+
+export async function refreshShopHistory(env: Env, shop: string, now = Date.now()) {
+  const identity = await new ShopRepo().get(shop);
+  const checkpoints = new ShopSyncCheckpointRepo();
+  const result = await reconcileShopHistory({
+    partner: new ShopifyPartnerAdapter({ token: env.SHOPIFY_PARTNER_API_TOKEN || "", organizationId: env.SHOPIFY_PARTNER_ORGANIZATION_ID || "", apiVersion: env.SHOPIFY_PARTNER_API_VERSION || "", fetch }),
+    ledger: historyLedger(),
+    clock: { now: () => now },
+    appId: env.SHOPIFY_PARTNER_APP_ID || null,
+  }, { shop, shopifyShopId: identity?.shopifyShopId ?? null, installedAt: identity?.installedAt ?? null }, now);
+  const checkpointName = `partner_history:${shop}`;
+  if (result.status === "succeeded") {
+    await Promise.all([
+      new ShopRepo().markReconciled(shop, now),
+      checkpoints.markSucceeded(checkpointName, null, now, now),
+    ]);
+  } else {
+    await checkpoints.markFailed(checkpointName, result.code, result.detail, now);
+  }
+  return result;
 }
 
 /** History ledger adapter binding kept here so services never import models. */
@@ -149,6 +199,11 @@ export function webhookConsumer() {
         await new ShopRepo().recordUninstall(delivery.shop, Date.now());
         const found = await sessions.findSessionsByShop(delivery.shop);
         await sessions.deleteSessions(found.map(({ id }) => id));
+        const result = await reconcileAfterUninstall({
+          refreshSubscription: () => refreshShopSubscription(env, delivery.shop),
+          refreshHistory: () => refreshShopHistory(env, delivery.shop),
+        });
+        if (!result.ok) throw new Error(`Uninstall billing reconciliation failed: ${result.code}: ${result.detail}`);
       },
       "app/scopes_update": async (delivery: ConsumerDelivery) => {
         const current = await scopes.list(delivery.id, delivery.shop);

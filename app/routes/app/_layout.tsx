@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 
 import { createShopify } from "~/shopify.server";
 import { getEnv } from "~/request-context.server";
+import { persistShopIdentity } from "~/wiring.server";
 
 /**
  * Namespaces for the embedded admin. `public` is deliberately absent — the
@@ -16,7 +17,8 @@ export const handle = { i18n: ["common", "admin"] };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const env = getEnv();
-  await createShopify(env).authenticate.admin(request);
+  const { admin, session } = await createShopify(env).authenticate.admin(request);
+  await persistShopIdentity(admin, session.shop);
 
   // The public client_id, read from the Worker's env binding — there is no
   // process.env in workerd.

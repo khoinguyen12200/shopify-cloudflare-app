@@ -82,6 +82,24 @@ describe("streaming a support attachment", () => {
     });
   });
 
+  it("forces CSV attachments to download instead of rendering inline", async () => {
+    await run(async () => {
+      const repo = new SupportRepo();
+      const created = await repo.open({
+        shop: SHOP, shopName: "Store", merchantEmail: null, ccEmails: [], category: "bug",
+        subject: "Broken", body: "Look at this", authorName: "Store", locale: null, at: 1_000,
+      });
+      const id = crypto.randomUUID();
+      await env.UPLOADS.put(`support/${SHOP}/orders.csv`, "order_id\n1");
+      await repo.attach({ shop: SHOP, messageId: created.messageId, id, r2Key: `support/${SHOP}/orders.csv`, filename: "orders.csv", contentType: "text/csv", sizeBytes: 10, at: 1_000 });
+      const token = await signAttachmentToken({ secret: SECRET, attachmentId: id, expiresAt: Date.now() + 60_000 });
+
+      const response = await get(id, token);
+
+      expect(response.headers.get("Content-Disposition")).toBe('attachment; filename="orders.csv"');
+    });
+  });
+
   it("refuses a request with no token and no staff session", async () => {
     await run(async () => {
       const id = await storedAttachment();

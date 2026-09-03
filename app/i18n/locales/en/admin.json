@@ -71,6 +71,13 @@
     },
     "planLabel": "Your plan",
     "managedNote": "Plans are managed by Shopify. Use the button above to view available plans, upgrade, or change your subscription.",
+    "processing": {
+      "heading": "Updating your plan",
+      "body": "Checking the latest details from Shopify. This usually takes only a moment.",
+      "spinnerLabel": "Updating your plan",
+      "failedHeading": "We could not update your plan",
+      "failedBody": "Try again to check the latest details from Shopify."
+    },
     "price": {
       "perMonth": "{{price}}/mo",
       "perYear": "{{price}}/yr",
@@ -113,8 +120,9 @@
       "emailHelp": "We reply here as well as in the app. Clear it to only be notified in the app.",
       "cc": "Also copy these people",
       "ccHelp": "They get every reply, and can reply themselves. Up to {{max}}.",
-      "attachments": "Screenshots or a recording",
+      "attachments": "Screenshots, recordings, or files",
       "addFiles": "Add files",
+      "attachmentLimits": "Up to 10 MB images, 100 MB video, and 25 MB files",
       "emailHeading": "Replies",
       "ccEmpty": "No one else is copied.",
       "ccAdd": "Add email",
@@ -145,7 +153,7 @@
       "empty_reply": "Write a message or attach a file.",
       "upload_failed": "That file could not be uploaded. Try again.",
       "too_large": "That file is too big.",
-      "unsupported_type": "Only images and videos can be attached.",
+      "unsupported_type": "That file type is not supported.",
       "invalid_cc": "That copy list is not valid. Use one email address per line.",
       "invalid_cc_email": "That does not look like an email address.",
       "duplicate_cc_email": "That address is already on the list.",

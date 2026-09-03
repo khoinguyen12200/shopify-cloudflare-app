@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:test";
-import { reconcileHistory, type LifecycleLedgerPort, type SyncCheckpointPort } from "./reconcile-shopify-history";
+import { reconcileHistory, reconcileShopHistory, type LifecycleLedgerPort, type SyncCheckpointPort } from "./reconcile-shopify-history";
 import type { ShopifyPartnerPort } from "~/ports/shopify-partner";
 import { ShopifyEventRepo } from "~/models/shopify-events.server";
 import { ShopSubscriptionRepo } from "~/models/shop-subscriptions.server";
@@ -15,6 +15,52 @@ function event(id: string, occurredAt = "2026-01-01T00:00:00.000Z") {
 }
 
 describe("reconcileHistory", () => {
+  it("syncs only the requested shop's immutable history for an internal refresh", async () => {
+    const calls: Parameters<ShopifyPartnerPort["listHistoricalEvents"]>[0][] = [];
+    const partner: ShopifyPartnerPort = {
+      activeSubscription: async () => null,
+      listHistoricalEvents: async (input) => {
+        calls.push(input);
+        return { events: [event("shop-event")], hasNextPage: false, endCursor: null };
+      },
+    };
+    const recorded: string[] = [];
+
+    await expect(reconcileShopHistory({
+      partner,
+      ledger: {
+        recordPartnerRelationship: async (value) => { recorded.push(value.id); return "inserted"; },
+        recordPartnerSubscription: async () => "inserted",
+      },
+      clock: { now: () => 100 },
+      appId: "gid://shopify/App/1",
+    }, { shop: "one.myshopify.com", shopifyShopId: "gid://shopify/Shop/1" }, 100)).resolves.toEqual({ status: "succeeded", pages: 1, events: 1 });
+
+    expect(calls).toEqual([{ appId: "gid://shopify/App/1", shopId: "gid://shopify/Shop/1", cursor: null, occurredAtMin: "1969-12-31T00:00:00.100Z", occurredAtMax: "1970-01-01T00:00:00.100Z" }]);
+    expect(recorded).toEqual(["shop-event"]);
+  });
+
+  it("backfills a shop history in explicit 365-day windows from installation", async () => {
+    const calls: Parameters<ShopifyPartnerPort["listHistoricalEvents"]>[0][] = [];
+    const partner: ShopifyPartnerPort = {
+      activeSubscription: async () => null,
+      listHistoricalEvents: async (input) => {
+        calls.push(input);
+        return { events: [], hasNextPage: false, endCursor: null };
+      },
+    };
+    const start = Date.parse("2024-01-01T00:00:00.000Z");
+    const end = Date.parse("2025-01-02T00:00:00.000Z");
+    await reconcileShopHistory({
+      partner,
+      ledger: { recordPartnerRelationship: async () => "inserted", recordPartnerSubscription: async () => "inserted" },
+      clock: { now: () => end }, appId: "gid://shopify/App/1",
+    }, { shop: "one.myshopify.com", shopifyShopId: "gid://shopify/Shop/1", installedAt: start }, end);
+    expect(calls).toEqual([
+      { appId: "gid://shopify/App/1", shopId: "gid://shopify/Shop/1", cursor: null, occurredAtMin: "2024-01-01T00:00:00.000Z", occurredAtMax: "2024-12-31T00:00:00.000Z" },
+      { appId: "gid://shopify/App/1", shopId: "gid://shopify/Shop/1", cursor: null, occurredAtMin: "2024-12-31T00:00:00.000Z", occurredAtMax: "2025-01-02T00:00:00.000Z" },
+    ]);
+  });
   it("requests full history on first scan", async () => {
     let request: Parameters<ShopifyPartnerPort["listHistoricalEvents"]>[0] | undefined;
     const partner: ShopifyPartnerPort = {

@@ -2,7 +2,7 @@ import type { ActiveSubscription, ShopifyPartnerPort } from "~/ports/shopify-par
 import { fromDecimalString } from "~/money";
 
 export interface Clock { readonly now: () => number; }
-export interface ShopIdentity { readonly shop: string; readonly shopifyShopId: string | null; }
+export interface ShopIdentity { readonly shop: string; readonly shopifyShopId: string | null; readonly installedAt?: number | null; }
 export interface SubscriptionProjectionPort {
   upsertSubscriptionProjection(shop: string, observation: SubscriptionObservation): Promise<"applied" | "stale" | "duplicate">;
 }

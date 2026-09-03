@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveBillingStatus, type AppSubscriptionLike } from "./subscription-status";
+import { resolveBillingStatus, resolveProjectionBillingStatus, type AppSubscriptionLike } from "./subscription-status";
 
 const NOW = Date.parse("2026-01-15T00:00:00.000Z");
 
@@ -122,5 +122,28 @@ describe("resolveBillingStatus", () => {
       NOW,
     );
     expect(status).toMatchObject({ price: null, interval: null });
+  });
+});
+
+describe("resolveProjectionBillingStatus", () => {
+  it("uses the Partner-backed projection without the legacy Billing API", () => {
+    expect(resolveProjectionBillingStatus({
+      status: "ACTIVE",
+      planHandle: "pro",
+      billingInterval: "EVERY_30_DAYS",
+      priceAmount: 1900,
+      priceCurrency: "USD",
+      trialEndsAt: null,
+      currentPeriodEndsAt: 1_800_000_000_000,
+    }, "Pro", 1_700_000_000_000)).toMatchObject({
+      kind: "subscribed",
+      name: "Pro",
+      price: { amount: 1900, currency: "USD" },
+      interval: "every_30_days",
+      periodEnd: 1_800_000_000_000,
+    });
+  });
+  it("treats NONE as the free plan", () => {
+    expect(resolveProjectionBillingStatus({ status: "NONE", planHandle: null, billingInterval: null, priceAmount: null, priceCurrency: null, trialEndsAt: null, currentPeriodEndsAt: null }, "Free", 1_700_000_000_000)).toEqual({ kind: "free" });
   });
 });

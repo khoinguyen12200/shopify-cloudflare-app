@@ -20,7 +20,7 @@ import { useTranslation } from "react-i18next";
 import { createShopify } from "~/shopify.server";
 import { getEnv } from "~/request-context.server";
 import { useLocale } from "~/i18n/useLocale";
-import { formatDate, formatDateTime } from "~/i18n/format";
+import { formatDate, formatDateTime, formatNumber } from "~/i18n/format";
 import { supportService } from "~/wiring.server";
 import { statusOf, type SupportStatus } from "~/support/status";
 import { CATEGORY_LABEL_KEY } from "~/support/categories";
@@ -64,7 +64,8 @@ export const loader = async ({ params, request }: LoaderFunctionArgs) => {
             filename: file.filename,
             contentType: file.contentType,
             url: await service.attachmentUrl(file.id),
-            isVideo: file.contentType.startsWith("video/"),
+            sizeBytes: file.sizeBytes,
+            kind: file.contentType.startsWith("video/") ? "video" : file.contentType.startsWith("image/") ? "image" : "file",
           })),
       ),
     })),
@@ -227,6 +228,8 @@ export default function SupportThreadPage() {
           <Thread
             messages={messages}
             youLabel={t("support.thread.you")}
+            downloadLabel={t("support.thread.download")}
+            formatFileSize={(sizeBytes) => `${formatNumber(locale, Math.max(1, Math.round(sizeBytes / 1024)))} KB`}
             formatWhen={(at) => formatDateTime(locale, at)}
           />
         </s-section>
@@ -250,6 +253,7 @@ export default function SupportThreadPage() {
                 <AttachmentPicker
                   label={t("support.form.attachments")}
                   addLabel={t("support.form.addFiles")}
+                  limitsLabel={t("support.form.attachmentLimits")}
                   uploads={uploads}
                   errorLabel={(reason) => t(supportErrorKey(reason))}
                 />

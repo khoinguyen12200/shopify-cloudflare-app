@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  FILE_MAX_BYTES,
   IMAGE_MAX_BYTES,
   VIDEO_MAX_BYTES,
   attachmentKey,
@@ -24,6 +25,20 @@ describe("validateUpload", () => {
     }
   });
 
+  it("accepts CSV and ordinary support documents as downloadable files", () => {
+    for (const type of [
+      "text/csv",
+      "application/pdf",
+      "text/plain",
+      "application/json",
+      "application/zip",
+    ]) {
+      const result = validateUpload({ contentType: type, sizeBytes: 5_000_000 });
+      expect(result.ok, type).toBe(true);
+      if (result.ok) expect(result.value.kind).toBe("file");
+    }
+  });
+
   it("ignores charset and casing on the content type", () => {
     // Browsers send `video/MP4` and occasionally a parameter.
     const result = validateUpload({
@@ -33,8 +48,8 @@ describe("validateUpload", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("refuses anything that is not an image or a video", () => {
-    for (const type of ["application/pdf", "text/html", "application/zip", ""]) {
+  it("refuses executable and active document types", () => {
+    for (const type of ["application/x-msdownload", "text/html", "application/javascript", ""]) {
       const result = validateUpload({ contentType: type, sizeBytes: 10 });
       expect(result.ok, type).toBe(false);
       if (!result.ok) expect(result.reason).toBe("unsupported_type");
@@ -76,6 +91,11 @@ describe("validateUpload", () => {
 
   it("gives video a bigger allowance than images", () => {
     expect(VIDEO_MAX_BYTES).toBeGreaterThan(IMAGE_MAX_BYTES);
+  });
+
+  it("caps regular files at their own limit", () => {
+    expect(validateUpload({ contentType: "text/csv", sizeBytes: FILE_MAX_BYTES }).ok).toBe(true);
+    expect(validateUpload({ contentType: "text/csv", sizeBytes: FILE_MAX_BYTES + 1 }).ok).toBe(false);
   });
 });
 

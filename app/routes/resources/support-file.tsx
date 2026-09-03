@@ -51,10 +51,10 @@ export const loader = async ({ params, request }: LoaderFunctionArgs) => {
     headers: {
       "Content-Type": attachment.contentType,
       "Content-Length": String(attachment.sizeBytes),
-      // `inline` so an image or video renders in the thread instead of
-      // downloading. The filename was sanitised on the way in
+      // Images and video render in the thread; documents are explicit downloads.
+      // The filename was sanitised on the way in
       // (app/support/attachment.ts) precisely because it lands in this header.
-      "Content-Disposition": `inline; filename="${attachment.filename}"`,
+      "Content-Disposition": `${attachment.contentType.startsWith("image/") || attachment.contentType.startsWith("video/") ? "inline" : "attachment"}; filename="${attachment.filename}"`,
       // Private and short: the URL is bearer authorisation, so it must not sit
       // in a shared cache, and it must not outlive the token that carries it.
       "Cache-Control": "private, max-age=3600",

@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { i18nServer } from "~/i18n/i18n.server";
 import { useLocale } from "~/i18n/useLocale";
 import { formatMoney } from "~/money";
-import { FEATURED_PLAN_KEY, PLANS } from "~/billing/plans";
+import { FEATURED_PLAN_HANDLE, PLANS } from "~/billing/plans";
 
 export const handle = { i18n: ["common", "public"] };
 
@@ -77,7 +77,7 @@ export default function Landing() {
           <h2>{t("landing.pricingTeaser.heading")}</h2>
           <p className="lead">
             {t("landing.pricingTeaser.body", {
-              price: formatMoney(locale, PLANS[FEATURED_PLAN_KEY].priceMonthly),
+              price: formatMoney(locale, PLANS[FEATURED_PLAN_HANDLE].priceMonthly),
             })}
           </p>
           <Link to="/pricing" className="btn btn--secondary">

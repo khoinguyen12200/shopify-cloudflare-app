@@ -134,7 +134,7 @@ export class SupportService {
     ticketId: string;
     staffName: string;
     body: string;
-  }): Promise<Result<null, "not_found">> {
+  }): Promise<Result<{ shop: string; messageId: string }, "not_found">> {
     const replied = await this.dependencies.repo.replyAsStaff({
       ticketId: input.ticketId,
       authorName: input.staffName,
@@ -146,7 +146,7 @@ export class SupportService {
     const thread = await this.dependencies.repo.findForStaff(input.ticketId);
     if (thread) await this.notifyMerchant(thread, input.staffName, input.body);
 
-    return ok(null);
+    return ok(replied);
   }
 
   /**

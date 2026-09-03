@@ -3,6 +3,9 @@ import type { ActionFunctionArgs } from "react-router";
 import { createShopify } from "~/shopify.server";
 import { getEnv } from "~/request-context.server";
 import { attachmentKey, safeFilename, validateUpload } from "~/support/attachment";
+import { getAdminUser } from "~/services/admin-auth.server";
+import { adminUsers } from "~/wiring.server";
+import { SupportRepo } from "~/models/support.server";
 
 /**
  * One file, streamed straight into R2.
@@ -21,22 +24,24 @@ import { attachmentKey, safeFilename, validateUpload } from "~/support/attachmen
  */
 export const action = async ({ request }: ActionFunctionArgs) => {
   const env = getEnv();
-  const { session } = await createShopify(env).authenticate.admin(request);
 
   if (request.method !== "POST") {
     return data({ error: "method_not_allowed" as const }, { status: 405 });
   }
 
+  const ticketId = request.headers.get("X-Support-Ticket") ?? "new";
+  const staff = await getAdminUser(request, { users: adminUsers() });
+  const shop = staff
+    ? (await new SupportRepo().findForStaff(ticketId))?.ticket.shop
+    : (await createShopify(env).authenticate.admin(request)).session.shop;
+  if (!shop) return data({ error: "not_found" as const }, { status: 404 });
+
   // Uploads cost storage, so they share the limiter with ticket writes. Fails
   // open when the binding is absent.
   if (env.SUPPORT_LIMITER) {
-    const { success } = await env.SUPPORT_LIMITER.limit({ key: session.shop });
-    if (!success) {
-      return data({ error: "rate_limited" as const }, { status: 429 });
-    }
+    const { success } = await env.SUPPORT_LIMITER.limit({ key: shop });
+    if (!success) return data({ error: "rate_limited" as const }, { status: 429 });
   }
-
-  const ticketId = request.headers.get("X-Support-Ticket") ?? "new";
   const contentType = request.headers.get("Content-Type") ?? "";
   // Content-Length is the client's claim, checked here so an oversized upload
   // is refused before a byte is stored. The real size is verified after the
@@ -53,7 +58,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   const uploadId = crypto.randomUUID();
-  const key = attachmentKey({ shop: session.shop, ticketId, uploadId });
+  const key = attachmentKey({ shop, ticketId, uploadId });
   const filename = safeFilename(
     request.headers.get("X-Support-Filename") ?? "file",
   );

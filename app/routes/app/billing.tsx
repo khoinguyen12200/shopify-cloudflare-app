@@ -1,5 +1,6 @@
-import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { useLoaderData } from "react-router";
+import { useEffect } from "react";
+import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
+import { data, useFetcher, useLoaderData, useNavigate } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useTranslation } from "react-i18next";
 
@@ -8,14 +9,17 @@ import { getEnv } from "~/request-context.server";
 import { useLocale } from "~/i18n/useLocale";
 import { formatDateTime } from "~/i18n/format";
 import { formatMoney } from "~/money";
-import { resolveBillingStatus, type BillingStatus } from "~/billing/subscription-status";
-import { currentPlanKeyFor } from "~/billing/current-plan";
+import { resolveProjectionBillingStatus, type BillingStatus } from "~/billing/subscription-status";
+import { currentPlanHandleFor } from "~/billing/current-plan";
 import { planPriceLine, type PriceCadence } from "~/billing/plan-price-line";
 import { pricingPlansUrl } from "~/billing/pricing-plans-url";
-import { FEATURED_PLAN_KEY, PLANS, PLAN_LIST } from "~/billing/plans";
-import { refreshShopSubscription } from "~/wiring.server";
+import { FEATURED_PLAN_HANDLE, PLANS, PLAN_LIST, planForShopifyHandle } from "~/billing/plans";
+import { persistShopIdentity, refreshShopHistory, refreshShopSubscription } from "~/wiring.server";
+import { ShopSubscriptionRepo } from "~/models/shop-subscriptions.server";
 import { PlanCard, PLAN_CARD_CSS } from "~/components/billing/PlanCard";
 import type { SubscriptionStatus } from "~/billing/subscription-status";
+import { isPricingReturn } from "~/billing/pricing-return";
+import { reconcileShop } from "~/services/reconcile-shop";
 
 type Subscribed = Extract<BillingStatus, { kind: "subscribed" }>;
 
@@ -37,6 +41,16 @@ const PRICE_CADENCE_KEY: Record<PriceCadence, PriceKey> = {
 
 export const handle = { i18n: ["common", "admin"] };
 
+/** Partner refreshes only after Shopify redirects from hosted plan selection. */
+export function shouldRefreshSubscription(requestUrl: string): boolean {
+  return isPricingReturn(requestUrl);
+}
+
+/** The return URL is a trigger only; the plan data still comes from Shopify. */
+export function shouldShowProcessing(requestUrl: string): boolean {
+  return isPricingReturn(requestUrl);
+}
+
 /** The app's own Managed Pricing handle — needed to build the hosted pricing URL. */
 const APP_HANDLE_QUERY = `#graphql
   query AppHandle {
@@ -48,17 +62,32 @@ const APP_HANDLE_QUERY = `#graphql
   }
 `;
 
+type BillingReconciliationResponse = { readonly ok: true } | { readonly ok: false };
+
+export const action = async ({ request }: ActionFunctionArgs) => {
+  const { admin, session } = await createShopify(getEnv()).authenticate.admin(request);
+  await persistShopIdentity(admin, session.shop);
+  const result = await reconcileShop({
+    refreshSubscription: () => refreshShopSubscription(getEnv(), session.shop),
+    refreshHistory: () => refreshShopHistory(getEnv(), session.shop),
+  });
+  return result.status === "succeeded"
+    ? data<BillingReconciliationResponse>({ ok: true })
+    : data<BillingReconciliationResponse>({ ok: false }, { status: 502 });
+};
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, billing, session } =
+  const { admin, session } =
     await createShopify(getEnv()).authenticate.admin(request);
-  await refreshShopSubscription(getEnv(), session.shop);
+  await persistShopIdentity(admin, session.shop);
+  const pricingReturn = shouldShowProcessing(request.url);
 
   // Shopify owns the actual subscribe/upgrade/cancel flow (Managed Pricing);
   // this page only ever reads status. There's no in-app request()/cancel() —
-  // Partner subscription history projects entitlement changes.
-  // on Shopify's hosted page reach this app.
-  const check = await billing.check();
-  const status = resolveBillingStatus(check, Date.now());
+  // Partner history projects entitlement changes, and D1 serves normal visits.
+  const projection = await new ShopSubscriptionRepo().currentForShop(session.shop);
+  const planName = planForShopifyHandle(projection?.planHandle)?.name ?? PLANS.free.name;
+  const status = resolveProjectionBillingStatus(projection, planName, Date.now());
 
   const response = await admin.graphql(APP_HANDLE_QUERY);
   const body = await response.json();
@@ -66,17 +95,22 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   return {
     status,
+    planHandle: projection?.planHandle ?? null,
     pricingPlansUrl: pricingPlansUrl(session.shop, appHandle),
+    pricingReturn,
   };
 };
 
 export default function Billing() {
-  const { status, pricingPlansUrl } = useLoaderData<typeof loader>();
+  const loaderData = useLoaderData<typeof loader>();
   const { t } = useTranslation(["admin", "common"]);
   const locale = useLocale();
+  if (loaderData.pricingReturn) return <BillingProcessing />;
+
+  const { status, pricingPlansUrl, planHandle } = loaderData;
   const cycleCopy =
     status.kind === "subscribed" ? billingCycleCopy(locale, status) : null;
-  const currentPlanKey = currentPlanKeyFor(status);
+  const currentPlanHandle = currentPlanHandleFor(status, planHandle);
   const priceLine = planPriceLine(status);
 
   return (
@@ -103,7 +137,7 @@ export default function Billing() {
 
             <s-stack direction="inline" gap="small" alignItems="center">
               <s-heading>
-                {status.kind === "free" ? PLANS[currentPlanKey].name : status.name}
+                {status.kind === "free" ? PLANS.free.name : status.name}
               </s-heading>
               {status.kind === "subscribed" && (
                 <>
@@ -148,16 +182,55 @@ export default function Billing() {
         <div className="bp-grid">
           {PLAN_LIST.map((plan, index) => (
             <PlanCard
-              key={plan.key}
+              key={plan.handle}
               plan={plan}
               // PLAN_LIST is cheapest-first, so the plan before this one is the
               // one it builds on — which is what "Everything in X, plus" names.
               buildsOn={index > 0 ? PLAN_LIST[index - 1] : null}
-              isCurrent={plan.key === currentPlanKey}
-              isFeatured={plan.key === FEATURED_PLAN_KEY}
+              isCurrent={plan.handle === currentPlanHandle}
+              isFeatured={plan.handle === FEATURED_PLAN_HANDLE}
             />
           ))}
         </div>
+      </s-section>
+    </s-page>
+  );
+}
+
+function BillingProcessing() {
+  const { t } = useTranslation(["admin", "common"]);
+  const fetcher = useFetcher<BillingReconciliationResponse>();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data === undefined) {
+      fetcher.submit(null, { method: "post" });
+    }
+  }, [fetcher]);
+
+  useEffect(() => {
+    if (fetcher.data?.ok) navigate("/app/billing", { replace: true });
+  }, [fetcher.data, navigate]);
+
+  const failed = fetcher.data?.ok === false;
+  return (
+    <s-page heading={t("billing.processing.heading")} inlineSize="base">
+      <s-section>
+        <s-stack direction="block" gap="large-100" alignItems="center">
+          <s-spinner size="large-100" accessibilityLabel={t("billing.processing.spinnerLabel")} />
+          <s-stack direction="block" gap="small" alignItems="center">
+            <s-heading>{t("billing.processing.heading")}</s-heading>
+            <s-paragraph color="subdued">{t("billing.processing.body")}</s-paragraph>
+          </s-stack>
+          {failed && (
+            <s-banner tone="critical" heading={t("billing.processing.failedHeading")}>
+              <s-paragraph>{t("billing.processing.failedBody")}</s-paragraph>
+              <fetcher.Form method="post">
+                <s-button slot="primary-actions" type="submit">{t("actions.retry", { ns: "common" })}</s-button>
+              </fetcher.Form>
+            </s-banner>
+          )}
+        </s-stack>
       </s-section>
     </s-page>
   );

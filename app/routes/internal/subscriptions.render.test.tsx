@@ -60,6 +60,12 @@ describe("the internal subscriptions page", () => {
     expect(html).toContain("Active");
   });
 
+  it("does not imply Shopify historical events include a price", async () => {
+    const html = await render([event()]);
+    expect(html).not.toContain(">Price<");
+    expect(html).not.toContain("$19.00");
+  });
+
   it("shows an empty state with no history yet", async () => {
     const html = await render([]);
     expect(html).toContain("No subscription activity yet");

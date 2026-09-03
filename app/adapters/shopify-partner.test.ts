@@ -2,6 +2,21 @@ import { describe, expect, it } from "vitest";
 import { ShopifyPartnerAdapter } from "./shopify-partner.server";
 
 describe("ShopifyPartnerAdapter", () => {
+  it("calls the Worker fetch function without rebinding its required receiver", async () => {
+    const adapter = new ShopifyPartnerAdapter({
+      token: "token",
+      organizationId: "org-123",
+      apiVersion: "2026-07",
+      fetch,
+    });
+
+    // Vitest blocks outbound calls with HTTP 403. An Illegal invocation here
+    // means the adapter called Worker fetch as an object method instead.
+    await expect(adapter.activeSubscription("app", "shop")).rejects.toThrow(
+      "Partner API returned HTTP 403",
+    );
+  });
+
   it("reads active subscription through Partner GraphQL", async () => {
     const calls: Request[] = [];
     const adapter = new ShopifyPartnerAdapter({

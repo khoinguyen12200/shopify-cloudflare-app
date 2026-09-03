@@ -1,5 +1,5 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { useLoaderData } from "react-router";
+import { redirect, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useTranslation } from "react-i18next";
 
@@ -8,14 +8,19 @@ import { getEnv } from "~/request-context.server";
 import { ShopRepo } from "~/models/shops.server";
 import { useLocale } from "~/i18n/useLocale";
 import { formatDateTime } from "~/i18n/format";
-import { refreshShopSubscription } from "~/wiring.server";
+import { persistShopIdentity } from "~/wiring.server";
+import { pricingReturnDestination } from "~/billing/pricing-return";
 
 export const handle = { i18n: ["common", "admin"] };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } =
     await createShopify(getEnv()).authenticate.admin(request);
-  await refreshShopSubscription(getEnv(), session.shop);
+  await persistShopIdentity(admin, session.shop);
+
+  // Let Billing render its processing state before it reconciles Shopify truth.
+  const destination = pricingReturnDestination(request.url);
+  if (destination) throw redirect(destination);
 
   // The Admin GraphQL call and the D1 read are independent — both need only
   // `session.shop` — so they run concurrently instead of one full round trip

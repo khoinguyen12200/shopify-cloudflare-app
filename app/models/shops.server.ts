@@ -70,6 +70,15 @@ export class ShopRepo {
       });
   }
 
+  /** Persist the Admin API's stable GID after authenticating that same shop. */
+  async recordAuthenticatedIdentity(shop: string, shopifyShopId: string, now: number): Promise<void> {
+    await getDb().update(shops).set({ shopifyShopId, lastAuthenticatedAt: now }).where(eq(shops.shop, shop));
+  }
+
+  async markReconciled(shop: string, now: number): Promise<void> {
+    await getDb().update(shops).set({ lastReconciledAt: now }).where(eq(shops.shop, shop));
+  }
+
   async recordUninstall(shop: string, now: number): Promise<void> {
     await getDb()
       .update(shops)
