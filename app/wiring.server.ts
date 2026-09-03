@@ -194,6 +194,7 @@ export function webhookConsumer() {
   return {
     deliveries: new WebhookDeliveryRepo(),
     now: Date.now,
+    isRedactedShop: async (shop: string) => (await new ShopRepo().get(shop)) === undefined,
     handlers: {
       "app/uninstalled": async (delivery: ConsumerDelivery) => {
         await new ShopRepo().recordUninstall(delivery.shop, Date.now());

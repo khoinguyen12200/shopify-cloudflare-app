@@ -45,7 +45,10 @@ export default {
   async queue(batch, env) {
     await runWithRequestContext(env, async () => {
       await handleWebhookQueueBatch(batch, {
-        consume: (work) => { const consumer = webhookConsumer(); return consumeWebhook(consumer, work); },
+        consume: async (work) => {
+          // Queue attempts count completed retries; the consumer counts deliveries.
+          return consumeWebhook(webhookConsumer(), { ...work, attempts: (work.attempts ?? 0) + 1 });
+        },
         log: async (entry) => {
           const digest = entry.shop ? await crypto.subtle.digest("SHA-256", new TextEncoder().encode(entry.shop)) : undefined;
           const shopHash = digest ? `sha256:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")}` : undefined;

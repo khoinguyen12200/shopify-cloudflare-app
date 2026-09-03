@@ -22,6 +22,7 @@ export interface WebhookConsumerDependencies {
   };
   readonly handlers: Record<string, (delivery: ConsumerDelivery) => Promise<void>>;
   readonly now: () => number;
+  readonly isRedactedShop?: (shop: string) => Promise<boolean>;
 }
 
 export interface WebhookConsumerResult {
@@ -38,6 +39,7 @@ export async function consumeWebhook(
 ): Promise<WebhookConsumerResult> {
   const delivery = await dependencies.deliveries.get(work.shop, work.id);
   if (!delivery) return { outcome: "missing", topic: null };
+  if (await dependencies.isRedactedShop?.(work.shop)) return { outcome: "missing", topic: delivery.topic };
   if (delivery.status === "processed") return { outcome: "duplicate", topic: delivery.topic };
 
   const claimed = await dependencies.deliveries.markProcessing(work.shop, work.id, dependencies.now());
