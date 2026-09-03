@@ -93,6 +93,29 @@ export const supportTickets = sqliteTable(
 export type SupportTicket = typeof supportTickets.$inferSelect;
 export type NewSupportTicket = typeof supportTickets.$inferInsert;
 
+/** Server-owned metadata for an object uploaded before its message is submitted. */
+export const pendingUploads = sqliteTable(
+  "pending_uploads",
+  {
+    id: text("id").primaryKey(),
+    shop: text("shop").notNull(),
+    ticketId: text("ticket_id"),
+    r2Key: text("r2_key").notNull().unique(),
+    filename: text("filename").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    createdAt: integer("created_at").notNull(),
+    expiresAt: integer("expires_at").notNull(),
+    adoptedAt: integer("adopted_at"),
+  },
+  (table) => [
+    index("pending_uploads_shop_idx").on(table.shop, table.createdAt),
+    index("pending_uploads_expiry_idx").on(table.expiresAt),
+  ],
+);
+
+export type PendingUpload = typeof pendingUploads.$inferSelect;
+
 /**
  * One message in a thread. `authorName` is a snapshot for the same reason the
  * ticket's shopName is: a staff account can be renamed or deleted, and the

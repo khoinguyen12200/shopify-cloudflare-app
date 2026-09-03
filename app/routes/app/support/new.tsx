@@ -12,6 +12,7 @@ import { createShopify } from "~/shopify.server";
 import { getEnv } from "~/request-context.server";
 import { getLocale } from "~/i18n/i18n.server";
 import { supportService } from "~/wiring.server";
+import { SupportRepo } from "~/models/support.server";
 import {
   createTicketSchema,
   readShopContact,
@@ -91,22 +92,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   // Attach whatever was streamed up while the form was being filled in. The
   // objects already exist in R2; this is the row that adopts them.
-  const attachments = [];
-  for (const upload of parsed.data.uploadIds) {
-    const meta = form.get(`upload:${upload}`);
-    if (typeof meta !== "string") continue;
-    const parts = meta.split("|");
-    const [r2Key, filename, contentType, size] = parts;
-    if (!r2Key || !filename || !contentType) continue;
-    attachments.push({
-      id: upload,
-      r2Key,
-      filename,
-      contentType,
-      sizeBytes: Number(size ?? 0),
-    });
-  }
-  await service.adoptAttachments(session.shop, created.value.messageId, attachments);
+  const adopted = await new SupportRepo().adoptPendingUploads(
+    session.shop, created.value.messageId, parsed.data.uploadIds, Date.now(),
+  );
+  if (!adopted) return data({ error: "invalid_upload" as const }, { status: 400 });
 
   // `?created=1` is what makes the thread page toast on arrival. The
   // confirmation belongs on the screen the merchant lands on, not on this one,

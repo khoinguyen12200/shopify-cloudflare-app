@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import { getDb } from "~/request-context.server";
-import { supportAttachments, supportMessages, supportTickets, type SupportTicket as DbSupportTicket } from "~/db/schema";
+import { pendingUploads, supportAttachments, supportMessages, supportTickets, type PendingUpload, type SupportTicket as DbSupportTicket } from "~/db/schema";
 import type { SupportCategory } from "~/support/categories";
 import type { SupportAttachment, SupportAuthor, SupportThread, SupportTicket } from "~/support/types";
 
@@ -15,6 +15,37 @@ export type { SupportThread } from "~/support/types";
  * `findForStaff` serve the internal console, which is deliberately cross-shop.
  */
 export class SupportRepo {
+  async stageUpload(input: {
+    id: string; shop: string; ticketId: string | null; r2Key: string;
+    filename: string; contentType: string; sizeBytes: number; createdAt: number; expiresAt: number;
+  }): Promise<void> {
+    await getDb().insert(pendingUploads).values(input);
+  }
+
+  async claimPendingUploads(shop: string, ids: readonly string[], now: number): Promise<PendingUpload[]> {
+    if (ids.length === 0) return [];
+    const rows = await getDb().select().from(pendingUploads).where(and(
+      eq(pendingUploads.shop, shop),
+      inArray(pendingUploads.id, [...new Set(ids)]),
+      isNull(pendingUploads.adoptedAt),
+    ));
+    return rows.filter((row) => row.expiresAt > now);
+  }
+
+  async adoptPendingUploads(shop: string, messageId: string, ids: readonly string[], at: number): Promise<boolean> {
+    const rows = await this.claimPendingUploads(shop, ids, at);
+    if (rows.length !== new Set(ids).size) return false;
+    const db = getDb();
+    for (const row of rows) {
+      await db.insert(supportAttachments).values({
+        id: row.id, messageId, shop, r2Key: row.r2Key, filename: row.filename,
+        contentType: row.contentType, sizeBytes: row.sizeBytes, createdAt: at,
+      });
+      await db.delete(pendingUploads).where(and(eq(pendingUploads.shop, shop), eq(pendingUploads.id, row.id), isNull(pendingUploads.adoptedAt)));
+    }
+    return true;
+  }
+
   /**
    * Open a ticket and write its first message together.
    *

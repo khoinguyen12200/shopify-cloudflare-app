@@ -22,6 +22,7 @@ import { getEnv } from "~/request-context.server";
 import { useLocale } from "~/i18n/useLocale";
 import { formatDate, formatDateTime, formatNumber } from "~/i18n/format";
 import { supportService } from "~/wiring.server";
+import { SupportRepo } from "~/models/support.server";
 import { statusOf, type SupportStatus } from "~/support/status";
 import { CATEGORY_LABEL_KEY } from "~/support/categories";
 import { replySchema, updateCcSchema, BODY_MAX } from "~/schemas/support";
@@ -131,22 +132,8 @@ export const action = async ({ params, request }: ActionFunctionArgs) => {
 
   const thread = await service.find(session.shop, ticketId);
   const newest = thread?.messages.at(-1);
-  if (newest) {
-    const attachments = [];
-    for (const uploadId of parsed.data.uploadIds) {
-      const meta = form.get(`upload:${uploadId}`);
-      if (typeof meta !== "string") continue;
-      const [r2Key, filename, contentType, size] = meta.split("|");
-      if (!r2Key || !filename || !contentType) continue;
-      attachments.push({
-        id: uploadId,
-        r2Key,
-        filename,
-        contentType,
-        sizeBytes: Number(size ?? 0),
-      });
-    }
-    await service.adoptAttachments(session.shop, newest.id, attachments);
+  if (!newest || !(await new SupportRepo().adoptPendingUploads(session.shop, newest.id, parsed.data.uploadIds, Date.now()))) {
+    return data({ error: "invalid_upload" as const }, { status: 400 });
   }
 
   return data({ success: "replied" as const });

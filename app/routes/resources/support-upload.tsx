@@ -35,6 +35,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     ? (await new SupportRepo().findForStaff(ticketId))?.ticket.shop
     : (await createShopify(env).authenticate.admin(request)).session.shop;
   if (!shop) return data({ error: "not_found" as const }, { status: 404 });
+  if (!staff && ticketId !== "new" && !(await new SupportRepo().find(shop, ticketId))) {
+    return data({ error: "not_found" as const }, { status: 404 });
+  }
 
   // Uploads cost storage, so they share the limiter with ticket writes. Fails
   // open when the binding is absent.
@@ -74,6 +77,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     await env.UPLOADS.delete(key);
     return data({ error: "too_large" as const }, { status: 413 });
   }
+
+  await new SupportRepo().stageUpload({
+    id: uploadId, shop, ticketId: ticketId === "new" ? null : ticketId,
+    r2Key: key, filename, contentType, sizeBytes: object.size,
+    createdAt: Date.now(), expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+  });
 
   return data({
     uploadId,
