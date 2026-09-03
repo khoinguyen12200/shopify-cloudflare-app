@@ -13,7 +13,7 @@ import { ShopRepo } from "~/models/shops.server";
 import { refreshShopSubscription } from "~/wiring.server";
 import { getEnv } from "~/request-context.server";
 
-export const apiVersion = ApiVersion.October26;
+export const apiVersion = ApiVersion.July26;
 
 /**
  * Record (or revive) an install the moment a shop gets a session.

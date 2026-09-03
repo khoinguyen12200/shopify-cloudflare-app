@@ -3,7 +3,7 @@ import { env } from "cloudflare:test";
 import { runWithRequestContext } from "~/request-context.server";
 import { setupTestDatabase } from "~/test/db";
 import { ShopRepo } from "~/models/shops.server";
-import { afterAuth } from "./shopify.server";
+import { afterAuth, apiVersion } from "./shopify.server";
 
 setupTestDatabase();
 
@@ -20,6 +20,10 @@ const authOf = (shop: string) => ({ session: { shop } });
  * app is told a shop has a session — every row in `shops` starts here.
  */
 describe("recording an install when a session is minted", () => {
+  it("pins Shopify Admin API calls to the current stable release", () => {
+    expect(apiVersion).toBe("2026-07");
+  });
+
   it("writes a shops row for the shop the session belongs to", async () => {
     const found = await inRequest(async () => {
       await afterAuth(authOf(SHOP));

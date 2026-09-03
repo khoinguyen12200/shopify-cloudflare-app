@@ -118,6 +118,16 @@ function tomlStrings(text, key) {
   return [...value.matchAll(/"([^"]*)"/g)].map((match) => match[1]);
 }
 
+function tomlSectionString(text, section, key) {
+  const escaped = section.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const header = new RegExp(`^\\[${escaped}\\]\\s*$`, "m").exec(text);
+  if (!header || header.index === undefined) return "";
+  const rest = text.slice(header.index + header[0].length);
+  const nextSection = rest.search(/^\[/m);
+  const body = nextSection < 0 ? rest : rest.slice(0, nextSection);
+  return tomlString(body, key);
+}
+
 export function validateLaunchContract(files) {
   const issues = [];
   const production = configForEnv(files.wrangler, "production");
@@ -148,6 +158,15 @@ export function validateLaunchContract(files) {
   if (productionScopes !== developmentScopes) issues.push("scope drift between production and development configs");
   for (const scope of productionScopes.split(",").map((scope) => scope.trim()).filter(Boolean)) {
     issues.push(`unused scope ${scope}; base template must start with no scopes`);
+  }
+  const productionWebhookVersion = tomlSectionString(files.productionToml, "webhooks", "api_version");
+  const developmentWebhookVersion = tomlSectionString(files.developmentToml, "webhooks", "api_version");
+  const supportedShopifyVersion = "2026-07";
+  if (productionWebhookVersion !== supportedShopifyVersion || developmentWebhookVersion !== supportedShopifyVersion) {
+    issues.push(`webhook API version must be ${supportedShopifyVersion} in both Shopify app configs`);
+  }
+  if (vars.SHOPIFY_PARTNER_API_VERSION !== supportedShopifyVersion) {
+    issues.push(`SHOPIFY_PARTNER_API_VERSION must be ${supportedShopifyVersion}`);
   }
   if (PLACEHOLDER.test(files.legal) || !/LAST_UPDATED\s*=\s*"\d{4}-\d{2}-\d{2}"/.test(files.legal)) {
     issues.push("legal identity/contact/date contains TODO or invalid effective date");

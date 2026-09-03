@@ -18,8 +18,8 @@ function validFiles() {
         secrets: { required: ["SHOPIFY_PARTNER_API_TOKEN"] },
       } },
     },
-    productionToml: 'client_id = "client-key"\napplication_url = "https://app.example.org"\nscopes = ""\nredirect_urls = [ "https://app.example.org/auth/callback" ]',
-    developmentToml: 'client_id = "dev-key"\napplication_url = "https://dev.example.org"\nscopes = ""\nredirect_urls = [ "https://dev.example.org/auth/callback" ]',
+    productionToml: 'client_id = "client-key"\napplication_url = "https://app.example.org"\n[webhooks]\napi_version = "2026-07"\n[access_scopes]\nscopes = ""\n[auth]\nredirect_urls = [ "https://app.example.org/auth/callback" ]',
+    developmentToml: 'client_id = "dev-key"\napplication_url = "https://dev.example.org"\n[webhooks]\napi_version = "2026-07"\n[access_scopes]\nscopes = ""\n[auth]\nredirect_urls = [ "https://dev.example.org/auth/callback" ]',
     legal: 'export const APP_NAME = "Useful App";\nexport const COMPANY_NAME = "Example LLC";\nexport const CONTACT_EMAIL = "privacy@example.org";\nexport const COMPANY_ADDRESS = "1 Main Street";\nexport const LAST_UPDATED = "2026-09-01";',
     plans: 'handle: "free"\nhandle: "pro"',
     publicCopy: '{"pricing":"Clear pricing","support":"Email support@example.org","privacy":"We process merchant data."}',
@@ -28,6 +28,13 @@ function validFiles() {
 
 test("accepts populated production config while allowing local fixture values", () => {
   assert.deepEqual(validateLaunchContract(validFiles()), []);
+});
+
+test("rejects a webhook API version that is not the template release", () => {
+  const files = validFiles();
+  files.productionToml = files.productionToml.replace('api_version = "2026-07"', 'api_version = "2026-10"');
+  const issues = validateLaunchContract(files).join("\n");
+  assert.match(issues, /webhook API version/i);
 });
 
 test("rejects missing Partner organization and API version", () => {
