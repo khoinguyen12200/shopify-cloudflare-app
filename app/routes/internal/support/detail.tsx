@@ -23,6 +23,7 @@ import {
 import { requireAdminUser } from "~/services/admin-auth.server";
 import { adminUsers } from "~/wiring.server";
 import { supportService } from "~/wiring.server";
+import { SupportRepo } from "~/models/support.server";
 import { ShopSubscriptionRepo } from "~/models/shop-subscriptions.server";
 import { planForShopifyHandle } from "~/billing/plans";
 import { statusOf, type SupportStatus } from "~/support/status";
@@ -126,14 +127,9 @@ export const action = async ({ params, request }: ActionFunctionArgs) => {
   });
   if (!replied.ok) return { error: "That ticket no longer exists." as const };
 
-  const attachments = uploadIds.flatMap((uploadId) => {
-    const meta = form.get(`upload:${uploadId}`);
-    if (typeof meta !== "string") return [];
-    const [r2Key, filename, contentType, size] = meta.split("|");
-    if (!r2Key || !filename || !contentType) return [];
-    return [{ id: uploadId, r2Key, filename, contentType, sizeBytes: Number(size ?? 0) }];
-  });
-  await service.adoptAttachments(replied.value.shop, replied.value.messageId, attachments);
+  if (!(await new SupportRepo().adoptPendingUploads(replied.value.shop, replied.value.messageId, uploadIds, Date.now()))) {
+    return { error: "invalid_upload" as const };
+  }
   return { success: "replied" as const };
 };
 

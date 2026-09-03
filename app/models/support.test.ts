@@ -33,6 +33,25 @@ function open(
 }
 
 describe("SupportRepo", () => {
+  it("stages upload metadata under its owning shop", async () => {
+    await run(async () => {
+      const repo = new SupportRepo();
+      await repo.stageUpload({
+        id: "upload-alpha",
+        shop: SHOP,
+        ticketId: null,
+        r2Key: "support/alpha/new/upload-alpha",
+        filename: "screen.png",
+        contentType: "image/png",
+        sizeBytes: 123,
+        createdAt: 1_000,
+        expiresAt: 2_000,
+      });
+
+      expect(await repo.claimPendingUploads(OTHER, ["upload-alpha"], 1_500)).toEqual([]);
+    });
+  });
+
   it("opens a ticket whose first message is the merchant's, so it reads as open", async () => {
     await run(async () => {
       const repo = new SupportRepo();
