@@ -78,11 +78,11 @@ describe("KVSessionStorage", () => {
     expect(await storage.findSessionsByShop(other.shop)).toHaveLength(1);
   });
 
-  it("finds orphaned session records when index write was lost", async () => {
+  it("does not scan every session when a shop index entry is missing", async () => {
     const session = offlineSession("orphan.myshopify.com");
     await env.SESSION.put(`session:${session.id}`, JSON.stringify(session.toPropertyArray()));
     const found = await new KVSessionStorage(env.SESSION).findSessionsByShop(session.shop);
-    expect(found.map(({ id }) => id)).toContain(session.id);
+    expect(found).toEqual([]);
   });
 
   it("gives an offline session no KV expiry, so its refresh token outlives the access token", async () => {
