@@ -5,13 +5,8 @@ import {
 } from "react-router";
 import { runWithRequestContext } from "../app/request-context.server";
 import { runScheduledSweeps } from "../app/services/scheduled.server";
-import { scheduledDependencies } from "../app/wiring.server";
-import { WebhookDeliveryRepo } from "../app/models/webhook-deliveries.server";
-import { WebhookScopeObservationRepo } from "../app/models/webhook-scope-observations.server";
-import { ShopRepo } from "../app/models/shops.server";
-import { KVSessionStorage } from "../app/session-storage.server";
+import { scheduledDependencies, webhookConsumer } from "../app/wiring.server";
 import { consumeWebhook } from "../app/services/webhook-consumer";
-import { formatWebhookLog, writeWebhookLog } from "../app/services/webhook-logging";
 import { handleWebhookQueueBatch } from "../app/services/webhook-queue";
 
 /**
@@ -50,37 +45,7 @@ export default {
   async queue(batch, env) {
     await runWithRequestContext(env, async () => {
       await handleWebhookQueueBatch(batch, {
-        consume: async (work) => {
-          const result = await consumeWebhook({
-          deliveries: new WebhookDeliveryRepo(),
-          now: Date.now,
-          isRedactedShop: async (shop) => (await new ShopRepo().get(shop)) === undefined,
-          log: async (delivery, outcome, attempts, latencyMs) => {
-            writeWebhookLog(await formatWebhookLog({
-              deliveryId: delivery.id, topic: delivery.topic, shop: delivery.shop,
-              handler: delivery.topic, outcome, attempts, latencyMs,
-            }));
-          },
-          handlers: {
-            "app/uninstalled": async (delivery) => {
-              await new ShopRepo().recordUninstall(delivery.shop, Date.now());
-              const sessions = await new KVSessionStorage(env.SESSION).findSessionsByShop(delivery.shop);
-              await new KVSessionStorage(env.SESSION).deleteSessions(sessions.map((session) => session.id));
-            },
-            "app/scopes_update": async (delivery) => {
-              const storage = new KVSessionStorage(env.SESSION);
-              const scopes = await new WebhookScopeObservationRepo().list(delivery.id, delivery.shop);
-              await new WebhookScopeObservationRepo().applyScopes(delivery.id, delivery.shop, scopes, Date.now());
-              const sessions = await storage.findSessionsByShop(delivery.shop);
-              await Promise.all(sessions.map(async (session) => {
-                session.scope = scopes.join(",");
-                await storage.storeSession(session);
-              }));
-            },
-          },
-          }, work);
-          return result === "redacted" ? { outcome: "missing", topic: null } : result;
-        },
+        consume: (work) => { const consumer = webhookConsumer(); return consumeWebhook(consumer, work); },
         log: async (entry) => {
           const digest = entry.shop ? await crypto.subtle.digest("SHA-256", new TextEncoder().encode(entry.shop)) : undefined;
           const shopHash = digest ? `sha256:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")}` : undefined;

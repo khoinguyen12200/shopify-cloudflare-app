@@ -42,6 +42,16 @@ describe("TenantPurgeRepo", () => {
     expect(remaining.count).toBe(0);
   });
 
+  it("counts every directly deleted shop row", async () => {
+    const affected = await runWithRequestContext(env, async () => {
+      const shop = "count-all.myshopify.com";
+      await env.DB.prepare("INSERT INTO shops (shop, installed_at) VALUES (?, ?)").bind(shop, 1).run();
+      await env.DB.prepare("INSERT INTO notification_logs (id,event,channel,recipient,status,shop,created_at) VALUES (?,?,?,?,?,?,?)").bind("count-log", "x", "email", "x@y.com", "sent", shop, 1).run();
+      return new TenantPurgeRepo().deleteTenantRows(shop);
+    });
+    expect(affected).toBe(2);
+  });
+
   it("purges every tenant table without touching another tenant", async () => {
     const target = "target.myshopify.com";
     const other = "other.myshopify.com";

@@ -52,6 +52,31 @@ describe("ingestWebhook", () => {
     expect(deps.queued).toEqual(["example.myshopify.com:delivery-1"]);
   });
 
+  it("normalizes Shopify enum webhook topics for the consumer registry", async () => {
+    const claimed: string[] = [];
+    const deps = dependencies();
+    const deliveries = {
+      ...deps.deliveries,
+      async claim(input: { topic: string }) {
+        claimed.push(input.topic);
+        return "claimed" as const;
+      },
+    };
+
+    await ingestWebhook({ ...deps, deliveries }, {
+      webhookId: "delivery-uninstall",
+      eventId: "event-uninstall",
+      topic: "APP_UNINSTALLED",
+      shop: "example.myshopify.com",
+      apiVersion: "2026-10",
+      triggeredAt: 100,
+      receivedAt: 200,
+      payload: {},
+    });
+
+    expect(claimed).toEqual(["app/uninstalled"]);
+  });
+
   it("persists typed payload values before queue handoff", async () => {
     const deps = dependencies();
     const calls: string[] = [];

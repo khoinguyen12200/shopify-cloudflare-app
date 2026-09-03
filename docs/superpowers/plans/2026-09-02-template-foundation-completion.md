@@ -16,7 +16,7 @@
 - No `any`, `as`, skipped tests, new dependency, mocked D1/KV/R2, or fabricated production value.
 - Services import ports only. Models own Drizzle. `app/wiring.server.ts` builds per-request adapters.
 - Shopify UI/API work uses matching Shopify skill lookup and validator.
-- Embedded `/app` uses Polaris and translations. `/internal` migration requires owner decision first.
+- Embedded `/app` uses Polaris and translations. Staff-only `/internal` keeps its current accessible UI; no migration is planned.
 
 ---
 
@@ -90,25 +90,41 @@
 - [x] Run `node scripts/install-skills.test.mjs && npm run test:agent-setup`; expect pass.
 - [x] Commit: `git commit -m "test: isolate locked agent setup"`.
 
-### Task 6: Internal UI Decision and Migration
+### Task 6: Support Route Boundary
 
-**Files:** modify `docs/LIFECYCLE_FOUNDATION_STATUS.md`; conditional changes under `app/routes/internal/**`, `app/internal/components/**`, `app/styles/internal/**`.
+**Files:** modify `app/ports/support.ts`, `app/services/support.server.ts`, `app/routes/app/support/new.tsx`, `app/routes/app/support/detail.tsx`, and focused tests.
 
-- [x] Record decision request: staff-only `/internal` keeps current accessible UI system, or migrates to Polaris despite not being embedded Admin. Status records decision as pending.
-- [x] Do not migrate without this decision.
-- [ ] If Polaris selected: invoke `shopify-polaris-app-home`, search Homepage/Index/Details/Settings templates, inspect installed custom-elements manifest, validate all markup.
-- [ ] Migrate groups test-first: auth; dashboard; shops/subscriptions; support; admins/profile/AI. For every group add translation/render assertions, run focused tests, then commit separately.
-- [ ] Final migration gate: `npm run verify && npm run build`; no Tailwind/ngk imports in migrated files.
+- [x] Write failing service test proving attachment adoption uses injected support dependency; routes import no `SupportRepo`.
+- [x] Run focused test; confirm failure because `adoptAttachments` is missing.
+- [x] Add smallest `SupportService` method/port for adopting uploads, wire existing adapter in `app/wiring.server.ts`, replace both route constructions.
+- [x] Run focused support tests and typecheck; confirm pass.
+- [ ] Commit: `refactor: route support attachments through service`.
 
-### Task 7: Final Gate and Status
+### Task 7: Transactional Subscription Projection
+
+**Files:** modify `app/models/shop-subscriptions.server.ts`, `app/models/shop-subscriptions.test.ts`.
+
+- [x] Write failing regression test with overlapping observations/items proving stale ordering cannot delete newer items.
+- [x] Run focused model test; confirm failure under current non-transactional replacement.
+- [x] Batch projection upsert and item replacement, with the applied-event ordering guard on every item write; retain the existing guarded retirement cleanup path.
+- [x] Run focused subscription tests and typecheck; confirm pass.
+- [ ] Commit: `fix: make subscription projection updates atomic`.
+
+### Task 8: Local Coding Gate
 
 **Files:** modify `docs/LIFECYCLE_FOUNDATION_STATUS.md`.
 
-- [x] Run `npm run verify`, `npm run db:migrate:local`, `npm run test:agent-setup`, `npm run build`, and `git diff --check`; each must exit zero.
+- [x] Run `npm run verify`, `npm run db:migrate:local`, `npm run test:agent-setup`, `npm run build`, and `git diff --check`; all exit zero.
 - [x] Run `npm run check:placeholders`; expected failure until derived app supplies values. Guard remains strict.
-- [x] Attempted skill-documented Shopify dev/production validation; exact organization-access and missing-linkage blockers recorded in `docs/LIFECYCLE_FOUNDATION_STATUS.md`.
-- [x] Update status only with observed verification. Keep client ID, app URL, resource IDs, Partner credentials, plan handles, legal identity/copy, callback/scopes, and Shopify org access as external inputs.
-- [x] Commit: `git commit -m "docs: record template foundation verification"`.
+- [x] Update status with coding results and explicitly record `/internal` no-Polaris decision.
+
+### Task 9: Live Shopify Validation (last)
+
+**Files:** modify `docs/LIFECYCLE_FOUNDATION_STATUS.md` only.
+
+- [ ] After all coding and local gates pass, run skill-documented Shopify dev/production validation with supplied organization/app credentials.
+- [ ] Record exact command results and any external blockers; never replace missing IDs, URLs, secrets, scopes, legal copy, or plan handles with guesses.
+- [ ] Commit: `docs: record final Shopify validation`.
 
 ## Coverage Check
 
@@ -117,4 +133,4 @@
 - Inward architecture: Tasks 3 and 4.
 - Locked installer integrity: Task 5.
 - Internal UI: Task 6 requires owner decision.
-- Production authority and values: Task 7 external gate.
+- Production authority and values: Task 9 external gate.

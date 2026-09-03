@@ -17,6 +17,7 @@ import { requireAdminUser } from "~/services/admin-auth.server";
 import { adminUsers } from "~/wiring.server";
 import { ShopRepo } from "~/models/shops.server";
 import { ShopifyEventRepo } from "~/models/shopify-events.server";
+import { WebhookDeliveryRepo } from "~/models/webhook-deliveries.server";
 import { planForShopifyHandle } from "~/billing/plans";
 import { formatDateTime } from "~/i18n/format";
 import { formatMoney, fromMinorUnits, toCurrency } from "~/money";
@@ -54,6 +55,14 @@ const STATUS_TONE: Record<SubscriptionStatus, "success" | "warning" | "destructi
   FROZEN: "warning",
 };
 
+interface EventHistoryRow {
+  readonly id: string;
+  readonly kind: string;
+  readonly status: string;
+  readonly occurredAt: number;
+  readonly detail: string;
+}
+
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   await requireAdminUser(request, { users: adminUsers() });
   const shopDomain = decodeURIComponent(params.shop ?? "");
@@ -61,13 +70,41 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const shop = await new ShopRepo().get(shopDomain);
   if (!shop) throw new Response("Not found", { status: 404 });
 
-  const history = await new ShopifyEventRepo().listSubscriptionEvents(shopDomain);
+  const eventsRepo = new ShopifyEventRepo();
+  const [history, relationshipEvents, deliveries] = await Promise.all([
+    eventsRepo.listSubscriptionEvents(shopDomain),
+    eventsRepo.listRelationshipEvents(shopDomain),
+    new WebhookDeliveryRepo().listForShop(shopDomain),
+  ]);
+  const events: EventHistoryRow[] = [
+    ...relationshipEvents.map((event) => ({
+      id: `relationship:${event.eventId}`,
+      kind: "Relationship",
+      status: event.eventType,
+      occurredAt: event.occurredAt,
+      detail: event.reasonDescription ?? event.reason ?? event.eventId,
+    })),
+    ...history.map((event) => ({
+      id: `subscription:${event.id}`,
+      kind: "Subscription",
+      status: event.status,
+      occurredAt: event.occurredAt,
+      detail: event.planHandle ?? event.subscriptionId,
+    })),
+    ...deliveries.map((delivery) => ({
+      id: `webhook:${delivery.id}`,
+      kind: `Webhook: ${delivery.topic}`,
+      status: delivery.status,
+      occurredAt: delivery.receivedAt,
+      detail: delivery.failureDetail ?? delivery.id,
+    })),
+  ].sort((left, right) => right.occurredAt - left.occurredAt);
 
-  return { shop, history };
+  return { shop, history, events };
 };
 
 export default function ShopDetail() {
-  const { shop, history } = useLoaderData<typeof loader>();
+  const { shop, history, events } = useLoaderData<typeof loader>();
 
   return (
     <Page title={shop.shop} subtitle="Install history and subscription activity." fullWidth>
@@ -100,6 +137,49 @@ export default function ShopDetail() {
             </div>
           </CardContent>
         </Card>
+
+        <section aria-labelledby="event-history-heading">
+          <div className="mb-3">
+            <Text as="h2" id="event-history-heading" className="text-base font-semibold">
+              Event history
+            </Text>
+            <Text as="p" className="text-sm text-muted-foreground">
+              Immutable relationship, subscription, and webhook delivery records.
+            </Text>
+          </div>
+          <Card>
+            <CardContent className="overflow-x-auto p-0">
+              <Table className="[&_th]:h-12 [&_th]:px-4 [&_td]:px-4 [&_td]:py-3">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Event</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Detail</TableHead>
+                    <TableHead>When</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {events.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center text-muted-foreground">
+                        No event records for this shop yet.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    events.map((event) => (
+                      <TableRow key={event.id}>
+                        <TableCell className="font-medium">{event.kind}</TableCell>
+                        <TableCell><Badge variant="outline">{event.status}</Badge></TableCell>
+                        <TableCell className="max-w-md whitespace-normal text-muted-foreground">{event.detail}</TableCell>
+                        <TableCell className="text-muted-foreground">{formatDateTime(LOCALE, event.occurredAt)}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </section>
 
         <Card>
           <CardContent className="overflow-x-auto p-0">

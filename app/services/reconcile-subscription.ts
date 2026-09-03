@@ -54,6 +54,9 @@ export async function refreshSubscription(deps: {
   if (!deps.appId || !shop.shopifyShopId) return { status: "failed", code: "MISSING_CREDENTIALS", detail: "Partner app ID, token, or Shopify shop ID unavailable" };
   try {
     const response = await deps.partner.activeSubscription(deps.appId, shop.shopifyShopId);
+    if (response?.shop && ((response.shop.id && response.shop.id !== shop.shopifyShopId) || (response.shop.myshopifyDomain && response.shop.myshopifyDomain !== shop.shop))) {
+      throw new Error("Partner subscription shop does not match requested shop");
+    }
     // Partner history has no subscription ID, so both reconciliation paths use
     // the singular app/shop Active Subscription as projection identity.
     const subscriptionId = `active:${shop.shopifyShopId}`;

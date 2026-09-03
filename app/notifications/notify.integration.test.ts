@@ -10,13 +10,13 @@ import {
 import { createAdmin } from "~/services/admin-management.server";
 import { requestPasswordReset } from "~/services/password-reset.server";
 import { notify } from "./notify.server";
-import { adminUsers, passwordResetTokens } from "~/wiring.server";
+import { adminUsers, passwordResetNotifier, passwordResetTokens } from "~/wiring.server";
 
 setupTestDatabase();
 
 const inRequest = <T>(fn: () => Promise<T>) => runWithRequestContext(env, fn);
 const ORIGIN = "https://example.test";
-const resetDeps = { users: adminUsers(), tokens: passwordResetTokens() };
+const resetDeps = { users: adminUsers(), tokens: passwordResetTokens(), notifier: passwordResetNotifier() };
 
 /**
  * END TO END, through the real call site.

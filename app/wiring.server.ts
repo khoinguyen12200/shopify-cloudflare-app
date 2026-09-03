@@ -10,8 +10,13 @@ import { PasswordResetTokenRepo } from "~/models/password-reset-tokens.server";
 import { AiRepo } from "~/models/ai.server";
 import { SupportRepo } from "~/models/support.server";
 import { WebhookDeliveryRepo } from "~/models/webhook-deliveries.server";
+import { TenantPurgeRepo } from "~/models/tenant-purge.server";
+import { WebhookScopeObservationRepo } from "~/models/webhook-scope-observations.server";
+import { KVSessionStorage } from "~/session-storage.server";
+import type { ConsumerDelivery } from "~/services/webhook-consumer";
 import { getEnv } from "~/request-context.server";
 import { notify } from "~/notifications/notify.server";
+import type { PasswordResetNotifier } from "~/services/password-reset.server";
 import { signAttachmentToken } from "~/support/file-token";
 import { AiService } from "~/services/ai.server";
 import { SupportService } from "~/services/support.server";
@@ -34,6 +39,10 @@ export function passwordResetTokens(): PasswordResetTokenPort {
     invalidateAllForUser: (id, now) => repo.invalidateAllForUser(id, now),
     countActiveForUser: (id, now) => repo.countActiveForUser(id, now),
   };
+}
+
+export function passwordResetNotifier(): PasswordResetNotifier {
+  return { send: (input) => notify(input) };
 }
 
 /** Targeted billing refresh composition. Missing Partner credentials stay observable. */
@@ -106,6 +115,49 @@ export function supportService(): SupportService {
 
 export function webhookDeliveries() {
   return new WebhookDeliveryRepo();
+}
+
+export function tenantPurgeDependencies() {
+  const env = getEnv();
+  const storage = new KVSessionStorage(env.SESSION);
+  const repo = new TenantPurgeRepo();
+  return {
+    d1: {
+      prepare: (shop: string) => repo.prepareTenantPurge(shop),
+      deleteRows: (shop: string) => repo.deleteTenantRows(shop),
+    },
+    r2: { delete: (keys: readonly string[]) => env.UPLOADS.delete([...keys]) },
+    kv: {
+      deleteSessions: async (shop: string) => {
+        const sessions = await storage.findSessionsByShop(shop);
+        await storage.deleteSessions(sessions.map(({ id }) => id));
+        return sessions.length;
+      },
+    },
+  };
+}
+
+export function webhookConsumer() {
+  const env = getEnv();
+  const sessions = new KVSessionStorage(env.SESSION);
+  const scopes = new WebhookScopeObservationRepo();
+  return {
+    deliveries: new WebhookDeliveryRepo(),
+    now: Date.now,
+    handlers: {
+      "app/uninstalled": async (delivery: ConsumerDelivery) => {
+        await new ShopRepo().recordUninstall(delivery.shop, Date.now());
+        const found = await sessions.findSessionsByShop(delivery.shop);
+        await sessions.deleteSessions(found.map(({ id }) => id));
+      },
+      "app/scopes_update": async (delivery: ConsumerDelivery) => {
+        const current = await scopes.list(delivery.id, delivery.shop);
+        await scopes.applyScopes(delivery.id, delivery.shop, current, Date.now());
+        const found = await sessions.findSessionsByShop(delivery.shop);
+        await Promise.all(found.map(async (session) => { session.scope = current.join(","); await sessions.storeSession(session); }));
+      },
+    },
+  };
 }
 
 export function scheduledDependencies() {

@@ -61,15 +61,20 @@ export async function reconcileHistory(deps: {
     return { status: "failed", code: "MISSING_CREDENTIALS", detail: "Partner app ID or token unavailable" };
   }
   const checkpoint = await deps.checkpoint.readCheckpoint(CHECKPOINT);
-  const overlapFrom = (checkpoint?.watermarkAt ?? deps.clock.now()) - OVERLAP_MS;
-  const occurredAtMin = new Date(overlapFrom).toISOString();
+  const occurredAtMin = checkpoint?.watermarkAt === null || checkpoint?.watermarkAt === undefined
+    ? undefined
+    : new Date(checkpoint.watermarkAt - OVERLAP_MS).toISOString();
   const seen = new Set<string>();
   let cursor: string | null = null;
   let pages = 0;
   let events = 0;
   try {
     for (;;) {
-      const page = await deps.partner.listHistoricalEvents({ appId: deps.appId, cursor, occurredAtMin });
+      const page = await deps.partner.listHistoricalEvents({
+        appId: deps.appId,
+        cursor,
+        ...(occurredAtMin ? { occurredAtMin } : {}),
+      });
       pages += 1;
       for (const event of page.events) {
         if (seen.has(event.id)) continue;

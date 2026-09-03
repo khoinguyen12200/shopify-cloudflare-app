@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, or, sql } from "drizzle-orm";
 import {
   type WebhookDelivery,
   webhookDeliveries,
@@ -8,11 +8,21 @@ import type { WebhookDeliveryInput } from "~/ports/webhook-deliveries";
 
 export type { WebhookDeliveryInput } from "~/ports/webhook-deliveries";
 
+const PROCESSING_LEASE_MS = 5 * 60 * 1000;
+
 /**
  * The sole D1 adapter for the webhook delivery inbox. A delivery ID is a
  * global Shopify idempotency key; every subsequent tenant read is shop scoped.
  */
 export class WebhookDeliveryRepo {
+  async listForShop(shop: string): Promise<WebhookDelivery[]> {
+    return getDb()
+      .select()
+      .from(webhookDeliveries)
+      .where(eq(webhookDeliveries.shop, shop))
+      .orderBy(desc(webhookDeliveries.receivedAt));
+  }
+
   async markDeadLetter(shop: string, id: string, failedAt: number, detail: string): Promise<void> {
     await getDb().update(webhookDeliveries).set({ status: "dead_letter", failedAt, failureCode: "dead_letter", failureDetail: detail.slice(0, 1000) }).where(and(eq(webhookDeliveries.shop, shop), eq(webhookDeliveries.id, id), eq(webhookDeliveries.status, "failed")));
   }
@@ -68,7 +78,13 @@ export class WebhookDeliveryRepo {
         and(
           eq(webhookDeliveries.shop, shop),
           eq(webhookDeliveries.id, id),
-          inArray(webhookDeliveries.status, ["received", "queued", "failed"]),
+          or(
+            inArray(webhookDeliveries.status, ["received", "queued", "failed"]),
+            and(
+              eq(webhookDeliveries.status, "processing"),
+              lt(webhookDeliveries.processingStartedAt, startedAt - PROCESSING_LEASE_MS),
+            ),
+          ),
         ),
       )
       .returning({ id: webhookDeliveries.id });

@@ -49,4 +49,16 @@ describe("processQueuedWebhookMessage", () => {
     });
     expect(events).toEqual(["consume", "ack"]);
   });
+
+  it("retries work when another consumer still owns its processing lease", async () => {
+    const events: string[] = [];
+    await processQueuedWebhookMessage({
+      body: { shop: "shop.myshopify.com", id: "d1" }, attempts: 1,
+      ack: () => events.push("ack"), retry: () => events.push("retry"),
+    }, {
+      consume: async () => ({ outcome: "unavailable", topic: "app/uninstalled" }),
+      log: (entry) => { events.push(entry.outcome); },
+    });
+    expect(events).toEqual(["unavailable", "retry"]);
+  });
 });

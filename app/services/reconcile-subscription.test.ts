@@ -3,6 +3,15 @@ import { refreshSubscription, type SubscriptionProjectionPort } from "./reconcil
 import type { ShopifyPartnerPort } from "~/ports/shopify-partner";
 
 describe("refreshSubscription", () => {
+  it("rejects Partner data returned for another shop", async () => {
+    const subscriptions: SubscriptionProjectionPort = { upsertSubscriptionProjection: async () => "applied" };
+    const partner: ShopifyPartnerPort = {
+      listHistoricalEvents: async () => ({ events: [], hasNextPage: false, endCursor: null }),
+      activeSubscription: async () => ({ shop: { id: "gid://shopify/Shop/other", myshopifyDomain: "other.myshopify.com" }, billingPeriod: null, cancelAtEndOfCycle: false, trialEndsAt: null, currentBillingCycle: null, legacySubscriptionId: null, items: [], pendingUpdate: null }),
+    };
+    await expect(refreshSubscription({ partner, subscriptions, clock: { now: () => 100 }, appId: "app" }, { shop: "one.myshopify.com", shopifyShopId: "gid://shopify/Shop/1" }, 100)).resolves.toMatchObject({ status: "failed", code: "SUBSCRIPTION_REFRESH_FAILED" });
+  });
+
   it("makes one authoritative Partner read and replaces current projection", async () => {
     let calls = 0;
     let observation: unknown;

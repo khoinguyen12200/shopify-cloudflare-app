@@ -54,6 +54,20 @@ describe("consumeWebhook", () => {
     expect(deps.handled).toEqual([]);
   });
 
+  it("discards a delivery already marked processed", async () => {
+    const deps = dependencies();
+    const deliveries = {
+      ...deps.deliveries,
+      async get() { return {
+        id: "delivery-1", shop: "example.myshopify.com", topic: "app/uninstalled", status: "processed",
+      }; },
+    };
+    await expect(consumeWebhook({ ...deps, deliveries }, {
+      shop: "example.myshopify.com", id: "delivery-1",
+    })).resolves.toEqual({ outcome: "duplicate", topic: "app/uninstalled" });
+    expect(deps.handled).toEqual([]);
+  });
+
   it("persists dead-letter state after the final queue attempt", async () => {
     const deps = dependencies();
     const deadLetters: string[] = [];
@@ -65,21 +79,22 @@ describe("consumeWebhook", () => {
     };
     const failing = { ...deps, deliveries, handlers: { "app/uninstalled": async () => { throw new Error("broken"); } } };
 
-    await expect(consumeWebhook(failing, { shop: "example.myshopify.com", id: "delivery-1", attempts: 8 }))
+    await expect(consumeWebhook(failing, { shop: "example.myshopify.com", id: "delivery-1", attempts: 9 }))
       .rejects.toThrow("broken");
     expect(deadLetters).toEqual(["broken"]);
   });
 
-  it("skips redacted shops without dispatching a projection handler", async () => {
+  it("does not persist dead-letter state before configured retry limit", async () => {
     const deps = dependencies();
-    const handled: string[] = [];
-    const result = await consumeWebhook({
-      ...deps,
-      isRedactedShop: async () => true,
-      handlers: { "app/uninstalled": async () => { handled.push("written"); } },
-    }, { shop: "example.myshopify.com", id: "delivery-1" });
+    const deadLetters: string[] = [];
+    const deliveries = {
+      ...deps.deliveries,
+      async markDeadLetter(_shop: string, _id: string, _at: number, detail: string) { deadLetters.push(detail); },
+    };
+    const failing = { ...deps, deliveries, handlers: { "app/uninstalled": async () => { throw new Error("broken"); } } };
 
-    expect(result).toBe("redacted");
-    expect(handled).toEqual([]);
+    await expect(consumeWebhook(failing, { shop: "example.myshopify.com", id: "delivery-1", attempts: 8 }))
+      .rejects.toThrow("broken");
+    expect(deadLetters).toEqual([]);
   });
 });

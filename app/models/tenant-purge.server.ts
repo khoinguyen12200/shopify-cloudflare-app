@@ -46,6 +46,7 @@ export class TenantPurgeRepo {
     const deliveries = await db.select({ id: webhookDeliveries.id }).from(webhookDeliveries).where(eq(webhookDeliveries.shop, shop));
     const deliveryIds = deliveries.map(({ id }) => id);
     const counts = await Promise.all([
+      db.select({ count: sql<number>`count(*)` }).from(webhookScopeObservations).where(deliveryIds.length ? inArray(webhookScopeObservations.deliveryId, deliveryIds) : sql`0`),
       db.select({ count: sql<number>`count(*)` }).from(supportAttachments).where(eq(supportAttachments.shop, shop)),
       db.select({ count: sql<number>`count(*)` }).from(supportMessages).where(eq(supportMessages.shop, shop)),
       db.select({ count: sql<number>`count(*)` }).from(supportTickets).where(eq(supportTickets.shop, shop)),
@@ -61,6 +62,14 @@ export class TenantPurgeRepo {
       db.select({ count: sql<number>`count(*)` }).from(notificationPreferences).where(eq(notificationPreferences.scope, shop)),
       db.select({ count: sql<number>`count(*)` }).from(notificationOptOuts).where(eq(notificationOptOuts.scope, shop)),
       db.select({ count: sql<number>`count(*)` }).from(shops).where(eq(shops.shop, shop)),
+      db.select({ count: sql<number>`count(*)` }).from(shopGrantedScopes).where(eq(shopGrantedScopes.shop, shop)),
+      db.select({ count: sql<number>`count(*)` }).from(shopScopeChanges).where(eq(shopScopeChanges.shop, shop)),
+      db.select({ count: sql<number>`count(*)` }).from(shopifyEvents).where(eq(shopifyEvents.shop, shop)),
+      db.select({ count: sql<number>`count(*)` }).from(webhookDeliveries).where(eq(webhookDeliveries.shop, shop)),
+      db.select({ count: sql<number>`count(*)` }).from(aiRuns).where(eq(aiRuns.shop, shop)),
+      db.select({ count: sql<number>`count(*)` }).from(notificationLogs).where(eq(notificationLogs.shop, shop)),
+      db.select({ count: sql<number>`count(*)` }).from(notificationPreferences).where(eq(notificationPreferences.scope, shop)),
+      db.select({ count: sql<number>`count(*)` }).from(notificationOptOuts).where(eq(notificationOptOuts.scope, shop)),
     ]);
     const deleted = await db.batch([
       db.delete(webhookScopeObservations).where(deliveryIds.length ? or(eq(webhookScopeObservations.shop, shop), inArray(webhookScopeObservations.deliveryId, deliveryIds)) : eq(webhookScopeObservations.shop, shop)),

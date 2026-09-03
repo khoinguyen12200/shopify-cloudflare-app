@@ -22,27 +22,23 @@ export interface WebhookConsumerDependencies {
   };
   readonly handlers: Record<string, (delivery: ConsumerDelivery) => Promise<void>>;
   readonly now: () => number;
-  readonly isRedactedShop?: (shop: string) => Promise<boolean>;
-  readonly log?: (delivery: ConsumerDelivery, outcome: string, attempts: number, latencyMs: number) => Promise<void>;
 }
 
 export interface WebhookConsumerResult {
-  readonly outcome: "processed" | "unavailable" | "missing";
+  readonly outcome: "processed" | "unavailable" | "missing" | "duplicate";
   readonly topic: string | null;
 }
+
+const FINAL_QUEUE_ATTEMPT = 9;
 
 /** Claim-before-dispatch makes the at-least-once Queue transport exactly-once per delivery. */
 export async function consumeWebhook(
   dependencies: WebhookConsumerDependencies,
   work: QueuedWebhook,
-): Promise<WebhookConsumerResult | "redacted"> {
+): Promise<WebhookConsumerResult> {
   const delivery = await dependencies.deliveries.get(work.shop, work.id);
   if (!delivery) return { outcome: "missing", topic: null };
-  const startedAt = dependencies.now();
-  if (await dependencies.isRedactedShop?.(work.shop)) {
-    await dependencies.log?.(delivery, "redacted", work.attempts ?? 0, dependencies.now() - startedAt);
-    return "redacted";
-  }
+  if (delivery.status === "processed") return { outcome: "duplicate", topic: delivery.topic };
 
   const claimed = await dependencies.deliveries.markProcessing(work.shop, work.id, dependencies.now());
   if (claimed === "unavailable") return { outcome: "unavailable", topic: delivery.topic };
@@ -55,7 +51,7 @@ export async function consumeWebhook(
       failureCode: "unsupported_topic",
       failureDetail: detail,
     });
-    if ((work.attempts ?? 0) >= 8) {
+    if ((work.attempts ?? 0) >= FINAL_QUEUE_ATTEMPT) {
       await dependencies.deliveries.markDeadLetter?.(work.shop, work.id, dependencies.now(), detail);
     }
     throw new Error(`Unsupported webhook topic: ${delivery.topic}`);
@@ -64,7 +60,6 @@ export async function consumeWebhook(
   try {
     await handler(delivery);
     await dependencies.deliveries.markProcessed(work.shop, work.id, dependencies.now());
-    await dependencies.log?.(delivery, "processed", work.attempts ?? 0, dependencies.now() - startedAt);
     return { outcome: "processed", topic: delivery.topic };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
@@ -73,10 +68,9 @@ export async function consumeWebhook(
       failureCode: "consumer_failed",
       failureDetail: detail,
     });
-    if ((work.attempts ?? 0) >= 8) {
+    if ((work.attempts ?? 0) >= FINAL_QUEUE_ATTEMPT) {
       await dependencies.deliveries.markDeadLetter?.(work.shop, work.id, dependencies.now(), detail);
     }
-    await dependencies.log?.(delivery, (work.attempts ?? 0) >= 8 ? "dead_letter" : "failed", work.attempts ?? 0, dependencies.now() - startedAt);
     throw error;
   }
 }

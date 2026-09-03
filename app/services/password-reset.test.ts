@@ -23,6 +23,7 @@ const OLD_PASSWORD = "the-original-password";
 const resetDeps = {
   users: new AdminUserRepo(),
   tokens: new PasswordResetTokenRepo(),
+  notifier: { send: async () => ({ event: "admin_password_reset" as const, dispatched: [], decisions: [] }) },
 };
 
 async function seedUser(email = "user@example.com", status: "active" | "disabled" = "active") {

@@ -29,10 +29,11 @@ export async function ingestWebhook(
   dependencies: WebhookIngestDependencies,
   webhook: AuthenticatedWebhook,
 ): Promise<"queued" | "duplicate"> {
+  const topic = normalizeWebhookTopic(webhook.topic);
   const claimed = await dependencies.deliveries.claim({
     id: webhook.webhookId,
     eventId: webhook.eventId,
-    topic: webhook.topic,
+    topic,
     shop: webhook.shop,
     apiVersion: webhook.apiVersion,
     triggeredAt: webhook.triggeredAt,
@@ -52,6 +53,15 @@ export async function ingestWebhook(
   await dependencies.deliveries.markQueued(webhook.shop, webhook.webhookId);
   await dependencies.log?.(webhook, "queued", Date.now() - webhook.receivedAt);
   return "queued";
+}
+
+/** Shopify authentication returns enum names; consumers use webhook paths. */
+function normalizeWebhookTopic(topic: string): string {
+  if (topic.includes("/")) return topic.toLowerCase();
+  const separator = topic.indexOf("_");
+  return separator < 0
+    ? topic.toLowerCase()
+    : `${topic.slice(0, separator).toLowerCase()}/${topic.slice(separator + 1).toLowerCase()}`;
 }
 
 export async function sha256Json(payload: unknown): Promise<string> {

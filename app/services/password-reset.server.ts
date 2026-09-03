@@ -3,13 +3,18 @@ import type { PasswordResetTokenPort } from "~/ports/password-reset-tokens";
 import { generateToken, hashToken } from "~/lib/token";
 import { hashPassword } from "~/lib/password";
 import { validatePasswordStrength } from "~/lib/password-policy";
-import { notify } from "~/notifications/notify.server";
+import type { NotifyRequest } from "~/ports/notifier";
+import type { NotifyResult } from "~/notifications/notify.server";
 import { absolute, paths } from "~/urls";
 
 /** An unclicked link should not stay valid all day. */
 export const TOKEN_TTL_MS = 60 * 60 * 1000;
 /** Live links per account, so requesting repeatedly cannot flood an inbox. */
 export const MAX_ACTIVE_TOKENS = 3;
+
+export interface PasswordResetNotifier {
+  send(input: NotifyRequest<"admin_password_reset">): Promise<NotifyResult>;
+}
 
 /**
  * Ask for a reset link.
@@ -41,6 +46,7 @@ export async function requestPasswordReset(input: {
 }, deps: {
   users: Pick<AdminUserPort, "findByEmailWithHash">;
   tokens: Pick<PasswordResetTokenPort, "countActiveForUser" | "create">;
+  notifier: PasswordResetNotifier;
 }): Promise<RequestResetOutcome> {
   const email = normalizeEmail(input.email);
   const now = Date.now();
@@ -83,7 +89,7 @@ export async function requestPasswordReset(input: {
   // rendered from the registered template like every other notification. The
   // dedupe key is the token itself: a retried job cannot email the same link
   // twice, while a genuinely new request has a new token and sends.
-  const notified = await notify({
+  const notified = await deps.notifier.send({
     event: "admin_password_reset",
     to: { email: user.email },
     dedupeKey: `admin_password_reset:${await hashToken(token)}`,

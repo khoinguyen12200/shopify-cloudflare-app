@@ -63,7 +63,7 @@ describe("handleWebhookQueueBatch", () => {
     });
   });
 
-  it("persists dead letter in real D1 on attempt eight and retries queue message", async () => {
+  it("persists dead letter in real D1 on final attempt and retries queue message", async () => {
     await runWithRequestContext(env, async () => {
       const shop = "worker-dead-letter.myshopify.com";
       const id = "worker-dead-letter-delivery";
@@ -71,7 +71,7 @@ describe("handleWebhookQueueBatch", () => {
         .bind(id, "event", "app/uninstalled", "2025-01", shop, 1, 1, "hash", "queued").run();
       const events: string[] = [];
       await handleWebhookQueueBatch({ messages: [{
-        body: { shop, id }, attempts: 8,
+        body: { shop, id }, attempts: 9,
         ack: () => { events.push("ack"); }, retry: () => { events.push("retry"); },
       }] }, {
         consume: (work) => consumeWebhook({
@@ -86,7 +86,7 @@ describe("handleWebhookQueueBatch", () => {
     });
   });
 
-  it("persists unsupported topic as dead letter on attempt eight and retries queue message", async () => {
+  it("persists unsupported topic as dead letter on final attempt and retries queue message", async () => {
     await runWithRequestContext(env, async () => {
       const shop = "worker-unsupported-topic.myshopify.com";
       const id = "worker-unsupported-topic-delivery";
@@ -94,7 +94,7 @@ describe("handleWebhookQueueBatch", () => {
         .bind(id, "event", "orders/created", "2025-01", shop, 1, 1, "hash", "queued").run();
       const events: string[] = [];
       await handleWebhookQueueBatch({ messages: [{
-        body: { shop, id }, attempts: 8,
+        body: { shop, id }, attempts: 9,
         ack: () => { events.push("ack"); }, retry: () => { events.push("retry"); },
       }] }, {
         consume: (work) => consumeWebhook({

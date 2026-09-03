@@ -15,6 +15,7 @@ export interface AdminUser {
 export type SafeAdminUser = Omit<AdminUser, "passwordHash">;
 
 export interface AdminUserPort {
+  list(): Promise<SafeAdminUser[]>;
   findByEmailWithHash(email: string): Promise<AdminUser | undefined>;
   findById(id: string): Promise<SafeAdminUser | undefined>;
   findByIdWithHash(id: string): Promise<AdminUser | undefined>;

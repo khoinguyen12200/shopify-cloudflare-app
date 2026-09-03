@@ -137,6 +137,18 @@ describe("WebhookDeliveryRepo", () => {
     });
   });
 
+  it("reclaims a processing lease after five minutes", async () => {
+    const claims = await inRequest(async () => {
+      const repo = new WebhookDeliveryRepo();
+      const input = delivery();
+      await repo.claim(input);
+      await repo.markProcessing(input.shop, input.id, 1_700_000_000_000);
+      return repo.markProcessing(input.shop, input.id, 1_700_000_300_001);
+    });
+
+    expect(claims).toBe("claimed");
+  });
+
   it("does not let a stale failure overwrite a processed delivery", async () => {
     const stored = await inRequest(async () => {
       const repo = new WebhookDeliveryRepo();
@@ -192,5 +204,16 @@ describe("WebhookDeliveryRepo", () => {
     });
 
     expect(found).toBeUndefined();
+  });
+
+  it("lists every delivery for a shop in newest-first order", async () => {
+    const rows = await inRequest(async () => {
+      const repo = new WebhookDeliveryRepo();
+      await repo.claim(delivery({ id: "delivery-old", receivedAt: 100 }));
+      await repo.claim(delivery({ id: "delivery-new", receivedAt: 200 }));
+      return repo.listForShop("delivery.myshopify.com");
+    });
+
+    expect(rows.map((row) => row.id)).toEqual(["delivery-new", "delivery-old"]);
   });
 });

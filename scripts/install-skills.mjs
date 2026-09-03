@@ -28,6 +28,7 @@
 // reproducible from `skills-lock.json`. That is the whole reason this command
 // exists: clone, `npm install`, `npm run install:skill`, and the skills are back.
 import { spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   closeSync,
   cpSync,
@@ -214,20 +215,25 @@ if (sources.length === 0) {
 function verifyInstalledSkills(lock) {
   const skillNames = Object.keys(lock.skills ?? {});
   const stores = [codexDir, claudeDir];
-  const missing = stores.flatMap((store) =>
+  const invalid = stores.flatMap((store) =>
     skillNames
       .filter((name) => {
         const skillPath = join(store, name);
         if (!existsSync(skillPath) || !statSync(skillPath).isDirectory()) return true;
         const target = realpathSync(skillPath);
-        return relative(tempRoot, target).startsWith("..") || isAbsolute(relative(tempRoot, target));
+        if (relative(tempRoot, target).startsWith("..") || isAbsolute(relative(tempRoot, target))) return true;
+        const expected = lock.skills[name]?.computedHash;
+        if (typeof expected !== "string") return true;
+        const content = readFileSync(join(target, "SKILL.md"));
+        const actual = createHash("sha256").update(content).digest("hex");
+        return actual !== expected;
       })
       .map((name) => `${store}/${name}`),
   );
 
-  if (missing.length > 0) {
-    console.error(`\nMissing ${missing.length} installed skill path(s):`);
-    for (const path of missing) console.error(`  ${path}`);
+  if (invalid.length > 0) {
+    console.error(`\nMissing or changed ${invalid.length} locked skill path(s):`);
+    for (const path of invalid) console.error(`  ${path}`);
     process.exit(1);
   }
 

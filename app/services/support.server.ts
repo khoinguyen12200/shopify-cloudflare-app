@@ -50,6 +50,17 @@ function threadUrls(appUrl: string, ticketId: string) {
 export class SupportService {
   constructor(private readonly dependencies: SupportServiceDependencies) {}
 
+  async adoptAttachments(
+    shop: string,
+    messageId: string,
+    attachments: readonly Omit<Parameters<SupportRepository["attach"]>[0], "shop" | "messageId" | "at">[],
+  ): Promise<void> {
+    const at = this.dependencies.clock.now();
+    for (const attachment of attachments) {
+      await this.dependencies.repo.attach({ shop, messageId, at, ...attachment });
+    }
+  }
+
   /** File a new ticket, then tell the staff who asked to hear about it. */
   async openTicket(input: {
     shop: string;

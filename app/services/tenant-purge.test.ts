@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { purgeTenant } from "./tenant-purge.server";
+import { chunkR2Keys, purgeTenant } from "./tenant-purge.server";
 
 describe("purgeTenant", () => {
+  it("chunks R2 deletion keys at one thousand objects", () => {
+    const keys = Array.from({ length: 2_001 }, (_, index) => `key-${index}`);
+    expect(chunkR2Keys(keys)).toEqual([
+      keys.slice(0, 1_000), keys.slice(1_000, 2_000), keys.slice(2_000),
+    ]);
+  });
+
   it("deletes R2 objects before relational rows and then KV sessions", async () => {
     const order: string[] = [];
     const result = await purgeTenant({

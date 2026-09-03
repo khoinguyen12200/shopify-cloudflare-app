@@ -15,6 +15,26 @@ function event(id: string, occurredAt = "2026-01-01T00:00:00.000Z") {
 }
 
 describe("reconcileHistory", () => {
+  it("requests full history on first scan", async () => {
+    let request: Parameters<ShopifyPartnerPort["listHistoricalEvents"]>[0] | undefined;
+    const partner: ShopifyPartnerPort = {
+      activeSubscription: async () => null,
+      listHistoricalEvents: async (input) => {
+        request = input;
+        return { events: [], hasNextPage: false, endCursor: null };
+      },
+    };
+    await reconcileHistory({ partner, checkpoint: {
+      readCheckpoint: async () => null,
+      markCheckpointSucceeded: async () => undefined,
+      markCheckpointFailed: async () => undefined,
+    }, ledger: {
+      recordPartnerRelationship: async () => "inserted",
+      recordPartnerSubscription: async () => "inserted",
+    }, clock: { now: () => Date.parse("2026-01-01T00:00:00.000Z") }, appId: "app" }, 1);
+    expect(request).toEqual({ appId: "app", cursor: null });
+  });
+
   it("projects CREATED and CANCELED history into one current row while keeping both ledger facts", async () => {
     await runWithRequestContext(env, async () => {
       await env.DB.prepare("INSERT INTO shop_subscriptions (shop, subscription_id, status, applied_occurred_at, applied_external_id) VALUES (?, ?, ?, ?, ?)")

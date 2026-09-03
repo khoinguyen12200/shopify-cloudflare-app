@@ -4,6 +4,7 @@ import type { SupportAuthor, SupportThread, SupportTicket } from "~/support/type
 export type { SupportThread } from "~/support/types";
 
 export interface SupportRepository {
+  attach(input: { shop: string; messageId: string; id: string; r2Key: string; filename: string; contentType: string; sizeBytes: number; at: number }): Promise<void>;
   open(input: { shop: string; shopName: string; merchantEmail: string | null; ccEmails: readonly string[]; category: SupportCategory; subject: string; body: string; authorName: string; locale: string | null; at: number }): Promise<{ id: string; messageId: string }>;
   reply(input: { shop: string; ticketId: string; author: SupportAuthor; authorName: string; body: string; at: number }): Promise<boolean>;
   replyAsStaff(input: { ticketId: string; authorName: string; body: string; at: number }): Promise<{ shop: string; messageId: string } | undefined>;

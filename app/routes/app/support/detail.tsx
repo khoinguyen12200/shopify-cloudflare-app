@@ -22,7 +22,6 @@ import { getEnv } from "~/request-context.server";
 import { useLocale } from "~/i18n/useLocale";
 import { formatDate, formatDateTime } from "~/i18n/format";
 import { supportService } from "~/wiring.server";
-import { SupportRepo } from "~/models/support.server";
 import { statusOf, type SupportStatus } from "~/support/status";
 import { CATEGORY_LABEL_KEY } from "~/support/categories";
 import { replySchema, updateCcSchema, BODY_MAX } from "~/schemas/support";
@@ -129,27 +128,24 @@ export const action = async ({ params, request }: ActionFunctionArgs) => {
     return data({ error: replied.reason }, { status: replied.reason === "rate_limited" ? 429 : 404 });
   }
 
-  const repo = new SupportRepo();
-  const thread = await repo.find(session.shop, ticketId);
+  const thread = await service.find(session.shop, ticketId);
   const newest = thread?.messages.at(-1);
   if (newest) {
-    const now = Date.now();
+    const attachments = [];
     for (const uploadId of parsed.data.uploadIds) {
       const meta = form.get(`upload:${uploadId}`);
       if (typeof meta !== "string") continue;
       const [r2Key, filename, contentType, size] = meta.split("|");
       if (!r2Key || !filename || !contentType) continue;
-      await repo.attach({
-        shop: session.shop,
-        messageId: newest.id,
+      attachments.push({
         id: uploadId,
         r2Key,
         filename,
         contentType,
         sizeBytes: Number(size ?? 0),
-        at: now,
       });
     }
+    await service.adoptAttachments(session.shop, newest.id, attachments);
   }
 
   return data({ success: "replied" as const });

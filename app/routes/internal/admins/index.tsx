@@ -38,7 +38,6 @@ import {
 } from "ngk-dashboard";
 import { requireOwner } from "~/services/admin-auth.server";
 import { adminUsers } from "~/wiring.server";
-import { AdminUserRepo } from "~/models/admin-users.server";
 // Type-only: erased at build, so it does not pull the server module into the
 // client bundle.
 import type { AdminErrorReason } from "~/services/admin-management.server";
@@ -68,7 +67,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   return {
     actor,
-    admins: await new AdminUserRepo().list(),
+    admins: await adminUsers().list(),
     // Set by reset.tsx's redirect after a password reset — that page has
     // nothing of its own to render success on, since it navigates away.
     resetSuccess: url.searchParams.get("reset") === "1",

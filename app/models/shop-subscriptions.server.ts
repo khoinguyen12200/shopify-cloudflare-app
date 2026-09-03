@@ -88,7 +88,7 @@ export class ShopSubscriptionRepo {
     if (stale) return "stale";
     const { applySubscriptionObservation } = await import("~/domain/subscription-lifecycle");
     const state = applySubscriptionObservation(current ? { kind: kindByStatus[current.status], occurredAt: current.appliedOccurredAt, externalId: current.appliedExternalId } : null, observation);
-    const applied = await db.insert(shopSubscriptions).values({
+    const parentProjection = db.insert(shopSubscriptions).values({
       shop, subscriptionId: observation.subscriptionId, status: statusByKind[state.kind],
       planHandle: observation.planHandle === undefined ? current?.planHandle ?? null : observation.planHandle,
       billingInterval: observation.billingInterval === undefined ? current?.billingInterval ?? null : observation.billingInterval,
@@ -113,16 +113,32 @@ export class ShopSubscriptionRepo {
       pendingLegacySubscriptionId: observation.pendingLegacySubscriptionId === undefined ? current?.pendingLegacySubscriptionId ?? null : observation.pendingLegacySubscriptionId,
       appliedOccurredAt: observation.occurredAt, appliedExternalId: observation.externalId,
     }, where: or(sql`${shopSubscriptions.appliedOccurredAt} < ${observation.occurredAt}`, and(eq(shopSubscriptions.appliedOccurredAt, observation.occurredAt), sql`${shopSubscriptions.appliedExternalId} < ${observation.externalId}`)) }).returning({ subscriptionId: shopSubscriptions.subscriptionId });
+    const matchingProjection = sql`exists (select 1 from ${shopSubscriptions} where ${shopSubscriptions.shop} = ${shop} and ${shopSubscriptions.subscriptionId} = ${observation.subscriptionId} and ${shopSubscriptions.appliedOccurredAt} = ${observation.occurredAt} and ${shopSubscriptions.appliedExternalId} = ${observation.externalId})`;
+    const itemReplacement = observation.items ? [
+      db.delete(shopSubscriptionItems).where(and(
+        eq(shopSubscriptionItems.shop, shop),
+        eq(shopSubscriptionItems.subscriptionId, observation.subscriptionId),
+        matchingProjection,
+      )),
+      ...observation.items.map((item, position) => db.insert(shopSubscriptionItems).select(
+        db.select({
+          shop: sql<string>`${shop}`.as("shop"),
+          subscriptionId: sql<string>`${observation.subscriptionId}`.as("subscription_id"),
+          position: sql<number>`${position}`.as("position"),
+          itemType: sql<string>`${item.itemType}`.as("item_type"),
+          priceAmount: sql<number | null>`${item.priceAmount ?? null}`.as("price_amount"),
+          priceCurrency: sql<string | null>`${item.priceCurrency ?? null}`.as("price_currency"),
+          cappedAmountAmount: sql<number | null>`${item.cappedAmountAmount ?? null}`.as("capped_amount_amount"),
+          cappedAmountCurrency: sql<string | null>`${item.cappedAmountCurrency ?? null}`.as("capped_amount_currency"),
+        }).from(shopSubscriptions).where(matchingProjection),
+      )),
+    ] : [];
+    const [applied] = await db.batch([parentProjection, ...itemReplacement]);
     if (applied.length === 0 && !duplicate) return "stale";
-    if (observation.items) {
-      const replacement = db.delete(shopSubscriptionItems).where(and(eq(shopSubscriptionItems.shop, shop), eq(shopSubscriptionItems.subscriptionId, observation.subscriptionId)));
-      const rows = observation.items.map((item, position) => ({ shop, subscriptionId: observation.subscriptionId, position, itemType: item.itemType, priceAmount: item.priceAmount ?? null, priceCurrency: item.priceCurrency ?? null, cappedAmountAmount: item.cappedAmountAmount ?? null, cappedAmountCurrency: item.cappedAmountCurrency ?? null }));
-      await db.batch(rows.length ? [replacement, db.insert(shopSubscriptionItems).values(rows)] : [replacement]);
-    }
     if (observation.type === "ACTIVE_SUBSCRIPTION" && observation.status === "NONE") {
       await db.batch([
-        db.delete(shopSubscriptionItems).where(and(eq(shopSubscriptionItems.shop, shop), ne(shopSubscriptionItems.subscriptionId, observation.subscriptionId))),
-        db.delete(shopSubscriptions).where(and(eq(shopSubscriptions.shop, shop), ne(shopSubscriptions.subscriptionId, observation.subscriptionId))),
+        db.delete(shopSubscriptionItems).where(and(eq(shopSubscriptionItems.shop, shop), ne(shopSubscriptionItems.subscriptionId, observation.subscriptionId), matchingProjection)),
+        db.delete(shopSubscriptions).where(and(eq(shopSubscriptions.shop, shop), ne(shopSubscriptions.subscriptionId, observation.subscriptionId), matchingProjection)),
       ]);
     }
     return duplicate ? "duplicate" : "applied";

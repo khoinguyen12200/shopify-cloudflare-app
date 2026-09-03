@@ -27,7 +27,10 @@ Required source-of-truth rules:
 - Immutable normalized Shopify event ledger.
 - Ordered current relationship projections.
 - Ordered current subscription projections.
-- Subscription item replacement with atomic D1 writes.
+- Subscription item replacement with atomic D1 writes, including a guard that
+  prevents a stale duplicate from replacing a newer projection's items.
+- Subscription item writes split into D1-safe statements, so projections with
+  more items than one SQL statement's bind-variable limit remain valid.
 - Supported subscription states: `NONE`, `PENDING`, `ACTIVE`,
   `CANCELLATION_SCHEDULED`, `FROZEN`, `CANCELED`, and `UNKNOWN`.
 - Integer money and currency preservation.
@@ -89,9 +92,8 @@ Required source-of-truth rules:
 - Operational health read model exposes webhook failures, dead-letter count,
   lifecycle event count, subscription event count, and last sync checkpoint.
 - Internal subscription/shop/support readers use normalized projections/history.
-- Staff-only `/internal` keeps its current accessible UI system pending an owner
-  decision; no Polaris migration was authorized or performed. Polaris App Home
-  remains scoped to embedded `/app`.
+- Staff-only `/internal` keeps its current accessible UI system. Polaris App Home
+  remains scoped to embedded `/app`; no `/internal` Polaris migration is planned.
 
 ### Architecture
 
@@ -128,9 +130,8 @@ Required source-of-truth rules:
 
 ### Internal operations UI
 
-- Owner decision remains required before any `/internal` design-system migration.
-  Until then, feature and copy changes must stay within its current accessible,
-  translated staff UI system.
+- No migration remains. `/internal` stays on its current accessible, translated
+  staff UI system.
 
 ### Launch validation
 
@@ -147,7 +148,7 @@ Required source-of-truth rules:
 Latest verified commands:
 
 ```text
-npm run verify                 typecheck + lint + 858 Vitest tests passed
+npm run verify                 typecheck + lint + 870 Vitest tests passed
 npm run db:migrate:local       no migrations pending
 npm run test:agent-setup       12/12 passed
 npm run build                  passed
@@ -155,7 +156,7 @@ git diff --check               passed
 npm run check:placeholders     expected failure: 10 launch contract issues
 ```
 
-`npm run verify` currently reports 92 files and 858 tests passed. Shopify dev and
+`npm run verify` currently reports 92 files and 870 tests passed. Shopify dev and
 production CLI validation remains unrun in this gate because authorized org/app
 linkage is unavailable. Partner query schema validation passed; no live Partner
 API success is implied.

@@ -41,6 +41,60 @@ describe("ShopSubscriptionRepo", () => {
     expect(result?.amount).toBe(200);
   });
 
+  it("persists every item when a subscription exceeds D1's bind-variable limit", async () => {
+    const rows = await inRequest(async () => {
+      const repo = new ShopSubscriptionRepo();
+      const shop = "many-items.myshopify.com";
+      await repo.upsertObservation(shop, {
+        type: "CREATED" as const,
+        status: "ACTIVE" as const,
+        subscriptionId: "sub-1",
+        occurredAt: 1,
+        externalId: "evt-1",
+        items: Array.from({ length: 50 }, (_, position) => ({ itemType: `item-${position}`, priceAmount: position, priceCurrency: "USD" })),
+      });
+      return env.DB.prepare("SELECT item_type AS itemType, price_amount AS amount FROM shop_subscription_items WHERE shop = ? ORDER BY position")
+        .bind(shop).all<{ itemType: string; amount: number }>();
+    });
+    expect(rows.results).toHaveLength(50);
+    expect(rows.results[49]).toEqual({ itemType: "item-49", amount: 49 });
+  });
+
+  it("does not replace items after a newer projection wins", async () => {
+    const row = await inRequest(async () => {
+      const repo = new ShopSubscriptionRepo();
+      const shop = "interleaved-items.myshopify.com";
+      const old = {
+        type: "CREATED" as const,
+        status: "ACTIVE" as const,
+        subscriptionId: "sub-1",
+        occurredAt: 1,
+        externalId: "evt-1",
+        items: [{ itemType: "old", priceAmount: 100, priceCurrency: "USD" }],
+      };
+      await repo.upsertObservation(shop, old);
+      await env.DB.prepare(`
+        CREATE TRIGGER project_newer_subscription_before_item_replacement
+        BEFORE DELETE ON shop_subscription_items
+        WHEN OLD.shop = 'interleaved-items.myshopify.com'
+        BEGIN
+          UPDATE shop_subscriptions
+          SET applied_occurred_at = 2, applied_external_id = 'evt-2'
+          WHERE shop = OLD.shop AND subscription_id = OLD.subscription_id;
+          UPDATE shop_subscription_items
+          SET item_type = 'new', price_amount = 200
+          WHERE shop = OLD.shop AND subscription_id = OLD.subscription_id;
+          SELECT RAISE(IGNORE);
+        END
+      `).run();
+      await repo.upsertObservation(shop, old);
+      await env.DB.prepare("DROP TRIGGER project_newer_subscription_before_item_replacement").run();
+      return env.DB.prepare("SELECT item_type AS itemType, price_amount AS amount FROM shop_subscription_items WHERE shop = ?")
+        .bind(shop).first<{ itemType: string; amount: number }>();
+    });
+    expect(row).toEqual({ itemType: "new", amount: 200 });
+  });
+
   it("preserves metadata when observation omits it", async () => {
     const row = await inRequest(async () => {
       const repo = new ShopSubscriptionRepo();

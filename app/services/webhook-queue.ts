@@ -54,7 +54,8 @@ export async function processQueuedWebhookMessage(
     const finalOutcome = outcome === "missing" ? "discarded" : outcome;
     const topic = typeof result === "string" ? undefined : result.topic ?? undefined;
     await safeLog(dependencies.log, { event: "webhook.queue", id: work.id, shop: work.shop, attempts: message.attempts, outcome: finalOutcome, topic, handler: topic, latencyMs: (dependencies.now?.() ?? Date.now()) - started });
-    message.ack();
+    if (outcome === "unavailable") message.retry();
+    else message.ack();
   } catch {
     await safeLog(dependencies.log, { event: "webhook.queue", id: work.id, shop: work.shop, attempts: message.attempts, outcome: "failed", latencyMs: (dependencies.now?.() ?? Date.now()) - started });
     message.retry();

@@ -124,6 +124,16 @@ export class KVSessionStorage implements SessionStorage {
     for (const s of loaded) {
       if (s) sessions.push(s);
     }
+    const indexedIds = new Set(sessions.map(({ id }) => id));
+    let sessionCursor: string | undefined;
+    do {
+      const list = await this.kv.list({ prefix: "session:", cursor: sessionCursor });
+      const orphaned = await Promise.all(list.keys.map(({ name }) => this.loadSession(name.slice("session:".length))));
+      for (const candidate of orphaned) {
+        if (candidate?.shop === shop && !indexedIds.has(candidate.id)) sessions.push(candidate);
+      }
+      sessionCursor = list.list_complete ? undefined : list.cursor;
+    } while (sessionCursor);
     return sessions;
   }
 }
