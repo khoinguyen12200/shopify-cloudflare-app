@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull, lt } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lte } from "drizzle-orm";
 import { getDb } from "~/request-context.server";
 import { pendingUploads, supportAttachments, supportMessages, supportTickets, type PendingUpload, type SupportTicket as DbSupportTicket } from "~/db/schema";
 import type { SupportCategory } from "~/support/categories";
@@ -28,7 +28,7 @@ export class SupportRepo {
     return getDb()
       .select({ id: pendingUploads.id, r2Key: pendingUploads.r2Key })
       .from(pendingUploads)
-      .where(and(isNull(pendingUploads.adoptedAt), lt(pendingUploads.expiresAt, cutoff)))
+      .where(and(isNull(pendingUploads.adoptedAt), lte(pendingUploads.expiresAt, cutoff)))
       .limit(1_000);
   }
 
@@ -43,7 +43,7 @@ export class SupportRepo {
       .where(and(
         inArray(pendingUploads.id, [...new Set(ids)]),
         isNull(pendingUploads.adoptedAt),
-        lt(pendingUploads.expiresAt, cutoff),
+        lte(pendingUploads.expiresAt, cutoff),
       ))
       .returning({ id: pendingUploads.id });
     return deleted.length;

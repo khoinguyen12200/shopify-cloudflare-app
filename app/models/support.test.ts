@@ -52,15 +52,21 @@ describe("SupportRepo", () => {
           r2Key: "support/beta/expired", filename: "old-b.txt",
           contentType: "text/plain", sizeBytes: 1, createdAt: 3, expiresAt: 100,
         }),
+        repo.stageUpload({
+          id: "boundary-alpha", shop: SHOP, ticketId: null,
+          r2Key: "support/alpha/boundary", filename: "boundary.txt",
+          contentType: "text/plain", sizeBytes: 1, createdAt: 4, expiresAt: 200,
+        }),
       ]);
 
       const expired = await repo.listExpiredUploads(200);
       expect(expired).toEqual([
         { id: "expired-alpha", r2Key: "support/alpha/expired" },
         { id: "expired-beta", r2Key: "support/beta/expired" },
+        { id: "boundary-alpha", r2Key: "support/alpha/boundary" },
       ]);
 
-      expect(await repo.deleteExpiredUploads(["expired-alpha", "active-alpha", "missing"], 200)).toBe(1);
+      expect(await repo.deleteExpiredUploads(["expired-alpha", "active-alpha", "boundary-alpha", "missing"], 200)).toBe(2);
       expect(await repo.listExpiredUploads(200)).toEqual([
         { id: "expired-beta", r2Key: "support/beta/expired" },
       ]);
