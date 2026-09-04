@@ -127,6 +127,9 @@ business model.
 
 These were incorrectly classified as critical or launch blockers in the first
 pass. They need adoption documentation and checks, not one universal policy.
+The documentation gap is addressed by the [adoption checklist](ADOPTING_THE_TEMPLATE.md)
+and [operations runbook](OPERATIONS.md); the app-specific decisions remain with
+each adopter.
 
 - **AI gating:** `app/wiring.server.ts:247-249` intentionally returns `allowAll`; `.claude/rules/cloudflare.md` defines this as the base default. Every app that exposes merchant-facing AI must replace it with plan/quota/kill-switch policy before production. Add an adoption check, but do not bake billing assumptions into the starter.
 - **Compliance customer handlers:** the scaffold stores no customer records and already has tests documenting that outcome in `app/services/compliance.test.ts:121-175`. The real obligation is to update handlers whenever customer data is added; a filename grep is not a reliable control.
@@ -136,6 +139,19 @@ pass. They need adoption documentation and checks, not one universal policy.
 - **Runtime purge coverage:** `assertTenantPurgeCoverage` is a deliberate production invariant. Optimize its query count only after measurement; moving it solely to tests weakens GDPR protection.
 - **Server-side internal sessions:** signed cookie invalidation in KV may be worthwhile defense-in-depth, but it is an architectural expansion, not an automatic defect. Decide based on threat model and revocation requirements.
 - **Deploy automation and dependency scanning:** valuable operational improvements, but organization-specific. The previous workflow proposal was not deployable (including a misspelled token name and an assumed `/healthz` route); design these only after choosing the Cloudflare/GitHub trust model.
+
+## Documentation status
+
+- **Resolved documentation gap:** [Operations runbook](OPERATIONS.md) documents
+  deployment prerequisites, migration order, rollback boundaries, D1 recovery,
+  cron and R2 investigation, secret rotation, and the supported DLQ workflow.
+- **Resolved documentation gap:** [Adoption checklist](ADOPTING_THE_TEMPLATE.md)
+  makes the app-owned identity, legal, translation, billing, AI, customer-data,
+  production-resource, alerting, and App Store review gates explicit.
+- **Accepted template seam:** deployment automation, alert thresholds, incident
+  ownership, and CI/CD credentials remain organization-specific. The runbook
+  states the required properties without pretending that one workflow fits all
+  derived apps.
 
 ## Adoption checklist before an app ships
 
