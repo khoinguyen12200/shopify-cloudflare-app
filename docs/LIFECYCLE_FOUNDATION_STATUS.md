@@ -1,6 +1,6 @@
 # Shopify Lifecycle Foundation Status
 
-Status date: 2026-09-02
+Status date: 2026-09-04
 
 ## Goal
 
@@ -83,6 +83,8 @@ Required source-of-truth rules:
   without coverage; D1/KV/R2 boundary tests retain another tenant's data.
 - Two-tenant fixture proves every current D1 `shop` table is erased for target
   tenant while same rows for another tenant remain.
+- Staged support uploads are tenant-owned: their R2 keys are collected before
+  deletion and their metadata rows are erased with the rest of the tenant.
 - Explicit `implemented: true` and `noCustomerData: true` outcomes for customer
   compliance topics while app stores no customer records.
 - Shop-redaction path uses dependency ports instead of service-level model access.
@@ -124,11 +126,6 @@ Required source-of-truth rules:
 
 ## Not Done
 
-### Tenant purge
-
-- Full two-tenant fixture still needs rows for every supported table family,
-  including checkpoints and all notification variants.
-
 ### Internal operations UI
 
 - No migration remains. `/internal` stays on its current accessible, translated
@@ -152,7 +149,7 @@ Required source-of-truth rules:
 Latest verified commands:
 
 ```text
-npm run verify                 typecheck + lint + 870 Vitest tests passed
+npm run verify                 typecheck + lint + 917 Vitest tests passed
 npm run db:migrate:local       no migrations pending
 npm run test:agent-setup       12/12 passed
 npm run build                  passed
@@ -160,10 +157,11 @@ git diff --check               passed
 npm run check:placeholders     expected failure: 10 launch contract issues
 ```
 
-`npm run verify` currently reports 95 files and 883 tests passed. Shopify dev and
-production CLI validation remains unrun in this gate because authorized org/app
-linkage is unavailable. Partner query schema validation passed; no live Partner
-API success is implied.
+`npm run verify` currently reports 104 files and 917 tests passed. Shopify dev
+config validation reached the Shopify API but returned HTTP 403 because the
+current account is not a member of that app's organization; production remains
+unlinked by design. Partner query schema validation passed; no live Partner API
+success is implied.
 
 ## Intentional Template Blockers
 
