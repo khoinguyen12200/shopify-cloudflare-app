@@ -62,6 +62,13 @@ describe("usePendingUploads", () => {
     expect(hook.get().error).toBe("too_large");
   });
 
+  it("maps transport failures to upload_failed without rejecting add", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network down"));
+    const hook = setupHook();
+    await act(async () => expect(hook.get().add(fileList([uploadFile("shot.png")]))).resolves.toBeUndefined());
+    expect(hook.get().error).toBe("upload_failed");
+  });
+
   it("rejects invalid files before fetch", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
     const hook = setupHook();
@@ -71,7 +78,7 @@ describe("usePendingUploads", () => {
   });
 
   it("keeps at most ten uploads", async () => {
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
       const name = new Headers(init?.headers).get("X-Support-Filename") ?? "file.png";
       return new Response(JSON.stringify({ uploadId: name, r2Key: name, filename: name, contentType: "image/png", sizeBytes: 3 }), { status: 200 });
     });
@@ -79,6 +86,7 @@ describe("usePendingUploads", () => {
     const hook = setupHook();
     await act(async () => hook.get().add(fileList(Array.from({ length: 11 }, (_, index) => uploadFile(`file-${index}.png`)))));
     expect(hook.get().files).toHaveLength(10);
+    expect(fetchMock).toHaveBeenCalledTimes(10);
     expect(URL.createObjectURL).toHaveBeenCalledTimes(10);
   });
 

@@ -33,21 +33,30 @@ export function usePendingUploads(ticketId?: string): UploadController {
     setError(null);
     setBusy(true);
     try {
+      let remaining = Math.max(0, MAX_FILES - files.length);
       for (const file of Array.from(picked)) {
         const check = validateUpload({ contentType: file.type, sizeBytes: file.size });
         if (!check.ok) {
           setError(check.reason);
           continue;
         }
-        const response = await fetch("/support/upload", {
-          method: "POST",
-          body: file,
-          headers: {
-            "Content-Type": file.type,
-            "X-Support-Filename": encodeURIComponent(file.name),
-            ...(ticketId ? { "X-Support-Ticket": ticketId } : {}),
-          },
-        });
+        if (remaining === 0) break;
+        remaining -= 1;
+        let response: Response;
+        try {
+          response = await fetch("/support/upload", {
+            method: "POST",
+            body: file,
+            headers: {
+              "Content-Type": file.type,
+              "X-Support-Filename": encodeURIComponent(file.name),
+              ...(ticketId ? { "X-Support-Ticket": ticketId } : {}),
+            },
+          });
+        } catch {
+          setError("upload_failed");
+          continue;
+        }
         if (!response.ok) {
           const body: unknown = await response.json().catch(() => null);
           const reason = body && typeof body === "object" && "error" in body && typeof body.error === "string" ? body.error : "upload_failed";
@@ -68,7 +77,7 @@ export function usePendingUploads(ticketId?: string): UploadController {
     } finally {
       setBusy(false);
     }
-  }, [ticketId]);
+  }, [files.length, ticketId]);
 
   const remove = useCallback((uploadId: string) => {
     setFiles((current) => {
