@@ -105,7 +105,7 @@ describe("consumeWebhook", () => {
     const deliveries = {
       ...deps.deliveries,
       async get() {
-        return { id: "delivery-1", shop: "example.myshopify.com", topic: "retired/topic", status: states.includes("dead_letter") ? "dead_letter" : "queued", failureCode: states.includes("dead_letter") ? "unsupported_topic" : null, processingStartedAt: null };
+        return { id: "delivery-1", shop: "example.myshopify.com", topic: "retired/topic", status: states.includes("dead_letter") ? "dead_letter" : "queued", failureCode: states.includes("dead_letter") ? "dead_letter" : null, processingStartedAt: null };
       },
       async markFailed() { states.push("failed"); },
       async markDeadLetter() { states.push("dead_letter"); },

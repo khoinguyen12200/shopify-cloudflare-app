@@ -47,7 +47,7 @@ export async function consumeWebhook(
   if (!delivery) return { outcome: "missing", topic: null };
   if (await dependencies.isRedactedShop?.(work.shop)) return { outcome: "missing", topic: delivery.topic };
   if (delivery.status === "processed") return { outcome: "duplicate", topic: delivery.topic };
-  if (delivery.status === "dead_letter" && delivery.failureCode === "unsupported_topic") {
+  if (delivery.status === "dead_letter" && !isWebhookTopic(delivery.topic)) {
     return { outcome: "unsupported", topic: delivery.topic };
   }
 
