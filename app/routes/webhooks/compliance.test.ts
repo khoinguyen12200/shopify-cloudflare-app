@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { env } from "cloudflare:test";
 import { RouterContextProvider } from "react-router";
 import { runWithRequestContext } from "~/request-context.server";
@@ -55,6 +55,7 @@ describe("the compliance webhook endpoint", () => {
   });
 
   it("rejects a non-object compliance payload with 400", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const request = await signedWebhookRequest({
       url: WEBHOOK_URL,
       topic: "shop/redact",
@@ -64,6 +65,8 @@ describe("the compliance webhook endpoint", () => {
 
     const response = await post(request);
     expect(response.status).toBe(400);
+    expect(errorSpy).not.toHaveBeenCalledWith(expect.stringContaining("malformed-payload.myshopify.com"));
+    errorSpy.mockRestore();
   });
 
   it("rejects a GET with 405 rather than rendering an empty page", () => {

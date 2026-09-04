@@ -4,6 +4,7 @@ import { getEnv } from "~/request-context.server";
 import { compliancePayloadSchema } from "~/schemas/compliance-webhook";
 import { handleCompliance } from "~/services/compliance.server";
 import { tenantPurgeDependencies } from "~/wiring.server";
+import { shopLog } from "~/observability/shop-log";
 
 /**
  * The three MANDATORY compliance webhooks share this one endpoint, matching the
@@ -24,7 +25,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { topic, shop, payload } = await shopify.authenticate.webhook(request);
   const parsed = compliancePayloadSchema.safeParse(payload);
   if (!parsed.success) {
-    console.error(JSON.stringify({ event: "compliance.invalid_payload", shop, topic }));
+    await shopLog("compliance.invalid_payload", shop, { topic });
     return new Response("Invalid compliance payload", { status: 400 });
   }
 
