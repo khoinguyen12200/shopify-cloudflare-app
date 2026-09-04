@@ -9,6 +9,8 @@ export default defineConfig({
     include: [
       "app/components/support/AttachmentPicker.render.test.tsx",
       "app/routes/app/support/use-pending-uploads.test.tsx",
+      "app/routes/app/support/dom-outbound-guard.test.ts",
     ],
+    setupFiles: ["app/test/dom-outbound-guard.setup.ts"],
   },
 });
