@@ -91,6 +91,16 @@
       "namespace_id": "1001",
       // 10 writes per minute per shop: far above real use, far below a flood.
       "simple": { "limit": 10, "period": 60 }
+    },
+    {
+      "name": "LOGIN_LIMITER",
+      "namespace_id": "1002",
+      "simple": { "limit": 5, "period": 60 }
+    },
+    {
+      "name": "RESET_LIMITER",
+      "namespace_id": "1003",
+      "simple": { "limit": 3, "period": 60 }
     }
   ],
 
@@ -170,6 +180,16 @@
           "name": "SUPPORT_LIMITER",
           "namespace_id": "1001",
           "simple": { "limit": 10, "period": 60 }
+        },
+        {
+          "name": "LOGIN_LIMITER",
+          "namespace_id": "1002",
+          "simple": { "limit": 5, "period": 60 }
+        },
+        {
+          "name": "RESET_LIMITER",
+          "namespace_id": "1003",
+          "simple": { "limit": 3, "period": 60 }
         }
       ],
       "triggers": { "crons": ["30 3 * * *"] },

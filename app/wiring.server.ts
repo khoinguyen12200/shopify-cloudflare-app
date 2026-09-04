@@ -27,6 +27,7 @@ import type { AdminUserPort } from "~/ports/admin-users";
 import type { PasswordResetTokenPort } from "~/ports/password-reset-tokens";
 import { recordShopifyIdentity } from "~/services/record-shopify-identity";
 import { reconcileAfterUninstall } from "~/services/reconcile-after-uninstall";
+import type { AuthAttemptLimiter } from "~/ports/auth-rate-limit";
 
 const SHOP_IDENTITY_QUERY = `#graphql
   query AuthenticatedShopIdentity {
@@ -57,6 +58,35 @@ export async function persistShopIdentity(admin: { graphql: (query: string) => P
 
 export function adminUsers(): AdminUserPort {
   return new AdminUserRepo();
+}
+
+function authLimiter(binding: RateLimit | undefined): AuthAttemptLimiter {
+  return {
+    async check(key) {
+      if (!binding) return "unavailable";
+      try {
+        const outcome = await binding.limit({ key });
+        return outcome.success ? "allowed" : "limited";
+      } catch (error) {
+        console.error(JSON.stringify({
+          event: "auth.rate_limit_unavailable",
+          error: error instanceof Error ? error.message : "unknown",
+        }));
+        return "unavailable";
+      }
+    },
+  };
+}
+
+export function authLimiters(): {
+  readonly login: AuthAttemptLimiter;
+  readonly passwordReset: AuthAttemptLimiter;
+} {
+  const env = getEnv();
+  return {
+    login: authLimiter(env.LOGIN_LIMITER),
+    passwordReset: authLimiter(env.RESET_LIMITER),
+  };
 }
 
 export function passwordResetTokens(): PasswordResetTokenPort {

@@ -22,7 +22,11 @@ import {
   HOME_PATH,
 } from "~/services/admin-auth.server";
 import { getEnv } from "~/request-context.server";
-import { adminUsers } from "~/wiring.server";
+import { adminUsers, authLimiters } from "~/wiring.server";
+import { authClientKey } from "~/lib/auth-client-key";
+import { isProductionLike } from "~/lib/deployment";
+import type { AuthAttemptLimiter } from "~/ports/auth-rate-limit";
+import type { LoginResult } from "~/services/admin-auth.server";
 import { INTERNAL_FONT_LINKS, THEME_INIT_SCRIPT } from "~/internal/components";
 // Login sits OUTSIDE the /internal layout (see app/routes.ts), so it does not
 // inherit that layout's links() and must load the console stylesheet itself —
@@ -33,6 +37,7 @@ const LOGIN_ERRORS = {
   invalidCredentials: "That email and password do not match an account.",
   disabled: "This account has been disabled.",
   missingFields: "Email and password are both required.",
+  rateLimited: "Too many sign-in attempts. Try again later.",
 } as const;
 
 export const links: LinksFunction = () => [
@@ -58,7 +63,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   };
 };
 
-export const action = async ({ request }: ActionFunctionArgs) => {
+type LoginActionDeps = {
+  limiter: AuthAttemptLimiter;
+  verifyCredentials: (email: string, password: string) => Promise<LoginResult>;
+  createSession: (userId: string, redirectTo: string) => Promise<Response>;
+  productionLike: boolean;
+};
+
+export async function handleLoginAction(request: Request, deps: LoginActionDeps) {
+  const limit = await deps.limiter.check(authClientKey(request));
+  if (limit === "limited") return data({ error: "rateLimited" as const }, { status: 429 });
+  if (limit === "unavailable" && deps.productionLike) {
+    return new Response("Authentication rate limiting is unavailable", { status: 503 });
+  }
+
   const form = await request.formData();
   const email = String(form.get("email") ?? "");
   const password = String(form.get("password") ?? "");
@@ -68,14 +86,24 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return data({ error: "missingFields" as const }, { status: 400 });
   }
 
-  const result = await verifyAdminCredentials(email, password, { users: adminUsers() });
+  const result = await deps.verifyCredentials(email, password);
   if (!result.ok) {
     // 401, and the same generic message for a wrong password as for an unknown
     // email — anything else tells an attacker which emails exist.
     return data({ error: result.reason }, { status: 401 });
   }
 
-  return createAdminSession(result.user.id, next);
+  return deps.createSession(result.user.id, next);
+}
+
+export const action = async ({ request }: ActionFunctionArgs) => {
+  const users = adminUsers();
+  return handleLoginAction(request, {
+    limiter: authLimiters().login,
+    verifyCredentials: (email, password) => verifyAdminCredentials(email, password, { users }),
+    createSession: createAdminSession,
+    productionLike: isProductionLike(getEnv().SHOPIFY_APP_URL ?? ""),
+  });
 };
 
 export default function InternalLogin() {

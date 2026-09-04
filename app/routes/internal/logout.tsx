@@ -8,5 +8,5 @@ import { destroyAdminSession } from "~/services/admin-auth.server";
 export const action = ({ request }: ActionFunctionArgs) =>
   destroyAdminSession(request);
 
-export const loader = ({ request }: LoaderFunctionArgs) =>
-  destroyAdminSession(request);
+export const loader = (_args: LoaderFunctionArgs) =>
+  new Response("Method Not Allowed", { status: 405, headers: { Allow: "POST" } });
