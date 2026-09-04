@@ -109,6 +109,48 @@ export function configForEnv(config, envName) {
   return config.env?.[envName];
 }
 
+const BINDING_SECTIONS = [
+  ["ai", "binding"],
+  ["analytics_engine_datasets", "binding"],
+  ["browser", "binding"],
+  ["d1_databases", "binding"],
+  ["durable_objects", "bindings", "name"],
+  ["hyperdrive", "binding"],
+  ["images", "binding"],
+  ["kv_namespaces", "binding"],
+  ["queues", "consumers", "binding"],
+  ["queues", "producers", "binding"],
+  ["r2_buckets", "binding"],
+  ["ratelimits", "name"],
+  ["send_email", "name"],
+  ["services", "binding"],
+  ["vectorize", "binding"],
+  ["workflows", "binding"],
+];
+
+function bindingKeys(config) {
+  return new Set(BINDING_SECTIONS.flatMap(([section, nested, key]) => {
+    const entries = key ? config[section]?.[nested] : config[section];
+    if (Array.isArray(entries)) return entries.map((entry) => entry[key ?? nested]).filter(Boolean);
+    if (entries && typeof entries === "object") return [entries[key ?? nested]].filter(Boolean);
+    return [];
+  }));
+}
+
+function parityIssues(base, production) {
+  const issues = [];
+  for (const key of bindingKeys(base)) {
+    if (!bindingKeys(production).has(key)) issues.push(`production binding ${key} is missing`);
+  }
+  for (const key of Object.keys(base.vars ?? {})) {
+    if (!(key in (production.vars ?? {}))) issues.push(`production var ${key} is missing`);
+  }
+  for (const key of base.secrets?.required ?? []) {
+    if (!production.secrets?.required?.includes(key)) issues.push(`production secret ${key} is missing`);
+  }
+  return issues;
+}
+
 function tomlString(text, key) {
   return text.match(new RegExp(`^${key}\\s*=\\s*"([^"]*)"`, "m"))?.[1] ?? "";
 }
@@ -132,6 +174,7 @@ export function validateLaunchContract(files) {
   const issues = [];
   const production = configForEnv(files.wrangler, "production");
   if (!production) return ['No "production" environment in wrangler.jsonc'];
+  issues.push(...parityIssues(configForEnv(files.wrangler, "top-level"), production));
   if (findPlaceholders(production).length > 0) issues.push("Cloudflare production binding contains placeholder values");
 
   const vars = production.vars ?? {};

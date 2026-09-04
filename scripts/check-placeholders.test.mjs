@@ -3,26 +3,28 @@ import { test } from "node:test";
 import { validateLaunchContract } from "./check-placeholders.mjs";
 
 function validFiles() {
+  const production = {
+    kv_namespaces: [{ binding: "SESSION", id: "0123456789abcdef0123456789abcdef" }],
+    d1_databases: [{ binding: "DB", database_id: "11111111-2222-3333-4444-555555555555" }],
+    vars: {
+      SHOPIFY_API_KEY: "client-key",
+      SHOPIFY_APP_URL: "https://app.example.org",
+      SHOPIFY_PARTNER_APP_ID: "gid://partners/App/1",
+      SHOPIFY_PARTNER_ORGANIZATION_ID: "1234567",
+      SHOPIFY_PARTNER_API_VERSION: "2026-07",
+      AI_GATEWAY_ID: "",
+    },
+    secrets: { required: ["SHOPIFY_PARTNER_API_TOKEN", "ATTACHMENT_TOKEN_SECRET"] },
+    r2_buckets: [{ binding: "UPLOADS", bucket_name: "uploads" }],
+    send_email: [{ name: "EMAIL" }],
+    ai: { binding: "AI" },
+    queues: { producers: [{ binding: "WEBHOOK_QUEUE", queue: "queue" }] },
+    ratelimits: [{ name: "SUPPORT_LIMITER" }, { name: "LOGIN_LIMITER" }, { name: "RESET_LIMITER" }],
+  };
   return {
     wrangler: {
-      env: { production: {
-        kv_namespaces: [{ binding: "SESSION", id: "0123456789abcdef0123456789abcdef" }],
-        d1_databases: [{ binding: "DB", database_id: "11111111-2222-3333-4444-555555555555" }],
-        vars: {
-          SHOPIFY_API_KEY: "client-key",
-          SHOPIFY_APP_URL: "https://app.example.org",
-          SHOPIFY_PARTNER_APP_ID: "gid://partners/App/1",
-          SHOPIFY_PARTNER_ORGANIZATION_ID: "1234567",
-          SHOPIFY_PARTNER_API_VERSION: "2026-07",
-          AI_GATEWAY_ID: "",
-        },
-        secrets: { required: ["SHOPIFY_PARTNER_API_TOKEN", "ATTACHMENT_TOKEN_SECRET"] },
-        r2_buckets: [{ binding: "UPLOADS", bucket_name: "uploads" }],
-        send_email: [{ name: "EMAIL" }],
-        ai: { binding: "AI" },
-        queues: { producers: [{ binding: "WEBHOOK_QUEUE", queue: "queue" }] },
-        ratelimits: [{ name: "SUPPORT_LIMITER" }, { name: "LOGIN_LIMITER" }, { name: "RESET_LIMITER" }],
-      } },
+      ...structuredClone(production),
+      env: { production },
     },
     productionToml: 'client_id = "client-key"\napplication_url = "https://app.example.org"\n[webhooks]\napi_version = "2026-07"\n[access_scopes]\nscopes = ""\n[auth]\nredirect_urls = [ "https://app.example.org/auth/callback" ]',
     developmentToml: 'client_id = "dev-key"\napplication_url = "https://dev.example.org"\n[webhooks]\napi_version = "2026-07"\n[access_scopes]\nscopes = ""\n[auth]\nredirect_urls = [ "https://dev.example.org/auth/callback" ]',
@@ -57,6 +59,13 @@ test("reports an absent production binding by its exact key", () => {
   delete files.wrangler.env.production.r2_buckets;
   const issues = validateLaunchContract(files).join("\n");
   assert.match(issues, /production binding UPLOADS/);
+});
+
+test("rejects a top-level var omitted from production", () => {
+  const files = validFiles();
+  files.wrangler.vars.FUTURE_REQUIRED_VAR = "configured";
+  const issues = validateLaunchContract(files).join("\n");
+  assert.match(issues, /production var FUTURE_REQUIRED_VAR/i);
 });
 
 test("rejects every launch placeholder and redirect drift", () => {
