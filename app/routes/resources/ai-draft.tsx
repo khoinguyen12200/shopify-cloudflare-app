@@ -6,6 +6,32 @@ import type { ThreadForPrompt } from "~/ai/draft-prompt";
 import { toReplyTone } from "~/ai/tones";
 import { replyTask } from "~/ai/tasks/reply";
 
+interface DraftStreamController {
+  enqueue(chunk: Uint8Array): void;
+  close(): void;
+}
+
+export async function writeDraftStream(
+  textStream: AsyncIterable<string>,
+  controller: DraftStreamController,
+  ticketId: string,
+): Promise<void> {
+  const encoder = new TextEncoder();
+  try {
+    for await (const chunk of textStream) {
+      controller.enqueue(encoder.encode(chunk));
+    }
+  } catch (cause) {
+    console.error(JSON.stringify({
+      event: "ai.draft_cancel_failed",
+      ticketId,
+      error: errorMessage(cause),
+    }));
+  } finally {
+    controller.close();
+  }
+}
+
 /**
  * Streams a REWRITE of what the staff member has already typed, token by token
  * — or a suggestion when the box is empty.
@@ -69,19 +95,9 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
   const cloudflare = context.get(cloudflareContext);
   cloudflare.ctx.waitUntil(started.value.done);
 
-  const encoder = new TextEncoder();
   const body = new ReadableStream<Uint8Array>({
     async start(controller) {
-      try {
-        for await (const chunk of started.value.textStream) {
-          controller.enqueue(encoder.encode(chunk));
-        }
-      } catch {
-        // The draft stops where it stops. The staff member keeps what arrived
-        // and writes the rest — never an error thrown into a half-filled box.
-      } finally {
-        controller.close();
-      }
+      await writeDraftStream(started.value.textStream, controller, ticketId);
     },
   });
 
@@ -94,3 +110,7 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
     },
   });
 };
+
+function errorMessage(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause);
+}
