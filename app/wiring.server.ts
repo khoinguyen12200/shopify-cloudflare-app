@@ -218,8 +218,16 @@ export function webhookConsumer() {
 
 export function scheduledDependencies() {
   const env = getEnv();
+  const uploads = new SupportRepo();
   return {
     tokens: new PasswordResetTokenRepo(),
+    uploads: {
+      listExpiredUploads: (cutoff: number) => uploads.listExpiredUploads(cutoff),
+      deleteExpiredUploads: (ids: readonly string[], cutoff: number) => uploads.deleteExpiredUploads(ids, cutoff),
+      deleteUploadObjects: async (keys: readonly string[]) => {
+        await env.UPLOADS.delete([...keys]);
+      },
+    },
     history: {
       reconcile: (now: number) => reconcileHistory({
         partner: new ShopifyPartnerAdapter({

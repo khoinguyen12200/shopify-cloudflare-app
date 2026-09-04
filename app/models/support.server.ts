@@ -1,8 +1,9 @@
-import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lt } from "drizzle-orm";
 import { getDb } from "~/request-context.server";
 import { pendingUploads, supportAttachments, supportMessages, supportTickets, type PendingUpload, type SupportTicket as DbSupportTicket } from "~/db/schema";
 import type { SupportCategory } from "~/support/categories";
 import type { SupportAttachment, SupportAuthor, SupportThread, SupportTicket } from "~/support/types";
+import type { ExpiredUpload } from "~/ports/scheduled";
 
 export type { SupportThread } from "~/support/types";
 
@@ -20,6 +21,32 @@ export class SupportRepo {
     filename: string; contentType: string; sizeBytes: number; createdAt: number; expiresAt: number;
   }): Promise<void> {
     await getDb().insert(pendingUploads).values(input);
+  }
+
+  /** Uploads that expired before a message adopted them, across all shops. */
+  async listExpiredUploads(cutoff: number): Promise<readonly ExpiredUpload[]> {
+    return getDb()
+      .select({ id: pendingUploads.id, r2Key: pendingUploads.r2Key })
+      .from(pendingUploads)
+      .where(and(isNull(pendingUploads.adoptedAt), lt(pendingUploads.expiresAt, cutoff)))
+      .limit(1_000);
+  }
+
+  /**
+   * Remove only rows still expired at deletion time. The repeat predicate keeps
+   * a concurrent extension from deleting a newly valid upload after R2 cleanup.
+   */
+  async deleteExpiredUploads(ids: readonly string[], cutoff: number): Promise<number> {
+    if (ids.length === 0) return 0;
+    const deleted = await getDb()
+      .delete(pendingUploads)
+      .where(and(
+        inArray(pendingUploads.id, [...new Set(ids)]),
+        isNull(pendingUploads.adoptedAt),
+        lt(pendingUploads.expiresAt, cutoff),
+      ))
+      .returning({ id: pendingUploads.id });
+    return deleted.length;
   }
 
   async claimPendingUploads(shop: string, ids: readonly string[], now: number): Promise<PendingUpload[]> {

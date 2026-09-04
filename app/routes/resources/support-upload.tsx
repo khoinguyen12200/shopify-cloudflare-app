@@ -19,7 +19,7 @@ import { SupportRepo } from "~/models/support.server";
  *
  * The object is written BEFORE any row exists, keyed by a fresh upload id. A
  * merchant who attaches a file and then abandons the form leaves an orphan
- * blob; the daily cron sweeps them (see workers/app.ts). That is the deliberate
+ * blob; the daily cron runs `runScheduledSweeps` to remove them. That is the deliberate
  * trade for never buffering.
  */
 export const action = async ({ request }: ActionFunctionArgs) => {
