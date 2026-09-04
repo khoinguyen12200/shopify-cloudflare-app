@@ -25,6 +25,14 @@ describe("billing refresh trigger", () => {
     );
   });
 
+  it("turns an empty Shopify app handle into a controlled 502", () => {
+    expect(() =>
+      parseCurrentAppInstallationHandle({
+        data: { currentAppInstallation: { app: { handle: "   " } } },
+      }),
+    ).toThrowError(expect.objectContaining({ status: 502 }));
+  });
+
   it("does not call Shopify on ordinary billing navigation", () => {
     expect(shouldRefreshSubscription("https://example.test/app/billing?shop=one.myshopify.com")).toBe(false);
   });

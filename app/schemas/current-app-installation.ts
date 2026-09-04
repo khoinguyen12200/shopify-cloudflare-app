@@ -6,7 +6,7 @@ export const currentAppInstallationSchema: z.ZodType<{
   data: z.object({
     currentAppInstallation: z.object({
       app: z.object({
-        handle: z.string(),
+        handle: z.string().trim().min(1),
       }),
     }),
   }),
