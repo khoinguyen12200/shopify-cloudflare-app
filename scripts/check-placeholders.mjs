@@ -143,6 +143,26 @@ export function validateLaunchContract(files) {
   if (!(production.secrets?.required ?? []).includes("SHOPIFY_PARTNER_API_TOKEN")) {
     issues.push("SHOPIFY_PARTNER_API_TOKEN secret is not declared");
   }
+  if (!(production.secrets?.required ?? []).includes("ATTACHMENT_TOKEN_SECRET")) {
+    issues.push("ATTACHMENT_TOKEN_SECRET secret is not declared");
+  }
+
+  const requiredBindings = [
+    ["SESSION", "kv_namespaces"], ["DB", "d1_databases"], ["UPLOADS", "r2_buckets"],
+    ["EMAIL", "send_email"], ["AI", "ai"], ["WEBHOOK_QUEUE", "queues"],
+    ["SUPPORT_LIMITER", "ratelimits"], ["LOGIN_LIMITER", "ratelimits"], ["RESET_LIMITER", "ratelimits"],
+  ];
+  for (const [binding, section] of requiredBindings) {
+    const configured = section === "ai"
+      ? production.ai?.binding === binding
+      : section === "queues"
+        ? production.queues?.producers?.some((entry) => entry.binding === binding)
+        : section === "ratelimits"
+          ? production.ratelimits?.some((entry) => entry.name === binding)
+          : production[section]?.some((entry) => entry.binding === binding || entry.name === binding);
+    if (!configured) issues.push(`production binding ${binding} is missing`);
+  }
+  if (!("AI_GATEWAY_ID" in vars)) issues.push("AI_GATEWAY_ID production var is missing");
 
   const clientId = tomlString(files.productionToml, "client_id");
   const appUrl = tomlString(files.productionToml, "application_url");

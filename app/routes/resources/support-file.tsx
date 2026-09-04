@@ -1,5 +1,6 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { getEnv } from "~/request-context.server";
+import { requireAttachmentTokenSecret } from "~/wiring.server";
 import { getAdminUser } from "~/services/admin-auth.server";
 import { adminUsers } from "~/wiring.server";
 import { SupportRepo } from "~/models/support.server";
@@ -40,7 +41,7 @@ export const loader = async ({ params, request }: LoaderFunctionArgs) => {
   const attachment = await new SupportRepo().findAttachment(id);
   if (!attachment) return deny();
 
-  if (!(await isAuthorised({ request, attachmentId: id, secret: env.SHOPIFY_API_SECRET }))) {
+  if (!(await isAuthorised({ request, attachmentId: id, secret: requireAttachmentTokenSecret(env) }))) {
     return deny();
   }
 

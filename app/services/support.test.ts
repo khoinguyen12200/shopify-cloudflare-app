@@ -431,7 +431,7 @@ describe("attachment URLs", () => {
     expect(url).toContain(`/support/file/${id}`);
     expect(
       await verifyAttachmentToken({
-        secret: "test-api-secret",
+        secret: "test-attachment-secret",
         attachmentId: id,
         token,
         now: Date.now(),
@@ -447,7 +447,7 @@ describe("attachment URLs", () => {
     const token = new URL(url, "https://example.test").searchParams.get("token") ?? "";
     expect(
       await verifyAttachmentToken({
-        secret: "test-api-secret",
+        secret: "test-attachment-secret",
         attachmentId: "attachment-b",
         token,
         now: Date.now(),

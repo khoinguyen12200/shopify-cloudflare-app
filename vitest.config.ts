@@ -53,6 +53,7 @@ export default defineConfig({
           // which is gitignored and absent on a CI runner.
           SHOPIFY_API_KEY: "test-api-key",
           SHOPIFY_API_SECRET: "test-api-secret",
+          ATTACHMENT_TOKEN_SECRET: "test-attachment-secret",
           SHOPIFY_APP_URL: "https://example.test",
           // Signs the internal console's session cookie. Injected here so the
           // session layer is TESTABLE: admin-auth.server.ts refuses to run

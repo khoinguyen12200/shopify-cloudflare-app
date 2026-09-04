@@ -10,6 +10,7 @@ import {
 } from "./compliance.server";
 import { TenantPurgeRepo } from "~/models/tenant-purge.server";
 import { KVSessionStorage } from "~/session-storage.server";
+import { vi } from "vitest";
 
 setupTestDatabase();
 
@@ -48,6 +49,15 @@ describe("compliance topic registry", () => {
 });
 
 describe("shop/redact", () => {
+  it("logs a shop hash rather than the raw tenant domain", async () => {
+    const write = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await inRequest(() => dispatch("SHOP_REDACT", { shop: "private.myshopify.com", payload: {} }));
+    const output = write.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(output).not.toContain("private.myshopify.com");
+    expect(output).toContain("shopHash");
+    write.mockRestore();
+  });
+
   it("erases the shop's row", async () => {
     const shop = "redact-me.myshopify.com";
 

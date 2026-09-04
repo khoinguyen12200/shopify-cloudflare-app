@@ -78,6 +78,13 @@ function authLimiter(binding: RateLimit | undefined): AuthAttemptLimiter {
   };
 }
 
+export function requireAttachmentTokenSecret(env: { readonly ATTACHMENT_TOKEN_SECRET?: string; readonly SHOPIFY_API_SECRET?: string }): string {
+  if (!env.ATTACHMENT_TOKEN_SECRET) {
+    throw new Error("ATTACHMENT_TOKEN_SECRET is not configured");
+  }
+  return env.ATTACHMENT_TOKEN_SECRET;
+}
+
 export function authLimiters(): {
   readonly login: AuthAttemptLimiter;
   readonly passwordReset: AuthAttemptLimiter;
@@ -189,7 +196,7 @@ export function supportService(): SupportService {
     notifier: { send: async (input) => { await notify(input); } },
     appUrl: env.SHOPIFY_APP_URL,
     withinRateLimit: async (shop) => env.SUPPORT_LIMITER ? (await env.SUPPORT_LIMITER.limit({ key: shop })).success : true,
-    signAttachment: async (attachmentId, expiresAt) => signAttachmentToken({ secret: env.SHOPIFY_API_SECRET, attachmentId, expiresAt }),
+    signAttachment: async (attachmentId, expiresAt) => signAttachmentToken({ secret: requireAttachmentTokenSecret(env), attachmentId, expiresAt }),
   });
 }
 

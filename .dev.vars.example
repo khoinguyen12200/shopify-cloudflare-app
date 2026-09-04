@@ -27,6 +27,10 @@
 # constant, which would make the session cookie forgeable.
 INTERNAL_SESSION_SECRET=dev-only-internal-session-secret-change-me
 
+# Signs support attachment URLs. Keep this independent from Shopify credentials.
+# Generate with: `openssl rand -hex 32`
+ATTACHMENT_TOKEN_SECRET=dev-only-attachment-token-secret-change-me
+
 # Transactional email. The `send_email` binding is already declared, but nothing
 # sends until the domain is onboarded and EMAIL_FROM is set (in wrangler.jsonc
 # vars, per environment — it is not a secret):
