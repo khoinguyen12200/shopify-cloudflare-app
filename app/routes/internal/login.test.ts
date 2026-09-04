@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { handleLoginAction } from "./login";
+import { handleLoginAction } from "./login.server";
 import type { AuthAttemptLimiter } from "~/ports/auth-rate-limit";
 
 type ActionResponse = { status: number };

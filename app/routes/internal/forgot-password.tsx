@@ -1,4 +1,4 @@
-import { data, Form, Link, useActionData, useNavigation } from "react-router";
+import { Form, Link, useActionData, useNavigation } from "react-router";
 import type {
   ActionFunctionArgs,
   LinksFunction,
@@ -17,9 +17,7 @@ import { isProductionLike } from "~/lib/deployment";
 import { getEnv } from "~/request-context.server";
 import { adminUsers, passwordResetNotifier, passwordResetTokens } from "~/wiring.server";
 import { authLimiters } from "~/wiring.server";
-import { authClientKey } from "~/lib/auth-client-key";
-import type { AuthAttemptLimiter } from "~/ports/auth-rate-limit";
-import type { RequestResetOutcome } from "~/services/password-reset.server";
+import { handleForgotPasswordAction } from "./forgot-password.server";
 import { paths } from "~/urls";
 import { INTERNAL_FONT_LINKS, THEME_INIT_SCRIPT } from "~/internal/components";
 import internalStyles from "~/styles/internal/internal.tailwind.css?url";
@@ -38,43 +36,6 @@ export const meta: MetaFunction = () => [
   { title: "Reset your password" },
   { name: "robots", content: "noindex, nofollow" },
 ];
-
-type ForgotPasswordActionDeps = {
-  limiter: AuthAttemptLimiter;
-  productionLike: boolean;
-  requestReset: (email: string, origin: string) => Promise<RequestResetOutcome>;
-};
-
-export async function handleForgotPasswordAction(request: Request, deps: ForgotPasswordActionDeps) {
-  const limit = await deps.limiter.check(authClientKey(request));
-  if (limit === "limited") return data({ error: "rateLimited" as const }, { status: 429 });
-  if (limit === "unavailable" && deps.productionLike) {
-    return new Response("Authentication rate limiting is unavailable", { status: 503 });
-  }
-
-  const form = await request.formData();
-  const email = String(form.get("email") ?? "").trim();
-
-  if (!email) {
-    return data({ error: "emailRequired" as const }, { status: 400 });
-  }
-
-  const result = await deps.requestReset(email, new URL(request.url).origin);
-
-  // ALWAYS the same shape, whatever happened — see requestPasswordReset. Never
-  // branch the response on whether the account exists.
-  //
-  // The one exception is a LOCAL development convenience: when email is not
-  // configured and this is not a real deployment, show the link so the flow can
-  // be walked through without a mail server. Both conditions are required —
-  // surfacing it on a real deployment would let anyone who can POST this form
-  // obtain a reset link for any account.
-  const showLink = !result.emailSent && !deps.productionLike;
-  return data({
-    sent: true as const,
-    devToken: showLink ? result.token : undefined,
-  });
-}
 
 export const action = async ({ request }: ActionFunctionArgs) => handleForgotPasswordAction(request, {
   limiter: authLimiters().passwordReset,

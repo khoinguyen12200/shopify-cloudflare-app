@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { handleForgotPasswordAction } from "./forgot-password";
+import { handleForgotPasswordAction } from "./forgot-password.server";
 import type { AuthAttemptLimiter } from "~/ports/auth-rate-limit";
 
 const request = () => new Request("https://example.test/internal/forgot-password", {

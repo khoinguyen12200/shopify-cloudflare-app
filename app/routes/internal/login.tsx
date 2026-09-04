@@ -1,5 +1,4 @@
 import {
-  data,
   redirect,
   Form,
   Link,
@@ -14,19 +13,11 @@ import type {
   MetaFunction,
 } from "react-router";
 import { Alert, AlertDescription, Button, Input, Label } from "ngk-dashboard";
-import {
-  createAdminSession,
-  getAdminUser,
-  safeRedirectPath,
-  verifyAdminCredentials,
-  HOME_PATH,
-} from "~/services/admin-auth.server";
+import { createAdminSession, getAdminUser, safeRedirectPath, verifyAdminCredentials, HOME_PATH } from "~/services/admin-auth.server";
 import { getEnv } from "~/request-context.server";
 import { adminUsers, authLimiters } from "~/wiring.server";
-import { authClientKey } from "~/lib/auth-client-key";
 import { isProductionLike } from "~/lib/deployment";
-import type { AuthAttemptLimiter } from "~/ports/auth-rate-limit";
-import type { LoginResult } from "~/services/admin-auth.server";
+import { handleLoginAction } from "./login.server";
 import { INTERNAL_FONT_LINKS, THEME_INIT_SCRIPT } from "~/internal/components";
 // Login sits OUTSIDE the /internal layout (see app/routes.ts), so it does not
 // inherit that layout's links() and must load the console stylesheet itself —
@@ -62,39 +53,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     showDevHint: !(getEnv().SHOPIFY_APP_URL ?? "").startsWith("https://"),
   };
 };
-
-type LoginActionDeps = {
-  limiter: AuthAttemptLimiter;
-  verifyCredentials: (email: string, password: string) => Promise<LoginResult>;
-  createSession: (userId: string, redirectTo: string) => Promise<Response>;
-  productionLike: boolean;
-};
-
-export async function handleLoginAction(request: Request, deps: LoginActionDeps) {
-  const limit = await deps.limiter.check(authClientKey(request));
-  if (limit === "limited") return data({ error: "rateLimited" as const }, { status: 429 });
-  if (limit === "unavailable" && deps.productionLike) {
-    return new Response("Authentication rate limiting is unavailable", { status: 503 });
-  }
-
-  const form = await request.formData();
-  const email = String(form.get("email") ?? "");
-  const password = String(form.get("password") ?? "");
-  const next = safeRedirectPath(form.get("next"));
-
-  if (!email || !password) {
-    return data({ error: "missingFields" as const }, { status: 400 });
-  }
-
-  const result = await deps.verifyCredentials(email, password);
-  if (!result.ok) {
-    // 401, and the same generic message for a wrong password as for an unknown
-    // email — anything else tells an attacker which emails exist.
-    return data({ error: result.reason }, { status: 401 });
-  }
-
-  return deps.createSession(result.user.id, next);
-}
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const users = adminUsers();
