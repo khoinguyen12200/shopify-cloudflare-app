@@ -1,14 +1,13 @@
-import { and, desc, eq, inArray, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import {
   type WebhookDelivery,
   webhookDeliveries,
 } from "~/db/schema";
 import { getDb } from "~/request-context.server";
 import type { WebhookDeliveryInput } from "~/ports/webhook-deliveries";
+import type { WebhookDeliveryStatus } from "~/domain/webhook-delivery-lifecycle";
 
 export type { WebhookDeliveryInput } from "~/ports/webhook-deliveries";
-
-const PROCESSING_LEASE_MS = 5 * 60 * 1000;
 
 /**
  * The sole D1 adapter for the webhook delivery inbox. A delivery ID is a
@@ -23,8 +22,9 @@ export class WebhookDeliveryRepo {
       .orderBy(desc(webhookDeliveries.receivedAt));
   }
 
-  async markDeadLetter(shop: string, id: string, failedAt: number, detail: string): Promise<void> {
-    await getDb().update(webhookDeliveries).set({ status: "dead_letter", failedAt, failureCode: "dead_letter", failureDetail: detail.slice(0, 1000) }).where(and(eq(webhookDeliveries.shop, shop), eq(webhookDeliveries.id, id), eq(webhookDeliveries.status, "failed")));
+  async markDeadLetter(shop: string, id: string, failedAt: number, detail: string, expectedFrom: WebhookDeliveryStatus = "failed"): Promise<"applied" | "conflict"> {
+    const changed = await getDb().update(webhookDeliveries).set({ status: "dead_letter", failedAt, failureCode: "dead_letter", failureDetail: detail.slice(0, 1000) }).where(and(eq(webhookDeliveries.shop, shop), eq(webhookDeliveries.id, id), eq(webhookDeliveries.status, expectedFrom))).returning({ id: webhookDeliveries.id });
+    return changed.length === 1 ? "applied" : "conflict";
   }
   async claim(input: WebhookDeliveryInput): Promise<"claimed" | "duplicate"> {
     const inserted = await getDb()
@@ -45,7 +45,7 @@ export class WebhookDeliveryRepo {
   }
 
   /** The worker is not allowed to claim a delivery until its queue handoff succeeded. */
-  async markQueued(shop: string, id: string): Promise<void> {
+  async markQueued(shop: string, id: string, expectedFrom: WebhookDeliveryStatus = "received"): Promise<void> {
     await getDb()
       .update(webhookDeliveries)
       .set({ status: "queued" })
@@ -53,7 +53,7 @@ export class WebhookDeliveryRepo {
         and(
           eq(webhookDeliveries.shop, shop),
           eq(webhookDeliveries.id, id),
-          eq(webhookDeliveries.status, "received"),
+          eq(webhookDeliveries.status, expectedFrom),
         ),
       );
   }
@@ -62,7 +62,9 @@ export class WebhookDeliveryRepo {
     shop: string,
     id: string,
     startedAt: number,
-  ): Promise<"claimed" | "unavailable"> {
+    expectedFrom: WebhookDeliveryStatus,
+    expectedProcessingStartedAt: number | null,
+  ): Promise<"applied" | "conflict"> {
     const claimed = await getDb()
       .update(webhookDeliveries)
       .set({
@@ -78,30 +80,29 @@ export class WebhookDeliveryRepo {
         and(
           eq(webhookDeliveries.shop, shop),
           eq(webhookDeliveries.id, id),
-          or(
-            inArray(webhookDeliveries.status, ["received", "queued", "failed"]),
-            and(
-              eq(webhookDeliveries.status, "processing"),
-              lt(webhookDeliveries.processingStartedAt, startedAt - PROCESSING_LEASE_MS),
-            ),
-          ),
+          eq(webhookDeliveries.status, expectedFrom),
+          expectedProcessingStartedAt === null
+            ? isNull(webhookDeliveries.processingStartedAt)
+            : eq(webhookDeliveries.processingStartedAt, expectedProcessingStartedAt),
         ),
       )
       .returning({ id: webhookDeliveries.id });
-    return claimed.length === 1 ? "claimed" : "unavailable";
+    return claimed.length === 1 ? "applied" : "conflict";
   }
 
-  async markProcessed(shop: string, id: string, processedAt: number): Promise<void> {
-    await getDb()
+  async markProcessed(shop: string, id: string, processedAt: number, expectedFrom: WebhookDeliveryStatus = "processing", expectedProcessingStartedAt?: number | null): Promise<"applied" | "conflict"> {
+    const changed = await getDb()
       .update(webhookDeliveries)
-      .set({ status: "processed", processedAt })
+      .set({ status: "processed", processedAt, processingStartedAt: null })
       .where(
         and(
           eq(webhookDeliveries.shop, shop),
           eq(webhookDeliveries.id, id),
-          eq(webhookDeliveries.status, "processing"),
+          eq(webhookDeliveries.status, expectedFrom),
+          ...(expectedProcessingStartedAt === undefined ? [] : [expectedProcessingStartedAt === null ? isNull(webhookDeliveries.processingStartedAt) : eq(webhookDeliveries.processingStartedAt, expectedProcessingStartedAt)]),
         ),
-      );
+      ).returning({ id: webhookDeliveries.id });
+    return changed.length === 1 ? "applied" : "conflict";
   }
 
   async markFailed(
@@ -112,8 +113,10 @@ export class WebhookDeliveryRepo {
       readonly failureCode: string;
       readonly failureDetail: string;
     },
-  ): Promise<void> {
-    await getDb()
+    expectedFrom: WebhookDeliveryStatus = "processing",
+    expectedProcessingStartedAt?: number | null,
+  ): Promise<"applied" | "conflict"> {
+    const changed = await getDb()
       .update(webhookDeliveries)
       .set({
         status: "failed",
@@ -125,8 +128,10 @@ export class WebhookDeliveryRepo {
         and(
           eq(webhookDeliveries.shop, shop),
           eq(webhookDeliveries.id, id),
-          eq(webhookDeliveries.status, "processing"),
+          eq(webhookDeliveries.status, expectedFrom),
+          ...(expectedProcessingStartedAt === undefined ? [] : [expectedProcessingStartedAt === null ? isNull(webhookDeliveries.processingStartedAt) : eq(webhookDeliveries.processingStartedAt, expectedProcessingStartedAt)]),
         ),
-      );
+      ).returning({ id: webhookDeliveries.id });
+    return changed.length === 1 ? "applied" : "conflict";
   }
 }

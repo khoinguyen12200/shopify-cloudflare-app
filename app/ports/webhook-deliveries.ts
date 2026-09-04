@@ -9,8 +9,17 @@ export interface WebhookDeliveryInput {
   readonly payloadHash: string;
 }
 
+export interface StoredWebhookDelivery {
+  readonly status: string;
+  readonly id?: string;
+  readonly shop?: string;
+  readonly topic?: string;
+  readonly processingStartedAt?: number | null;
+  readonly failureCode?: string | null;
+}
+
 export interface WebhookDeliveriesPort {
   claim(input: WebhookDeliveryInput): Promise<"claimed" | "duplicate">;
-  get(shop: string, id: string): Promise<{ readonly status: string } | undefined>;
+  get(shop: string, id: string): Promise<StoredWebhookDelivery | undefined>;
   markQueued(shop: string, id: string): Promise<void>;
 }

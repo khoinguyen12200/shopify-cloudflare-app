@@ -16,14 +16,14 @@ export interface QueueLogEntry {
   readonly id?: string;
   readonly shop?: string;
   readonly attempts?: number;
-  readonly outcome: "discarded" | "duplicate" | "processed" | "unavailable" | "failed" | "invalid";
+  readonly outcome: "discarded" | "duplicate" | "processed" | "unavailable" | "failed" | "invalid" | "unsupported";
   readonly topic?: string;
   readonly handler?: string;
   readonly latencyMs?: number;
 }
 
 export interface QueueProcessingDependencies {
-  readonly consume: (work: QueuedWebhook) => Promise<"processed" | "unavailable" | "missing" | "duplicate" | { readonly outcome: "processed" | "unavailable" | "missing" | "duplicate"; readonly topic: string | null }>;
+  readonly consume: (work: QueuedWebhook) => Promise<"processed" | "unavailable" | "missing" | "duplicate" | "unsupported" | { readonly outcome: "processed" | "unavailable" | "missing" | "duplicate" | "unsupported"; readonly topic: string | null }>;
   readonly log: (entry: QueueLogEntry) => void | Promise<void>;
   readonly now?: () => number;
 }

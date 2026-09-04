@@ -13,7 +13,7 @@ import { WebhookDeliveryRepo } from "~/models/webhook-deliveries.server";
 import { TenantPurgeRepo } from "~/models/tenant-purge.server";
 import { WebhookScopeObservationRepo } from "~/models/webhook-scope-observations.server";
 import { KVSessionStorage } from "~/session-storage.server";
-import type { ConsumerDelivery } from "~/services/webhook-consumer";
+import type { ConsumerDelivery, WebhookHandlerRegistry } from "~/services/webhook-consumer";
 import { getEnv } from "~/request-context.server";
 import { notify } from "~/notifications/notify.server";
 import type { PasswordResetNotifier } from "~/services/password-reset.server";
@@ -228,28 +228,29 @@ export function webhookConsumer() {
   const env = getEnv();
   const sessions = new KVSessionStorage(env.SESSION);
   const scopes = new WebhookScopeObservationRepo();
+  const handlers = {
+    "app/uninstalled": async (delivery: ConsumerDelivery) => {
+      await new ShopRepo().recordUninstall(delivery.shop, Date.now());
+      const found = await sessions.findSessionsByShop(delivery.shop);
+      await sessions.deleteSessions(found.map(({ id }) => id));
+      const result = await reconcileAfterUninstall({
+        refreshSubscription: () => refreshShopSubscription(env, delivery.shop),
+        refreshHistory: () => refreshShopHistory(env, delivery.shop),
+      });
+      if (!result.ok) throw new Error(`Uninstall billing reconciliation failed: ${result.code}: ${result.detail}`);
+    },
+    "app/scopes_update": async (delivery: ConsumerDelivery) => {
+      const current = await scopes.list(delivery.id, delivery.shop);
+      await scopes.applyScopes(delivery.id, delivery.shop, current, Date.now());
+      const found = await sessions.findSessionsByShop(delivery.shop);
+      await Promise.all(found.map(async (session) => { session.scope = current.join(","); await sessions.storeSession(session); }));
+    },
+  } satisfies WebhookHandlerRegistry;
   return {
     deliveries: new WebhookDeliveryRepo(),
     now: Date.now,
     isRedactedShop: async (shop: string) => (await new ShopRepo().get(shop)) === undefined,
-    handlers: {
-      "app/uninstalled": async (delivery: ConsumerDelivery) => {
-        await new ShopRepo().recordUninstall(delivery.shop, Date.now());
-        const found = await sessions.findSessionsByShop(delivery.shop);
-        await sessions.deleteSessions(found.map(({ id }) => id));
-        const result = await reconcileAfterUninstall({
-          refreshSubscription: () => refreshShopSubscription(env, delivery.shop),
-          refreshHistory: () => refreshShopHistory(env, delivery.shop),
-        });
-        if (!result.ok) throw new Error(`Uninstall billing reconciliation failed: ${result.code}: ${result.detail}`);
-      },
-      "app/scopes_update": async (delivery: ConsumerDelivery) => {
-        const current = await scopes.list(delivery.id, delivery.shop);
-        await scopes.applyScopes(delivery.id, delivery.shop, current, Date.now());
-        const found = await sessions.findSessionsByShop(delivery.shop);
-        await Promise.all(found.map(async (session) => { session.scope = current.join(","); await sessions.storeSession(session); }));
-      },
-    },
+    handlers,
   };
 }
 

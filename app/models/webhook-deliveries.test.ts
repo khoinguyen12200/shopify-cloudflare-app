@@ -53,12 +53,12 @@ describe("WebhookDeliveryRepo", () => {
       const repo = new WebhookDeliveryRepo();
       const input = delivery();
       await repo.claim(input);
-      await repo.markProcessing(input.shop, input.id, 1_700_000_000_200);
+      await repo.markProcessing(input.shop, input.id, 1_700_000_000_200, "received", null);
       await repo.markFailed(input.shop, input.id, {
         failedAt: 1_700_000_000_300,
         failureCode: "invalid_payload",
         failureDetail: "The event does not contain a shop ID.",
-      });
+      }, "processing", 1_700_000_000_200);
       return repo.get(input.shop, input.id);
     });
 
@@ -78,8 +78,8 @@ describe("WebhookDeliveryRepo", () => {
       const repo = new WebhookDeliveryRepo();
       const input = delivery();
       await repo.claim(input);
-      await repo.markProcessing(input.shop, input.id, 1_700_000_000_200);
-      await repo.markProcessed(input.shop, input.id, 1_700_000_000_300);
+      await repo.markProcessing(input.shop, input.id, 1_700_000_000_200, "received", null);
+      await repo.markProcessed(input.shop, input.id, 1_700_000_000_300, "processing", 1_700_000_000_200);
       return repo.get(input.shop, input.id);
     });
 
@@ -108,12 +108,12 @@ describe("WebhookDeliveryRepo", () => {
       const input = delivery();
       await repo.claim(input);
       return [
-        await repo.markProcessing(input.shop, input.id, 1_700_000_000_200),
-        await repo.markProcessing(input.shop, input.id, 1_700_000_000_201),
+        await repo.markProcessing(input.shop, input.id, 1_700_000_000_200, "received", null),
+        await repo.markProcessing(input.shop, input.id, 1_700_000_000_201, "received", null),
       ];
     });
 
-    expect(claims).toEqual(["claimed", "unavailable"]);
+    expect(claims).toEqual(["applied", "conflict"]);
   });
 
   it("does not reclaim a processed delivery", async () => {
@@ -121,14 +121,14 @@ describe("WebhookDeliveryRepo", () => {
       const repo = new WebhookDeliveryRepo();
       const input = delivery();
       await repo.claim(input);
-      await repo.markProcessing(input.shop, input.id, 1_700_000_000_200);
-      await repo.markProcessed(input.shop, input.id, 1_700_000_000_300);
-      const retry = await repo.markProcessing(input.shop, input.id, 1_700_000_000_400);
+      await repo.markProcessing(input.shop, input.id, 1_700_000_000_200, "received", null);
+      await repo.markProcessed(input.shop, input.id, 1_700_000_000_300, "processing", 1_700_000_000_200);
+      const retry = await repo.markProcessing(input.shop, input.id, 1_700_000_000_400, "processing", 1_700_000_000_200);
       return { retry, stored: await repo.get(input.shop, input.id) };
     });
 
     expect(result).toEqual({
-      retry: "unavailable",
+      retry: "conflict",
       stored: expect.objectContaining({
         status: "processed",
         attempts: 1,
@@ -137,16 +137,16 @@ describe("WebhookDeliveryRepo", () => {
     });
   });
 
-  it("reclaims a processing lease after five minutes", async () => {
+  it("persists a service-approved processing lease reclaim", async () => {
     const claims = await inRequest(async () => {
       const repo = new WebhookDeliveryRepo();
       const input = delivery();
       await repo.claim(input);
-      await repo.markProcessing(input.shop, input.id, 1_700_000_000_000);
-      return repo.markProcessing(input.shop, input.id, 1_700_000_300_001);
+      await repo.markProcessing(input.shop, input.id, 1_700_000_000_000, "received", null);
+      return repo.markProcessing(input.shop, input.id, 1_700_000_300_001, "processing", 1_700_000_000_000);
     });
 
-    expect(claims).toBe("claimed");
+    expect(claims).toBe("applied");
   });
 
   it("does not let a stale failure overwrite a processed delivery", async () => {
@@ -154,13 +154,13 @@ describe("WebhookDeliveryRepo", () => {
       const repo = new WebhookDeliveryRepo();
       const input = delivery();
       await repo.claim(input);
-      await repo.markProcessing(input.shop, input.id, 1_700_000_000_200);
-      await repo.markProcessed(input.shop, input.id, 1_700_000_000_300);
+      await repo.markProcessing(input.shop, input.id, 1_700_000_000_200, "received", null);
+      await repo.markProcessed(input.shop, input.id, 1_700_000_000_300, "processing", 1_700_000_000_200);
       await repo.markFailed(input.shop, input.id, {
         failedAt: 1_700_000_000_400,
         failureCode: "late_failure",
         failureDetail: "A stale worker completed after the successful worker.",
-      });
+      }, "processing", 1_700_000_000_200);
       return repo.get(input.shop, input.id);
     });
 
@@ -178,13 +178,13 @@ describe("WebhookDeliveryRepo", () => {
       const repo = new WebhookDeliveryRepo();
       const input = delivery();
       await repo.claim(input);
-      await repo.markProcessing(input.shop, input.id, 1_700_000_000_200);
+      await repo.markProcessing(input.shop, input.id, 1_700_000_000_200, "received", null);
       await repo.markFailed(input.shop, input.id, {
         failedAt: 1_700_000_000_300,
         failureCode: "processing_error",
         failureDetail: "The worker failed while processing the delivery.",
-      });
-      await repo.markProcessed(input.shop, input.id, 1_700_000_000_400);
+      }, "processing", 1_700_000_000_200);
+      await repo.markProcessed(input.shop, input.id, 1_700_000_000_400, "processing", 1_700_000_000_200);
       return repo.get(input.shop, input.id);
     });
 
