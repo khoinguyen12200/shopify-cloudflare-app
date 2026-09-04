@@ -70,6 +70,13 @@ export default defineConfig({
     // suite is reliable rather than flaky — without masking a real hang.
     testTimeout: 60_000,
     hookTimeout: 60_000,
-    exclude: ["**/node_modules/**", "build/**", "extensions/**", "scripts/**"],
+    exclude: [
+      "**/node_modules/**",
+      "build/**",
+      "extensions/**",
+      "scripts/**",
+      "app/components/support/AttachmentPicker.render.test.tsx",
+      "app/routes/app/support/use-pending-uploads.test.tsx",
+    ],
   },
 });

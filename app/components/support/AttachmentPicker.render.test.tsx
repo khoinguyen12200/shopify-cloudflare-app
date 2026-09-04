@@ -1,12 +1,12 @@
-import { renderToStaticMarkup } from "react-dom/server";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { AttachmentPicker } from "./AttachmentPicker";
 
 describe("AttachmentPicker", () => {
-  it("renders the passed upload state without owning upload behavior", () => {
+  it("renders the passed upload state and invokes controller callbacks", async () => {
     const add = vi.fn(async () => undefined);
     const remove = vi.fn();
-    const html = renderToStaticMarkup(
+    render(
       <AttachmentPicker
         label="Attachments"
         addLabel="Add files"
@@ -21,8 +21,13 @@ describe("AttachmentPicker", () => {
         }}
       />,
     );
-    expect(html).toContain("shot.png");
-    expect(html).toContain('value="up_1"');
-    expect(AttachmentPicker.toString()).not.toContain("fetch");
+    expect(screen.getByRole("img", { name: "shot.png" })).toBeTruthy();
+    const input = document.querySelector('input[type="file"]');
+    if (!(input instanceof HTMLInputElement)) throw new Error("Attachment file input missing");
+    const file = new File(["abc"], "new.png", { type: "image/png" });
+    await fireEvent.change(input, { target: { files: [file] } });
+    expect(add).toHaveBeenCalledWith(expect.objectContaining({ 0: file, length: 1 }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove shot.png" }));
+    expect(remove).toHaveBeenCalledWith("up_1");
   });
 });

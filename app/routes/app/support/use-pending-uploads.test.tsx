@@ -1,23 +1,20 @@
-import { act } from "react";
-import { create } from "react-test-renderer";
+import { act, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { usePendingUploads } from "./use-pending-uploads";
 
 function setupHook(ticketId?: string) {
-  Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { value: true, configurable: true });
   let controller: ReturnType<typeof usePendingUploads> | undefined;
   function Harness() {
     controller = usePendingUploads(ticketId);
     return null;
   }
-  let root: ReturnType<typeof create>;
-  act(() => { root = create(<Harness />); });
+  const view = render(<Harness />);
   return {
     get: () => {
       if (!controller) throw new Error("Hook did not render");
       return controller;
     },
-    unmount: () => act(() => root.unmount()),
+    unmount: view.unmount,
   };
 }
 
