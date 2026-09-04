@@ -238,11 +238,6 @@ export function AttachmentPicker({
                 ×
               </button>
               {/* What the action needs to write the row. */}
-              <input
-                type="hidden"
-                name={`upload:${file.uploadId}`}
-                value={`${file.r2Key}|${file.filename}|${file.contentType}|${file.sizeBytes}`}
-              />
             </div>
           ))}
         </div>

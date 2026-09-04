@@ -129,15 +129,13 @@ const customersRedact: ComplianceHandler = async ({ shop, payload }) => {
  * This one does real work, and it is the pattern to copy: every shop-scoped
  * table gets purged here.
  */
-const shopRedact: ComplianceHandler = async ({ shop, payload }, deps) => {
-  const shopDomain = typeof payload.shop_domain === "string" ? payload.shop_domain : shop;
-
-  const erased = await purgeTenant(deps.tenantPurge, shopDomain);
+const shopRedact: ComplianceHandler = async ({ shop }, deps) => {
+  const erased = await purgeTenant(deps.tenantPurge, shop);
 
   console.log(
     JSON.stringify({
       event: "compliance.shop_redact",
-      shop: shopDomain,
+      shop,
       erased: erased.rows,
       // Called out separately: "did the screenshots go too?" is the question
       // a data-deletion request actually has to answer.

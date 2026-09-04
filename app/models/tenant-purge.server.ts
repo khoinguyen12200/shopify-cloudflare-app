@@ -4,6 +4,7 @@ import {
   notificationLogs,
   notificationOptOuts,
   notificationPreferences,
+  pendingUploads,
   shopGrantedScopes,
   shopScopeChanges,
   shopSubscriptionItems,
@@ -21,6 +22,7 @@ import { getDb } from "~/request-context.server";
 const PURGED_SHOP_TABLES = [
   "ai_runs",
   "notification_logs",
+  "pending_uploads",
   "shop_granted_scopes",
   "shop_scope_changes",
   "shop_subscription_items",
@@ -36,7 +38,11 @@ const PURGED_SHOP_TABLES = [
 
 export class TenantPurgeRepo {
   async prepareTenantPurge(shop: string): Promise<{ readonly shop: string; readonly attachmentKeys: readonly string[] }> {
-    const rows = await getDb().select({ key: supportAttachments.r2Key }).from(supportAttachments).where(eq(supportAttachments.shop, shop));
+    const [attachments, pending] = await Promise.all([
+      getDb().select({ key: supportAttachments.r2Key }).from(supportAttachments).where(eq(supportAttachments.shop, shop)),
+      getDb().select({ key: pendingUploads.r2Key }).from(pendingUploads).where(eq(pendingUploads.shop, shop)),
+    ]);
+    const rows = [...attachments, ...pending];
     return { shop, attachmentKeys: rows.map(({ key }) => key) };
   }
 
@@ -66,6 +72,7 @@ export class TenantPurgeRepo {
     const deleted = await db.batch([
       db.delete(webhookScopeObservations).where(deliveryIds.length ? or(eq(webhookScopeObservations.shop, shop), inArray(webhookScopeObservations.deliveryId, deliveryIds)) : eq(webhookScopeObservations.shop, shop)),
       db.delete(supportAttachments).where(eq(supportAttachments.shop, shop)),
+      db.delete(pendingUploads).where(eq(pendingUploads.shop, shop)),
       db.delete(supportMessages).where(eq(supportMessages.shop, shop)),
       db.delete(supportTickets).where(eq(supportTickets.shop, shop)),
       db.delete(shopSubscriptionItems).where(eq(shopSubscriptionItems.shop, shop)),

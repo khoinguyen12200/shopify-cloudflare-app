@@ -32,11 +32,6 @@ export function InternalAttachmentPicker({ uploads }: { uploads: UploadState }) 
 
       {uploads.files.map((file) => (
         <div key={file.uploadId} className="flex items-center gap-2 text-sm">
-          <input
-            type="hidden"
-            name={`upload:${file.uploadId}`}
-            value={`${file.r2Key}|${file.filename}|${file.contentType}|${file.sizeBytes}`}
-          />
           <Text as="span" className="max-w-80 truncate">{file.filename}</Text>
           <Button type="button" variant="ghost" size="sm" onClick={() => uploads.remove(file.uploadId)}>
             Remove

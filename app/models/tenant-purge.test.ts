@@ -10,7 +10,7 @@ describe("TenantPurgeRepo", () => {
   it("inventory covers every table with a shop column", async () => {
     const tables = await runWithRequestContext(env, schemaShopColumns);
     expect(tables).toEqual([
-      "ai_runs", "notification_logs", "shop_granted_scopes", "shop_scope_changes", "shop_subscription_items",
+      "ai_runs", "notification_logs", "pending_uploads", "shop_granted_scopes", "shop_scope_changes", "shop_subscription_items",
       "shop_subscriptions", "shopify_events", "shops", "support_attachments",
       "support_messages", "support_tickets", "webhook_deliveries", "webhook_scope_observations",
     ]);
@@ -72,6 +72,7 @@ describe("TenantPurgeRepo", () => {
         await env.DB.prepare("INSERT INTO support_tickets (id,shop,shop_name,category,subject,last_author,last_message_at,created_at) VALUES (?,?,?,?,?,?,?,?)").bind(`ticket-${shop}`, shop, "Shop", "other", "Subject", "merchant", 1, 1).run();
         await env.DB.prepare("INSERT INTO support_messages (id,ticket_id,shop,author,author_name,body,created_at) VALUES (?,?,?,?,?,?,?)").bind(`message-${shop}`, `ticket-${shop}`, shop, "merchant", "M", "Body", 1).run();
         await env.DB.prepare("INSERT INTO support_attachments (id,message_id,shop,r2_key,filename,content_type,size_bytes,created_at) VALUES (?,?,?,?,?,?,?,?)").bind(`attachment-${shop}`, `message-${shop}`, shop, `uploads/${shop}`, "a.txt", "text/plain", 1, 1).run();
+        await env.DB.prepare("INSERT INTO pending_uploads (id,shop,r2_key,filename,content_type,size_bytes,created_at,expires_at) VALUES (?,?,?,?,?,?,?,?)").bind(`pending-${shop}`, shop, `uploads/pending-${shop}`, "draft.txt", "text/plain", 1, 1, 2).run();
       }
       await env.DB.prepare("INSERT INTO notification_preferences (scope,event,channel,enabled,updated_at) VALUES (?,?,?,?,?)").bind("global", "test", "email", 1, 1).run();
       await env.DB.prepare("INSERT INTO notification_opt_outs (scope,channel,address,opted_out_at,source) VALUES (?,?,?,?,?)").bind("global", "email", "global@example.com", 1, "test").run();
