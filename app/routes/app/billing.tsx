@@ -204,12 +204,12 @@ function BillingProcessing() {
 
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data === undefined) {
-      fetcher.submit(null, { method: "post" });
+      void fetcher.submit(null, { method: "post" });
     }
   }, [fetcher]);
 
   useEffect(() => {
-    if (fetcher.data?.ok) navigate("/app/billing", { replace: true });
+    if (fetcher.data?.ok) void navigate("/app/billing", { replace: true });
   }, [fetcher.data, navigate]);
 
   const failed = fetcher.data?.ok === false;

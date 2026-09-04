@@ -119,12 +119,12 @@ export default function InternalSupport() {
               <Switch
                 defaultChecked={notifySupport}
                 disabled={busy}
-                onCheckedChange={(checked) =>
-                  submit(
+                onCheckedChange={(checked) => {
+                  void submit(
                     { notifySupport: checked ? "on" : "off" },
                     { method: "post" },
-                  )
-                }
+                  );
+                }}
               />
               <Text as="p" className="text-sm text-muted-foreground">
                 Send me an email when a merchant opens or replies to a ticket.
