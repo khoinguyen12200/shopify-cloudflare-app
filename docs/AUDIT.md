@@ -13,110 +13,110 @@ The template has a strong foundation: tenant-aware D1 repositories, KV-backed
 Shopify sessions, streamed R2 uploads, compliance webhook routing, integer
 money, localized public/admin surfaces, and meaningful integration tests.
 
-It is not yet a clean base for other apps. The highest-value work is to close
-the composition-root leaks, make upload cleanup real, harden authentication and
-security headers, and make external-input parsing and webhook lifecycle rules
-explicit. The AI gate, legal copy, billing plans, and Shopify identifiers are
-intentionally application-owned; they are not defects in a reusable starter,
-but they must be impossible to overlook during adoption.
+The base defects identified in this audit are resolved. The template now
+enforces composition-root boundaries, recovers staged-upload failures, hardens
+authentication and security headers, and makes external-input and webhook
+lifecycle rules explicit. The AI gate, legal copy, billing plans, and Shopify
+identifiers remain intentionally application-owned; the adoption checks make
+them impossible to overlook.
 
 ## Confirmed base defects
 
 These are findings in the template itself, independent of the app's future
 business model.
 
-### B1. Unhandled SSR stream promise (high)
+### B1. Resolved — unhandled SSR stream promise (`a4e455d`)
 
 - **Where:** `app/entry.server.tsx:66`; type-aware promise linting is absent from `eslint.config.js`.
 - **Why:** `stream.allReady.then(...)` can reject after the abort timeout. The rejection is not observed, violating the Workers no-floating-promises rule.
 - **Plan:** attach a rejection handler while clearing the timer, and add the appropriate type-aware ESLint rules. Do not introduce an unavailable `ctx` parameter without verifying the React Router entry contract.
 - **Acceptance:** an aborting render produces no unhandled rejection; lint fails a deliberately floating promise.
 
-### B2. Composition root leaks (high)
+### B2. Resolved — composition root leaks (`18a7db0`, `96c98cd`)
 
 - **Where:** adapter construction occurs in routes and services, including `app/routes/resources/support-upload.tsx`, `app/routes/app/support/new.tsx`, `app/routes/internal/dashboard.tsx`, `app/notifications/notify.server.ts`, and `app/notifications/eligibility/snapshot.server.ts`.
 - **Why:** ring-5 and ring-3 code construct repositories directly, so adapters cannot be swapped or tested through ports consistently.
 - **Plan:** expose surface-specific accessors from `app/wiring.server.ts` (split wiring internals if needed), then add a lint check preventing `new *Repo()` outside wiring and tests.
 - **Acceptance:** production imports contain no repository construction outside the composition root; existing behavior and tests remain unchanged.
 
-### B3. Orphan R2 uploads are not swept (high)
+### B3. Resolved — orphan R2 uploads (`a331451`, `77d18a1`, `beab37f`)
 
 - **Where:** `app/routes/resources/support-upload.tsx:20-23` promises a daily sweep; `app/services/scheduled.server.ts` has no upload sweep.
 - **Why:** abandoned `pending_uploads` rows and their R2 objects remain until tenant deletion, creating unbounded storage cost.
 - **Plan:** add a scheduled port/repository operation that atomically identifies expired rows, returns keys, deletes the rows, and deletes those keys through the R2 adapter. Test both D1 and R2 effects. Until then, remove the promise from the comment.
 - **Acceptance:** an expired row and object are both removed; a failed R2 delete is logged and retryable.
 
-### B4. Authentication abuse controls are incomplete (high)
+### B4. Resolved — authentication abuse controls (`03439cb`)
 
 - **Where:** `app/routes/internal/login.tsx` and `app/routes/internal/forgot-password.tsx`; only `SUPPORT_LIMITER` exists in `wrangler.jsonc`.
 - **Why:** expensive password verification and reset-email triggering have no per-client abuse control.
 - **Plan:** define login/reset limiter bindings and a documented missing-binding policy. Key by a trusted client identity strategy, not blindly by a spoofable header; fail closed for production authentication if that is the chosen policy. Add route-level 429 tests.
 - **Acceptance:** repeated attempts are throttled, legitimate deployments have configured bindings, and behavior when the binding is absent is explicit and tested.
 
-### B5. Logout is GET-capable (medium)
+### B5. Resolved — GET-capable logout (`961cb51`)
 
 - **Where:** `app/routes/internal/logout.tsx:11-12` exports a loader that destroys the session.
 - **Why:** prefetchers or image/link requests can log a user out without an intentional form submission.
 - **Plan:** make logout POST-only and return 405 for GET.
 - **Acceptance:** the navigation form still signs out; a GET cannot mutate session state.
 
-### B6. Sensitive compliance logs expose the shop domain (medium)
+### B6. Resolved — compliance log tenant privacy (`9b3bcb9`, `dea810e`)
 
 - **Where:** `app/services/compliance.server.ts:89,111,137`.
 - **Why:** compliance logs contain plaintext tenant identifiers while webhook logs hash them.
 - **Plan:** use one structured shop-hashing logger for compliance and webhook events; never log customer payloads, tokens, or secrets.
 - **Acceptance:** tests or a log-shape check prove compliance events contain a hash, not the raw domain.
 
-### B7. Attachment signing shares the Shopify API secret (medium)
+### B7. Resolved — attachment signing secret isolation (`9b3bcb9`)
 
 - **Where:** `app/wiring.server.ts:162`.
 - **Why:** compromise or rotation of one credential affects two unrelated trust domains.
 - **Plan:** add an independently rotated `ATTACHMENT_TOKEN_SECRET` and document local/production provisioning. Treat existing tokens as invalidated during migration.
 - **Acceptance:** attachment signing uses only the dedicated secret and missing configuration fails loudly.
 
-### B8. Production config drift is easy (medium)
+### B8. Resolved — production config parity (`9b3bcb9`, `3b2755c`)
 
 - **Where:** `wrangler.jsonc` top-level versus `env.production`.
 - **Why:** named environments do not inherit most bindings or vars. `AI_GATEWAY_ID` is present locally but absent from production; the same class of drift can recur.
 - **Plan:** add the variable where intentionally supported and make `check-placeholders.mjs` assert the production variable/binding contract. Keep optional values explicitly optional.
 - **Acceptance:** a config test reports missing production keys before deployment; no placeholder resource id can deploy.
 
-### B9. Webhook consumer lacks typed unknown-topic handling (medium)
+### B9. Resolved — typed unknown-topic handling (`81cb089`, `f665433`)
 
 - **Where:** `app/services/webhook-consumer.ts:23,49-60`.
 - **Why:** `Record<string, ...>` makes adding a configured topic non-exhaustive, and unknown topics consume retries before DLQ.
 - **Plan:** use a union-keyed registry and return/log an explicit unsupported outcome for unknown stored topics. Preserve retry behavior for actual handler failures.
 - **Acceptance:** adding a topic without a handler fails typecheck; an old/unknown topic does not throw repeatedly.
 
-### B10. Webhook delivery lifecycle is implicit (medium)
+### B10. Resolved — explicit webhook delivery lifecycle (`81cb089`)
 
 - **Where:** `app/models/webhook-deliveries.server.ts:26-131`.
 - **Why:** legal transitions and lease behavior are encoded in SQL predicates rather than a pure state machine, making invalid transitions hard to reason about.
 - **Plan:** introduce a pure lifecycle transition module and have the repository persist its decision. Keep lease duration as an injected policy value.
 - **Acceptance:** every status/event pair has a tested result, including expired processing leases and illegal transitions.
 
-### B11. Untrusted response/body casts remain (medium)
+### B11. Resolved — untrusted external payload parsing (`0ebf818`)
 
 - **Where:** `app/routes/webhooks/compliance.tsx:27`, `app/components/support/AttachmentPicker.tsx:91`, and the GraphQL response read in `app/routes/app/billing.tsx:92-94`.
 - **Why:** external data bypasses the repository's parse-at-the-edge rule and can fail later as malformed internal data.
 - **Plan:** add focused Zod schemas at each boundary; return a structured 4xx or degraded result and log parse failures.
 - **Acceptance:** malformed webhook, upload, and GraphQL payload tests prove no unchecked value reaches a use case.
 
-### B12. Component owns network interaction (medium)
+### B12. Resolved — upload orchestration is route-local (`1d3a682`, `272d339`)
 
 - **Where:** `app/components/support/AttachmentPicker.tsx:70`.
 - **Why:** the component mixes presentation with upload orchestration, contrary to the component boundary rule.
 - **Plan:** move the upload hook/controller beside the route and pass state/callbacks into the presentational component.
 - **Acceptance:** the component has no `fetch` and remains render-testable with props.
 
-### B13. Root stylesheet crosses surfaces (medium)
+### B13. Resolved — route-scoped stylesheets (`0bcd70c`)
 
 - **Where:** `app/root.tsx:33-43`.
 - **Why:** a root-level stylesheet is loaded for public, embedded admin, and internal routes, risking style leakage into Polaris.
 - **Plan:** load public SCSS only from the public layout and admin font assets only from the admin layout; verify with route render tests or a link inventory.
 - **Acceptance:** each stylesheet is owned by exactly one surface layout.
 
-### B14. Caught errors are not consistently observable (low)
+### B14. Resolved — caught failures are observable (`b5b38d1`)
 
 - **Where:** `app/routes/resources/ai-draft.tsx:79-82`, `app/services/webhook-queue.ts:68-70`.
 - **Why:** empty catches violate the structured-error rule and hide operational failures.
