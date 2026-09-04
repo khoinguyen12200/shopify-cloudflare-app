@@ -110,7 +110,18 @@ export default tseslint.config(
         {
           patterns: [
             {
-              group: ["~/models/*", "~/models/**"],
+              group: [
+                "~/models/*",
+                "~/models/**",
+                "../models/*",
+                "../models/**",
+                "../../models/*",
+                "../../models/**",
+                "../../../models/*",
+                "../../../models/**",
+                "../../../../models/*",
+                "../../../../models/**",
+              ],
               message: "Repository adapters are constructed only in the composition root (~/wiring.server).",
             },
           ],

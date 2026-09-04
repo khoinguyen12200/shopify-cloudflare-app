@@ -17,7 +17,7 @@ describe("composition root", () => {
     );
     const violations: string[] = [];
     for (const [file, source] of files) {
-      if (source.includes('from "~/models/')) violations.push(`${file}: model import`);
+      if (/from\s+["'](?:~\/models\/|(?:\.\.\/)+models\/)/.test(source)) violations.push(`${file}: model import`);
       if (/new [A-Za-z][A-Za-z0-9]*Repo\(/.test(source)) violations.push(`${file}: repository construction`);
     }
     expect(violations).toEqual([]);
