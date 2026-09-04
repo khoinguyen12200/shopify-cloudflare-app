@@ -33,6 +33,14 @@ describe("billing refresh trigger", () => {
     ).toThrowError(expect.objectContaining({ status: 502 }));
   });
 
+  it("rejects a padded Shopify app handle without coercing it", () => {
+    expect(() =>
+      parseCurrentAppInstallationHandle({
+        data: { currentAppInstallation: { app: { handle: " pro " } } },
+      }),
+    ).toThrowError(expect.objectContaining({ status: 502 }));
+  });
+
   it("does not call Shopify on ordinary billing navigation", () => {
     expect(shouldRefreshSubscription("https://example.test/app/billing?shop=one.myshopify.com")).toBe(false);
   });
