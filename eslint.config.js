@@ -101,4 +101,21 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    files: ["app/**/*.{ts,tsx}"],
+    ignores: ["app/models/**", "app/wiring.server.ts", "app/wiring/**", "app/**/*.test.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["~/models/*", "~/models/**"],
+              message: "Repository adapters are constructed only in the composition root (~/wiring.server).",
+            },
+          ],
+        },
+      ],
+    },
+  },
 );

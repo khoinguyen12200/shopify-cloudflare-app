@@ -27,6 +27,9 @@ export interface AdminUserPort {
   setRole(id: string, role: AdminRole, now: number): Promise<void>;
   remove(id: string): Promise<void>;
   countOtherActiveOwners(exceptId: string): Promise<number>;
+  countAll(): Promise<number>;
+  setNotifySupport(id: string, notifySupport: boolean, now: number): Promise<void>;
+  supportNotifyRecipients(): Promise<readonly { name: string; email: string }[]>;
 }
 
 export function normalizeEmail(email: string): string {

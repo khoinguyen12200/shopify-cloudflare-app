@@ -1,3 +1,4 @@
+import { support } from "~/wiring.server";
 import { data } from "react-router";
 import type { ActionFunctionArgs } from "react-router";
 import { createShopify } from "~/shopify.server";
@@ -5,7 +6,6 @@ import { getEnv } from "~/request-context.server";
 import { attachmentKey, safeFilename, validateUpload } from "~/support/attachment";
 import { getAdminUser } from "~/services/admin-auth.server";
 import { adminUsers } from "~/wiring.server";
-import { SupportRepo } from "~/models/support.server";
 
 /**
  * One file, streamed straight into R2.
@@ -32,10 +32,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const ticketId = request.headers.get("X-Support-Ticket") ?? "new";
   const staff = await getAdminUser(request, { users: adminUsers() });
   const shop = staff
-    ? (await new SupportRepo().findForStaff(ticketId))?.ticket.shop
+    ? (await support().findForStaff(ticketId))?.ticket.shop
     : (await createShopify(env).authenticate.admin(request)).session.shop;
   if (!shop) return data({ error: "not_found" as const }, { status: 404 });
-  if (!staff && ticketId !== "new" && !(await new SupportRepo().find(shop, ticketId))) {
+  if (!staff && ticketId !== "new" && !(await support().find(shop, ticketId))) {
     return data({ error: "not_found" as const }, { status: 404 });
   }
 
@@ -78,7 +78,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return data({ error: "too_large" as const }, { status: 413 });
   }
 
-  await new SupportRepo().stageUpload({
+  await support().stageUpload({
     id: uploadId, shop, ticketId: ticketId === "new" ? null : ticketId,
     r2Key: key, filename, contentType, sizeBytes: object.size,
     createdAt: Date.now(), expiresAt: Date.now() + 24 * 60 * 60 * 1000,

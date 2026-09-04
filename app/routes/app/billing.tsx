@@ -1,3 +1,4 @@
+import { shopSubscriptions } from "~/wiring.server";
 import { useEffect } from "react";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { data, useFetcher, useLoaderData, useNavigate } from "react-router";
@@ -16,7 +17,6 @@ import { planPriceLine, type PriceCadence } from "~/billing/plan-price-line";
 import { pricingPlansUrl } from "~/billing/pricing-plans-url";
 import { FEATURED_PLAN_HANDLE, PLANS, PLAN_LIST, planForShopifyHandle } from "~/billing/plans";
 import { persistShopIdentity, refreshShopHistory, refreshShopSubscription } from "~/wiring.server";
-import { ShopSubscriptionRepo } from "~/models/shop-subscriptions.server";
 import { PlanCard, PLAN_CARD_CSS } from "~/components/billing/PlanCard";
 import type { SubscriptionStatus } from "~/billing/subscription-status";
 import { isPricingReturn } from "~/billing/pricing-return";
@@ -95,7 +95,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Shopify owns the actual subscribe/upgrade/cancel flow (Managed Pricing);
   // this page only ever reads status. There's no in-app request()/cancel() —
   // Partner history projects entitlement changes, and D1 serves normal visits.
-  const projection = await new ShopSubscriptionRepo().currentForShop(session.shop);
+  const projection = await shopSubscriptions().currentForShop(session.shop);
   const planName = planForShopifyHandle(projection?.planHandle)?.name ?? PLANS.free.name;
   const status = resolveProjectionBillingStatus(projection, planName, Date.now());
 

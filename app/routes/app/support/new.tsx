@@ -1,3 +1,4 @@
+import { support } from "~/wiring.server";
 import { useState } from "react";
 import type {
   ActionFunctionArgs,
@@ -12,7 +13,6 @@ import { createShopify } from "~/shopify.server";
 import { getEnv } from "~/request-context.server";
 import { getLocale } from "~/i18n/i18n.server";
 import { supportService } from "~/wiring.server";
-import { SupportRepo } from "~/models/support.server";
 import {
   createTicketSchema,
   readShopContact,
@@ -93,7 +93,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   // Attach whatever was streamed up while the form was being filled in. The
   // objects already exist in R2; this is the row that adopts them.
-  const adopted = await new SupportRepo().adoptPendingUploads(
+  const adopted = await support().adoptPendingUploads(
     session.shop, created.value.messageId, parsed.data.uploadIds, Date.now(),
   );
   if (!adopted) return data({ error: "invalid_upload" as const }, { status: 400 });

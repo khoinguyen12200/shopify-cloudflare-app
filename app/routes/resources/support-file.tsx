@@ -1,9 +1,9 @@
+import { support } from "~/wiring.server";
 import type { LoaderFunctionArgs } from "react-router";
 import { getEnv } from "~/request-context.server";
 import { requireAttachmentTokenSecret } from "~/wiring.server";
 import { getAdminUser } from "~/services/admin-auth.server";
 import { adminUsers } from "~/wiring.server";
-import { SupportRepo } from "~/models/support.server";
 import { verifyAttachmentToken } from "~/support/file-token";
 
 /**
@@ -38,7 +38,7 @@ export const loader = async ({ params, request }: LoaderFunctionArgs) => {
   // tells the asker it exists.
   const deny = () => new Response("Not found", { status: 404 });
 
-  const attachment = await new SupportRepo().findAttachment(id);
+  const attachment = await support().findAttachment(id);
   if (!attachment) return deny();
 
   if (!(await isAuthorised({ request, attachmentId: id, secret: requireAttachmentTokenSecret(env) }))) {

@@ -1,3 +1,4 @@
+import { shops } from "~/wiring.server";
 // Workers runtime adapter (Web Crypto + global fetch) — replaces the Node
 // adapter the upstream template ships with. Must be imported before shopifyApp.
 import "@shopify/shopify-api/adapters/cf-worker";
@@ -9,7 +10,6 @@ import {
 } from "@shopify/shopify-app-react-router/server";
 
 import { KVSessionStorage } from "./session-storage.server";
-import { ShopRepo } from "~/models/shops.server";
 import { refreshShopSubscription } from "~/wiring.server";
 import { getEnv } from "~/request-context.server";
 
@@ -44,7 +44,7 @@ export async function afterAuth({
 }: {
   session: { shop: string };
 }): Promise<void> {
-  await new ShopRepo().recordInstall(session.shop, Date.now());
+  await shops().recordInstall(session.shop, Date.now());
   try {
     await refreshShopSubscription(getEnv(), session.shop);
   } catch (error) {

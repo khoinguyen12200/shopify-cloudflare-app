@@ -11,6 +11,7 @@ import { createAdmin } from "~/services/admin-management.server";
 import { requestPasswordReset } from "~/services/password-reset.server";
 import { notify } from "./notify.server";
 import { adminUsers, passwordResetNotifier, passwordResetTokens } from "~/wiring.server";
+import { notificationDependencies } from "~/wiring/notifications.server";
 
 setupTestDatabase();
 
@@ -132,7 +133,7 @@ describe("rule ORDER is observable in the record", () => {
           resetUrl: `${ORIGIN}/x`,
           expiresIn: "one hour",
         },
-      });
+      }, notificationDependencies());
       return new NotificationLogRepo().recent();
     });
     expect(rows[0]!.reasonCode).toBe("channel_unavailable");
@@ -169,7 +170,7 @@ describe("a missing address is refused by name", () => {
           resetUrl: `${ORIGIN}/x`,
           expiresIn: "one hour",
         },
-      });
+      }, notificationDependencies());
       return new NotificationLogRepo().recent();
     });
 
@@ -194,7 +195,7 @@ describe("notify reports every channel it considered", () => {
           resetUrl: `${ORIGIN}/x`,
           expiresIn: "one hour",
         },
-      });
+      }, notificationDependencies());
     });
 
     expect(result.dispatched).toHaveLength(0);

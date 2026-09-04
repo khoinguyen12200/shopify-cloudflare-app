@@ -1,9 +1,4 @@
 import { composeEmailMessage } from "./channels/email/compose";
-import { NotificationLogRepo } from "~/models/notification-logs.server";
-import {
-  GLOBAL_SCOPE,
-  NotificationSettingsRepo,
-} from "~/models/notification-settings.server";
 import { copyRecipients } from "./copy-recipients";
 import type { NotifyRequest } from "~/ports/notifier";
 import { dispatch, type DispatchResult } from "./dispatch.server";
@@ -12,6 +7,15 @@ import { loadEligibilityContext } from "./eligibility/snapshot.server";
 import type { ChannelDecision } from "./eligibility/types";
 import type { PayloadByEvent } from "./payloads";
 import type { ChannelKey, Message, NotificationEvent } from "./types";
+import type { NotificationLogsPort } from "~/ports/notification-logs";
+import type { NotificationSettingsPort } from "~/ports/notification-settings";
+
+const GLOBAL_SCOPE = "global";
+
+export interface NotifyDependencies {
+  readonly logs: NotificationLogsPort;
+  readonly settings: NotificationSettingsPort;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // THE ONE ENTRY POINT. Call sites use `notify()` and nothing else.
@@ -77,12 +81,13 @@ export interface NotifyResult {
 
 export async function notify<E extends NotificationEvent>(
   input: NotifyRequest<E>,
+  dependencies: NotifyDependencies,
 ): Promise<NotifyResult> {
   const context = await loadEligibilityContext({
     event: input.event,
     addresses: input.to,
     scope: input.scope,
-  });
+  }, dependencies.settings);
 
   const eligibility = resolveEligibility(context);
 
@@ -92,7 +97,7 @@ export async function notify<E extends NotificationEvent>(
   // not that: it is unqueryable, it ages out, and it leaves a suppressed
   // notification indistinguishable from one that was never requested. The status
   // is `refused` rather than `failed` because nothing was attempted.
-  const logs = new NotificationLogRepo();
+  const logs = dependencies.logs;
   const now = Date.now();
 
   for (const decision of eligibility.decisions) {
@@ -128,6 +133,7 @@ export async function notify<E extends NotificationEvent>(
         to,
         channel,
         scope: input.scope,
+        settings: dependencies.settings,
       }),
     );
 
@@ -137,7 +143,7 @@ export async function notify<E extends NotificationEvent>(
         dedupeKey: input.dedupeKey,
         shop: input.scope,
         logId: input.logId,
-      }),
+      }, {}, dependencies.logs),
     );
   }
 
@@ -159,10 +165,11 @@ async function allowedCopies(input: {
   to: string;
   channel: ChannelKey;
   scope?: string;
+  settings: NotificationSettingsPort;
 }): Promise<readonly string[]> {
   if (input.cc.length === 0) return [];
 
-  const optedOut = await new NotificationSettingsRepo().optedOutAddresses(
+  const optedOut = await input.settings.optedOutAddresses(
     input.scope ?? GLOBAL_SCOPE,
     input.channel,
     input.cc,

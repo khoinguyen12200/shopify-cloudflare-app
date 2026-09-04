@@ -1,3 +1,4 @@
+import { aiRepository } from "~/wiring.server";
 import { Form, useActionData, useLoaderData, useNavigation } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import {
@@ -31,7 +32,6 @@ import {
 } from "lucide-react";
 import { requireOwner } from "~/services/admin-auth.server";
 import { adminUsers } from "~/wiring.server";
-import { AiRepo } from "~/models/ai.server";
 import {
   MODEL_ROLES,
   ROLES_IN_USE,
@@ -55,7 +55,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Owner-only: changing a chain changes what every merchant is answered with,
   // and what we are billed.
   await requireOwner(request, { users: adminUsers() });
-  const repo = new AiRepo();
+  const repo = aiRepository();
   const now = Date.now();
 
   const [rows, spend, runs] = await Promise.all([
@@ -142,7 +142,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   // reads as a broken feature, not a bad setting (@rules/cloudflare.md).
   if (!isModelRole(role)) return { error: "That is not a purpose we use." as const };
 
-  const repo = new AiRepo();
+  const repo = aiRepository();
   const at = Date.now();
 
   switch (intent) {

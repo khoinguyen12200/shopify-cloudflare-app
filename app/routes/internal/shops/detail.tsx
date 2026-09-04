@@ -1,3 +1,4 @@
+import { shops, shopifyEvents, shopSyncCheckpoints, webhookDeliveryRepository } from "~/wiring.server";
 import { useLoaderData } from "react-router";
 import type { LoaderFunctionArgs } from "react-router";
 import {
@@ -16,10 +17,6 @@ import {
 import { requireAdminUser } from "~/services/admin-auth.server";
 import { adminUsers, refreshShopHistory, refreshShopSubscription } from "~/wiring.server";
 import { getEnv } from "~/request-context.server";
-import { ShopRepo } from "~/models/shops.server";
-import { ShopifyEventRepo } from "~/models/shopify-events.server";
-import { ShopSyncCheckpointRepo } from "~/models/shop-sync-checkpoints.server";
-import { WebhookDeliveryRepo } from "~/models/webhook-deliveries.server";
 import { planForShopifyHandle } from "~/billing/plans";
 import { formatDateTime } from "~/i18n/format";
 import type { Locale } from "~/i18n/config";
@@ -60,7 +57,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   await requireAdminUser(request, { users: adminUsers() });
   const shopDomain = decodeURIComponent(params.shop ?? "");
 
-  const shop = await new ShopRepo().get(shopDomain);
+  const shop = await shops().get(shopDomain);
   if (!shop) throw new Response("Not found", { status: 404 });
 
   if (shop.shopifyShopId === null || shop.lastReconciledAt === null || Date.now() - shop.lastReconciledAt > 5 * 60 * 1000) {
@@ -70,12 +67,12 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     ]);
   }
 
-  const eventsRepo = new ShopifyEventRepo();
+  const eventsRepo = shopifyEvents();
   const [history, relationshipEvents, deliveries, reconciliation] = await Promise.all([
     eventsRepo.listSubscriptionEvents(shopDomain),
     eventsRepo.listRelationshipEvents(shopDomain),
-    new WebhookDeliveryRepo().listForShop(shopDomain),
-    new ShopSyncCheckpointRepo().read(`partner_history:${shopDomain}`),
+    webhookDeliveryRepository().listForShop(shopDomain),
+    shopSyncCheckpoints().read(`partner_history:${shopDomain}`),
   ]);
   const events: EventHistoryRow[] = [
     ...relationshipEvents.map((event) => ({

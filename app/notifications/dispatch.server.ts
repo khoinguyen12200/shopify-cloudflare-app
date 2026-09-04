@@ -1,4 +1,3 @@
-import { NotificationLogRepo } from "~/models/notification-logs.server";
 import { emailChannel } from "./channels/email/channel.server";
 import type {
   Channel,
@@ -9,6 +8,7 @@ import type {
   SendContext,
   SendOutcome,
 } from "./types";
+import type { NotificationLogsPort } from "~/ports/notification-logs";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ONE way to send a notification: dedupe → policy → reserve → send → settle.
@@ -135,9 +135,9 @@ export class RetryableNotificationError extends Error {
 export async function dispatch(
   message: Message,
   meta: DispatchMeta,
-  context: SendContext = {},
+  context: SendContext,
+  logs: NotificationLogsPort,
 ): Promise<DispatchResult> {
-  const logs = new NotificationLogRepo();
 
   // Before anything else: has this already been handled? A skipped duplicate
   // must cost nothing, so this runs ahead of policies and transport.
@@ -221,7 +221,8 @@ async function runEntry<M extends Message>(
 /** Convenience for the common case. Kept thin — it only builds the message. */
 export async function dispatchEmail(
   input: Omit<EmailMessage, "kind"> & DispatchMeta,
+  logs: NotificationLogsPort,
 ): Promise<DispatchResult> {
   const { event, dedupeKey, shop, logId, ...email } = input;
-  return dispatch({ kind: "email", ...email }, { event, dedupeKey, shop, logId });
+  return dispatch({ kind: "email", ...email }, { event, dedupeKey, shop, logId }, {}, logs);
 }
