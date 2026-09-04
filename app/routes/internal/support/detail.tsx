@@ -34,7 +34,7 @@ import { formatDateTime, formatNumber } from "~/i18n/format";
 import type { Locale } from "~/i18n/config";
 import { Sparkles } from "lucide-react";
 import { useReplyDraft } from "~/internal/use-reply-draft";
-import { usePendingUploads } from "~/components/support/AttachmentPicker";
+import { usePendingUploads } from "~/routes/app/support/use-pending-uploads";
 import { InternalAttachmentPicker } from "~/components/support/InternalAttachmentPicker";
 import {
   DEFAULT_TONE,

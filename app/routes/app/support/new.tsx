@@ -24,7 +24,8 @@ import { SUPPORT_CATEGORIES, CATEGORY_LABEL_KEY } from "~/support/categories";
 import { supportErrorKey } from "~/support/error-keys";
 import { useActionToast } from "~/admin/use-action-toast";
 import { CcEmails, ccLabels } from "~/components/support/CcEmails";
-import { AttachmentPicker, usePendingUploads } from "~/components/support/AttachmentPicker";
+import { AttachmentPicker } from "~/components/support/AttachmentPicker";
+import { usePendingUploads } from "./use-pending-uploads";
 
 export const handle = { i18n: ["common", "admin"] };
 

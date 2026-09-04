@@ -1,9 +1,9 @@
 import { useRef } from "react";
 import { Button, Text } from "ngk-dashboard";
-import type { UploadState } from "./AttachmentPicker";
+import type { UploadController } from "~/routes/app/support/use-pending-uploads";
 
 /** The internal console uses ngk-dashboard, not Shopify Polaris web components. */
-export function InternalAttachmentPicker({ uploads }: { uploads: UploadState }) {
+export function InternalAttachmentPicker({ uploads }: { uploads: UploadController }) {
   const input = useRef<HTMLInputElement>(null);
 
   return (
