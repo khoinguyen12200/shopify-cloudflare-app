@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 
 import { createShopify } from "~/shopify.server";
 import { getEnv } from "~/request-context.server";
+import { currentAppInstallationSchema } from "~/schemas/current-app-installation";
 import { useLocale } from "~/i18n/useLocale";
 import { formatDateTime } from "~/i18n/format";
 import { formatMoney } from "~/money";
@@ -64,6 +65,15 @@ const APP_HANDLE_QUERY = `#graphql
 
 type BillingReconciliationResponse = { readonly ok: true } | { readonly ok: false };
 
+export function parseCurrentAppInstallationHandle(payload: unknown): string {
+  const parsed = currentAppInstallationSchema.safeParse(payload);
+  if (!parsed.success) {
+    console.error(JSON.stringify({ event: "billing.current_app_installation.invalid_payload" }));
+    throw new Response("Invalid current app installation response", { status: 502 });
+  }
+  return parsed.data.data.currentAppInstallation.app.handle;
+}
+
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin, session } = await createShopify(getEnv()).authenticate.admin(request);
   await persistShopIdentity(admin, session.shop);
@@ -90,8 +100,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const status = resolveProjectionBillingStatus(projection, planName, Date.now());
 
   const response = await admin.graphql(APP_HANDLE_QUERY);
-  const body = await response.json();
-  const appHandle: string = body.data?.currentAppInstallation?.app?.handle ?? "";
+  const appHandle = parseCurrentAppInstallationHandle(await response.json());
 
   return {
     status,

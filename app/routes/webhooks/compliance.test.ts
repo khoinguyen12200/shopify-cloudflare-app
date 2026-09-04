@@ -54,6 +54,18 @@ describe("the compliance webhook endpoint", () => {
     expect(record).toBeUndefined();
   });
 
+  it("rejects a non-object compliance payload with 400", async () => {
+    const request = await signedWebhookRequest({
+      url: WEBHOOK_URL,
+      topic: "shop/redact",
+      shop: "malformed-payload.myshopify.com",
+      payload: "not-an-object",
+    });
+
+    const response = await post(request);
+    expect(response.status).toBe(400);
+  });
+
   it("rejects a GET with 405 rather than rendering an empty page", () => {
     const response = loader();
     expect(response.status).toBe(405);

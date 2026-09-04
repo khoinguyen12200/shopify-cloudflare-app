@@ -1,6 +1,7 @@
 import type { ActionFunctionArgs } from "react-router";
 import { createShopify } from "~/shopify.server";
 import { getEnv } from "~/request-context.server";
+import { compliancePayloadSchema } from "~/schemas/compliance-webhook";
 import { handleCompliance } from "~/services/compliance.server";
 import { tenantPurgeDependencies } from "~/wiring.server";
 
@@ -21,10 +22,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   // Throws a 401 Response on a bad HMAC. Deliberately unguarded.
   const { topic, shop, payload } = await shopify.authenticate.webhook(request);
+  const parsed = compliancePayloadSchema.safeParse(payload);
+  if (!parsed.success) {
+    console.error(JSON.stringify({ event: "compliance.invalid_payload", shop, topic }));
+    return new Response("Invalid compliance payload", { status: 400 });
+  }
 
   const outcome = await handleCompliance(topic, {
     shop,
-    payload: payload as Record<string, unknown>,
+    payload: parsed.data,
   }, {
     tenantPurge: tenantPurgeDependencies(),
   });
