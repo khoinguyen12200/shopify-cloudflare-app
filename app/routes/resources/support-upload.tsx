@@ -78,11 +78,25 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return data({ error: "too_large" as const }, { status: 413 });
   }
 
-  await support().stageUpload({
-    id: uploadId, shop, ticketId: ticketId === "new" ? null : ticketId,
-    r2Key: key, filename, contentType, sizeBytes: object.size,
-    createdAt: Date.now(), expiresAt: Date.now() + 24 * 60 * 60 * 1000,
-  });
+  try {
+    await support().stageUpload({
+      id: uploadId, shop, ticketId: ticketId === "new" ? null : ticketId,
+      r2Key: key, filename, contentType, sizeBytes: object.size,
+      createdAt: Date.now(), expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+    });
+  } catch (stagingError) {
+    // Cron discovers abandoned objects through D1, so a failed insert must
+    // compensate immediately rather than leave an unreachable R2 object.
+    try {
+      await env.UPLOADS.delete(key);
+    } catch (cleanupError) {
+      console.error(JSON.stringify({
+        event: "support.upload_staging_cleanup_failed",
+        error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+      }));
+    }
+    throw stagingError;
+  }
 
   return data({
     uploadId,
