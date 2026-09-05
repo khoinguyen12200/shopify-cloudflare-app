@@ -64,6 +64,33 @@ async function ticketId(): Promise<string> {
 }
 
 describe("support upload staging", () => {
+  it("rejects a malformed Content-Length before streaming to R2", async () => {
+    const putObject = vi.spyOn(env.UPLOADS, "put");
+    try {
+      await inRequest(async () => {
+        const cookie = await staffCookie();
+        const id = await ticketId();
+        const request = new Request("https://example.test/support/upload", {
+          method: "POST",
+          body: "png-bytes",
+          headers: {
+            Cookie: cookie,
+            "Content-Type": "image/png",
+            "Content-Length": "not-a-number",
+            "X-Support-Filename": "screen.png",
+            "X-Support-Ticket": id,
+          },
+        });
+
+        const result = await action(actionArgs(request));
+        expect(result).toMatchObject({ data: { error: "empty" } });
+      });
+      expect(putObject).not.toHaveBeenCalled();
+    } finally {
+      putObject.mockRestore();
+    }
+  });
+
   it("keeps an oversized object discoverable when immediate cleanup fails", async () => {
     const deleteObject = vi.spyOn(env.UPLOADS, "delete").mockRejectedValue(new Error("cleanup unavailable"));
     const report = vi.spyOn(console, "error").mockImplementation(() => undefined);

@@ -51,6 +51,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   // write, from what R2 actually received.
   const declared = Number(request.headers.get("Content-Length") ?? "0");
 
+  if (!Number.isFinite(declared) || !Number.isInteger(declared) || declared <= 0) {
+    return data({ error: "empty" as const }, { status: 400 });
+  }
+
   const check = validateUpload({ contentType, sizeBytes: declared });
   if (!check.ok) {
     return data({ error: check.reason }, { status: 400 });
