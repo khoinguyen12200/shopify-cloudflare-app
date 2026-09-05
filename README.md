@@ -269,7 +269,7 @@ your team, not a merchant's records. Everything else stays shop-scoped.
 
 | | |
 | --- | --- |
-| URL | `http://localhost:3000/internal/login` |
+| Login path | `/internal/login` (append to the dev URL shown by Shopify CLI) |
 | Email | `admin@localhost` |
 | Password | `admin123` |
 

@@ -114,7 +114,7 @@ if (status !== 0) {
 
 console.log(
   `Local internal admin ready:\n` +
-    `  URL:      http://localhost:3000/internal/login\n` +
+    `  Login path: /internal/login (use the dev URL shown by Shopify CLI)\n` +
     `  Email:    ${SEED_EMAIL}\n` +
     `  Password: ${SEED_PASSWORD}\n` +
     `\nDEV ONLY — never use these credentials anywhere real.`,
