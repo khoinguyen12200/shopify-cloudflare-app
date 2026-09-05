@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { env } from "cloudflare:test";
 import { runWithRequestContext } from "~/request-context.server";
 import { setupTestDatabase } from "~/test/db";
@@ -31,6 +31,22 @@ describe("recording an install when a session is minted", () => {
     });
 
     expect(found).toMatchObject({ shop: SHOP, uninstalledAt: null });
+  });
+
+  it("does not write a raw shop domain when subscription refresh is degraded", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    await inRequest(() => afterAuth(authOf(SHOP), async () => {
+      throw new Error("Partner API unavailable");
+    }));
+
+    expect(error).toHaveBeenCalledTimes(1);
+    const record = String(error.mock.calls[0]?.[0]);
+    expect(record).toContain('"event":"subscription.refresh_failed"');
+    expect(record).toMatch(/"shopHash":"[a-f0-9]{64}"/);
+    expect(record).not.toContain(SHOP);
+    expect(record).toContain("Partner API unavailable");
+    error.mockRestore();
   });
 
   it("makes the shop visible to the internal console's list", async () => {

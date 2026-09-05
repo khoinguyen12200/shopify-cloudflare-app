@@ -12,6 +12,7 @@ import {
 import { KVSessionStorage } from "./session-storage.server";
 import { refreshShopSubscription } from "~/wiring.server";
 import { getEnv } from "~/request-context.server";
+import { hashShop } from "~/observability/shop-log";
 
 export const apiVersion = ApiVersion.July26;
 
@@ -43,12 +44,16 @@ export async function afterAuth({
   session,
 }: {
   session: { shop: string };
-}): Promise<void> {
+}, refresh: (env: Env, shop: string) => Promise<unknown> = refreshShopSubscription): Promise<void> {
   await shops().recordInstall(session.shop, Date.now());
   try {
-    await refreshShopSubscription(getEnv(), session.shop);
+    await refresh(getEnv(), session.shop);
   } catch (error) {
-    console.error(JSON.stringify({ event: "subscription.refresh_failed", shop: session.shop, error: error instanceof Error ? error.message : String(error) }));
+    console.error(JSON.stringify({
+      event: "subscription.refresh_failed",
+      shopHash: await hashShop(session.shop),
+      error: error instanceof Error ? error.message : String(error),
+    }));
   }
 }
 
