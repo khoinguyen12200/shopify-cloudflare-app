@@ -118,7 +118,6 @@ const BINDING_SECTIONS = [
   ["hyperdrive", "binding"],
   ["images", "binding"],
   ["kv_namespaces", "binding"],
-  ["queues", "consumers", "binding"],
   ["queues", "producers", "binding"],
   ["r2_buckets", "binding"],
   ["ratelimits", "name"],
@@ -147,6 +146,11 @@ function parityIssues(base, production) {
   }
   for (const key of base.secrets?.required ?? []) {
     if (!production.secrets?.required?.includes(key)) issues.push(`production secret ${key} is missing`);
+  }
+  const baseConsumers = new Set((base.queues?.consumers ?? []).map((entry) => entry.queue).filter(Boolean));
+  const productionConsumers = new Set((production.queues?.consumers ?? []).map((entry) => entry.queue).filter(Boolean));
+  for (const queue of baseConsumers) {
+    if (!productionConsumers.has(queue)) issues.push(`production queue consumer ${queue} is missing`);
   }
   return issues;
 }
@@ -204,6 +208,10 @@ export function validateLaunchContract(files) {
           ? production.ratelimits?.some((entry) => entry.name === binding)
           : production[section]?.some((entry) => entry.binding === binding || entry.name === binding);
     if (!configured) issues.push(`production binding ${binding} is missing`);
+  }
+  const webhookQueue = production.queues?.producers?.find((entry) => entry.binding === "WEBHOOK_QUEUE")?.queue;
+  if (!webhookQueue || !production.queues?.consumers?.some((entry) => entry.queue === webhookQueue)) {
+    issues.push("production WEBHOOK_QUEUE consumer is missing");
   }
   if (!("AI_GATEWAY_ID" in vars)) issues.push("AI_GATEWAY_ID production var is missing");
 

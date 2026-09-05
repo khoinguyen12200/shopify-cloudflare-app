@@ -74,7 +74,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   // Content-Length to get past the check above is caught here, and the object
   // is removed rather than left paid for.
   if (object.size > check.value.maxBytes) {
-    await env.UPLOADS.delete(key);
+    try {
+      await env.UPLOADS.delete(key);
+    } catch (cleanupError) {
+      await support().stageUpload({
+        id: uploadId, shop, ticketId: ticketId === "new" ? null : ticketId,
+        r2Key: key, filename, contentType, sizeBytes: object.size,
+        createdAt: Date.now(), expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+      });
+      console.error(JSON.stringify({
+        event: "support.upload_size_cleanup_failed",
+        error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+      }));
+    }
     return data({ error: "too_large" as const }, { status: 413 });
   }
 

@@ -18,7 +18,7 @@ function validFiles() {
     r2_buckets: [{ binding: "UPLOADS", bucket_name: "uploads" }],
     send_email: [{ name: "EMAIL" }],
     ai: { binding: "AI" },
-    queues: { producers: [{ binding: "WEBHOOK_QUEUE", queue: "queue" }] },
+    queues: { producers: [{ binding: "WEBHOOK_QUEUE", queue: "queue" }], consumers: [{ queue: "queue", max_retries: 5, dead_letter_queue: "queue-dlq" }] },
     ratelimits: [{ name: "SUPPORT_LIMITER" }, { name: "LOGIN_LIMITER" }, { name: "RESET_LIMITER" }],
   };
   return {
@@ -66,6 +66,13 @@ test("rejects a top-level var omitted from production", () => {
   files.wrangler.vars.FUTURE_REQUIRED_VAR = "configured";
   const issues = validateLaunchContract(files).join("\n");
   assert.match(issues, /production var FUTURE_REQUIRED_VAR/i);
+});
+
+test("rejects production config without a webhook queue consumer", () => {
+  const files = validFiles();
+  files.wrangler.env.production.queues.consumers = [];
+  const issues = validateLaunchContract(files).join("\n");
+  assert.match(issues, /WEBHOOK_QUEUE consumer/i);
 });
 
 test("rejects every launch placeholder and redirect drift", () => {

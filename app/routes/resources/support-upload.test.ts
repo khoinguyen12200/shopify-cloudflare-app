@@ -64,6 +64,38 @@ async function ticketId(): Promise<string> {
 }
 
 describe("support upload staging", () => {
+  it("keeps an oversized object discoverable when immediate cleanup fails", async () => {
+    const deleteObject = vi.spyOn(env.UPLOADS, "delete").mockRejectedValue(new Error("cleanup unavailable"));
+    const report = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      await inRequest(async () => {
+        const cookie = await staffCookie();
+        const id = await ticketId();
+        const body = new Uint8Array(10 * 1024 * 1024 + 1);
+        const request = new Request("https://example.test/support/upload", {
+          method: "POST",
+          body,
+          headers: {
+            Cookie: cookie,
+            "Content-Type": "image/png",
+            "Content-Length": "1",
+            "X-Support-Filename": "screen.png",
+            "X-Support-Ticket": id,
+          },
+        });
+
+        const result = await action(actionArgs(request));
+        expect(result).toMatchObject({ data: { error: "too_large" } });
+        const pending = await new SupportRepo().listExpiredUploads(Date.now() + 24 * 60 * 60 * 1000 + 1);
+        expect(pending).toHaveLength(1);
+      });
+      expect(report).toHaveBeenCalledWith(expect.stringContaining('"event":"support.upload_size_cleanup_failed"'));
+    } finally {
+      deleteObject.mockRestore();
+      report.mockRestore();
+    }
+  });
+
   it("removes the R2 object when pending-upload staging rejects it", async () => {
     await inRequest(async () => {
       const cookie = await staffCookie();
