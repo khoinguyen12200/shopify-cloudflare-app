@@ -13,7 +13,7 @@ export async function hashShop(shop: string): Promise<string> {
 /** Emit structured tenant-safe logs with a consistent event and shop hash shape. */
 export async function shopLog(event: string, shop: string, fields: ShopLogFields = {}): Promise<void> {
   const safeFields = Object.fromEntries(
-    Object.entries(fields).filter(([key]) => !/^(event|shop|shopHash|payload|token|secret)$/i.test(key)),
+    Object.entries(fields).filter(([key]) => !/^(event|shop|shopHash|payload|token|secret|customerId|email)$/i.test(key)),
   );
   console.log(JSON.stringify({ event, shopHash: await hashShop(shop), ...safeFields }));
 }

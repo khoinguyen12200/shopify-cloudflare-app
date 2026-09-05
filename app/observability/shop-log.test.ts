@@ -42,4 +42,17 @@ describe("shop observability", () => {
     expect(String(write.mock.calls[0]?.[0])).not.toContain("secret.myshopify.com");
     write.mockRestore();
   });
+
+  it("does not emit customer identifiers from compliance metadata", async () => {
+    const write = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await shopLog("compliance.customers_data_request.no_customer_data", "secret.myshopify.com", {
+      customerId: "gid://shopify/Customer/123",
+      ordersRequested: 2,
+    });
+    const record = String(write.mock.calls[0]?.[0]);
+    expect(record).not.toContain("customerId");
+    expect(record).not.toContain("Customer/123");
+    expect(record).toContain('"ordersRequested":2');
+    write.mockRestore();
+  });
 });
