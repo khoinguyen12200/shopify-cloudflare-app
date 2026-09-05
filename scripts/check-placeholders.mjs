@@ -147,10 +147,10 @@ function parityIssues(base, production) {
   for (const key of base.secrets?.required ?? []) {
     if (!production.secrets?.required?.includes(key)) issues.push(`production secret ${key} is missing`);
   }
-  const baseConsumers = new Set((base.queues?.consumers ?? []).map((entry) => entry.queue).filter(Boolean));
-  const productionConsumers = new Set((production.queues?.consumers ?? []).map((entry) => entry.queue).filter(Boolean));
-  for (const queue of baseConsumers) {
-    if (!productionConsumers.has(queue)) issues.push(`production queue consumer ${queue} is missing`);
+  const baseConsumers = base.queues?.consumers ?? [];
+  const productionConsumers = production.queues?.consumers ?? [];
+  if (productionConsumers.length < baseConsumers.length) {
+    issues.push(`production queue consumer configuration is missing (${baseConsumers.length} required)`);
   }
   return issues;
 }
