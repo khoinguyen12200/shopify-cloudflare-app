@@ -22,4 +22,6 @@ export interface WebhookDeliveriesPort {
   claim(input: WebhookDeliveryInput): Promise<"claimed" | "duplicate">;
   get(shop: string, id: string): Promise<StoredWebhookDelivery | undefined>;
   markQueued(shop: string, id: string): Promise<void>;
+  claimForQueue?(shop: string, id: string): Promise<boolean>;
+  markReceived?(shop: string, id: string): Promise<void>;
 }

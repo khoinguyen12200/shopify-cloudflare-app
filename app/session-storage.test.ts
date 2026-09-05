@@ -85,6 +85,15 @@ describe("KVSessionStorage", () => {
     expect(found).toEqual([]);
   });
 
+  it("removes a stale shop index when the primary session has expired", async () => {
+    const storage = new KVSessionStorage(env.SESSION);
+    const session = offlineSession("stale-index.myshopify.com");
+    await storage.storeSession(session);
+    await env.SESSION.delete(`session:${session.id}`);
+    await storage.deleteSession(session.id);
+    expect(await storage.findSessionsByShop(session.shop)).toEqual([]);
+  });
+
   it("gives an offline session no KV expiry, so its refresh token outlives the access token", async () => {
     const storage = new KVSessionStorage(env.SESSION);
     const session = offlineSession("offline.myshopify.com");

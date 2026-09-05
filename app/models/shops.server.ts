@@ -63,10 +63,10 @@ export class ShopRepo {
   async recordInstall(shop: string, now: number): Promise<void> {
     await getDb()
       .insert(shops)
-      .values({ shop, installedAt: now, uninstalledAt: null })
+      .values({ shop, installedAt: now, uninstalledAt: null, currentInstalledAt: now, relationshipStatus: "INSTALLED", relationshipOccurredAt: now, relationshipExternalId: `install:${now}` })
       .onConflictDoUpdate({
         target: shops.shop,
-        set: { uninstalledAt: null },
+        set: { uninstalledAt: null, currentInstalledAt: now, relationshipStatus: "INSTALLED", relationshipOccurredAt: now, relationshipExternalId: `install:${now}` },
       });
   }
 
@@ -82,7 +82,7 @@ export class ShopRepo {
   async recordUninstall(shop: string, now: number): Promise<void> {
     await getDb()
       .update(shops)
-      .set({ uninstalledAt: now })
+      .set({ uninstalledAt: now, currentInstalledAt: null, relationshipStatus: "UNINSTALLED", relationshipOccurredAt: now, relationshipExternalId: `uninstall:${now}` })
       .where(eq(shops.shop, shop));
   }
 

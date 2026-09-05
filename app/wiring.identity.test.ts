@@ -25,4 +25,11 @@ describe("persistShopIdentity", () => {
       expect(requests).toBe(0);
     });
   });
+
+  it("returns a query failure when Shopify responds with HTTP or GraphQL errors", async () => {
+    await runWithRequestContext(env, async () => {
+      await expect(persistShopIdentity({ graphql: async () => new Response(JSON.stringify({ errors: [{ message: "denied" }] }), { status: 200 }) }, "error.myshopify.com", 2)).resolves.toEqual({ status: "failed", code: "SHOP_IDENTITY_QUERY_FAILED" });
+      await expect(persistShopIdentity({ graphql: async () => new Response("unavailable", { status: 503 }) }, "http-error.myshopify.com", 2)).resolves.toEqual({ status: "failed", code: "SHOP_IDENTITY_QUERY_FAILED" });
+    });
+  });
 });

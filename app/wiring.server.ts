@@ -44,7 +44,11 @@ export async function persistShopIdentity(admin: { graphql: (query: string) => P
     return { status: "recorded" as const, shopifyShopId: existing.shopifyShopId };
   }
   const response = await admin.graphql(SHOP_IDENTITY_QUERY);
+  if (!response.ok) return { status: "failed", code: "SHOP_IDENTITY_QUERY_FAILED" };
   const body: unknown = await response.json();
+  if (body !== null && typeof body === "object" && "errors" in body && Array.isArray(body.errors) && body.errors.length > 0) {
+    return { status: "failed", code: "SHOP_IDENTITY_QUERY_FAILED" };
+  }
   const data = body !== null && typeof body === "object" && "data" in body ? body.data : null;
   const value = data !== null && typeof data === "object" && "shop" in data ? data.shop : null;
   const identity = value !== null && typeof value === "object" && "id" in value && "myshopifyDomain" in value
@@ -260,7 +264,9 @@ export function webhookConsumer() {
         refreshSubscription: () => refreshShopSubscription(env, delivery.shop),
         refreshHistory: () => refreshShopHistory(env, delivery.shop),
       });
-      if (!result.ok) throw new Error(`Uninstall billing reconciliation failed: ${result.code}: ${result.detail}`);
+      if (!result.ok) {
+        console.error(JSON.stringify({ event: "shopify.uninstall.reconciliation_failed", shop: delivery.shop, code: result.code, detail: result.detail }));
+      }
     },
     "app/scopes_update": async (delivery: ConsumerDelivery) => {
       const current = await scopes.list(delivery.id, delivery.shop);

@@ -104,25 +104,24 @@ export class KVSessionStorage implements SessionStorage {
   async findSessionsByShop(shop: string): Promise<Session[]> {
     const prefix = `shopidx:${shop}:`;
     const sessions: Session[] = [];
-    const missingIds: string[] = [];
+    const indexed: Array<{ id: string; metadata?: SessionProps }> = [];
     let cursor: string | undefined;
     do {
       const list = await this.kv.list<SessionProps>({ prefix, cursor });
       for (const key of list.keys) {
-        if (key.metadata) {
-          sessions.push(Session.fromPropertyArray(key.metadata));
-        } else {
-          missingIds.push(key.name.slice(prefix.length));
-        }
+        indexed.push({ id: key.name.slice(prefix.length), metadata: key.metadata });
       }
       cursor = list.list_complete ? undefined : list.cursor;
     } while (cursor);
 
-    const loaded = await Promise.all(
-      missingIds.map((id) => this.loadSession(id)),
-    );
-    for (const s of loaded) {
-      if (s) sessions.push(s);
+    const loaded = await Promise.all(indexed.map(({ id }) => this.loadSession(id)));
+    for (let index = 0; index < loaded.length; index += 1) {
+      const session = loaded[index];
+      if (session) {
+        sessions.push(session);
+      } else {
+        await this.kv.delete(this.shopIndexKey(shop, indexed[index].id));
+      }
     }
     return sessions;
   }

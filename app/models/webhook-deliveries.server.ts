@@ -58,6 +58,15 @@ export class WebhookDeliveryRepo {
       );
   }
 
+  async claimForQueue(shop: string, id: string): Promise<boolean> {
+    const changed = await getDb().update(webhookDeliveries).set({ status: "queued" }).where(and(eq(webhookDeliveries.shop, shop), eq(webhookDeliveries.id, id), eq(webhookDeliveries.status, "received"))).returning({ id: webhookDeliveries.id });
+    return changed.length === 1;
+  }
+
+  async markReceived(shop: string, id: string): Promise<void> {
+    await getDb().update(webhookDeliveries).set({ status: "received" }).where(and(eq(webhookDeliveries.shop, shop), eq(webhookDeliveries.id, id), eq(webhookDeliveries.status, "queued")));
+  }
+
   async markProcessing(
     shop: string,
     id: string,

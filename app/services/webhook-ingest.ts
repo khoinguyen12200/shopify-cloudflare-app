@@ -48,8 +48,15 @@ export async function ingestWebhook(
     }
   }
 
-  await dependencies.beforeEnqueue?.(webhook);
-  await dependencies.queue.send({ shop: webhook.shop, id: webhook.webhookId });
+  if (dependencies.deliveries.claimForQueue && !(await dependencies.deliveries.claimForQueue(webhook.shop, webhook.webhookId))) return "duplicate";
+
+  try {
+    await dependencies.beforeEnqueue?.(webhook);
+    await dependencies.queue.send({ shop: webhook.shop, id: webhook.webhookId });
+  } catch (error) {
+    await dependencies.deliveries.markReceived?.(webhook.shop, webhook.webhookId);
+    throw error;
+  }
   await dependencies.deliveries.markQueued(webhook.shop, webhook.webhookId);
   await dependencies.log?.(webhook, "queued", Date.now() - webhook.receivedAt);
   return "queued";

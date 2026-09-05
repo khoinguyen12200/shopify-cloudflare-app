@@ -108,7 +108,7 @@ describe("ShopRepo", () => {
       return repo.get(shop);
     });
 
-    expect(found).toMatchObject({ shop, installedAt: now, uninstalledAt: null });
+    expect(found).toMatchObject({ shop, installedAt: now, uninstalledAt: null, currentInstalledAt: now, relationshipStatus: "INSTALLED", relationshipOccurredAt: now });
   });
 
   it("is idempotent across a repeated install", async () => {
@@ -149,7 +149,7 @@ describe("ShopRepo", () => {
       return repo.get(shop);
     });
 
-    expect(found?.uninstalledAt).toBe(99);
+    expect(found).toMatchObject({ uninstalledAt: 99, currentInstalledAt: null, relationshipStatus: "UNINSTALLED", relationshipOccurredAt: 99 });
   });
 
   it("lists every shop, newest install first", async () => {
