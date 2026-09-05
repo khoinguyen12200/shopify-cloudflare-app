@@ -1,3 +1,4 @@
+import { shops } from "~/wiring.server";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { redirect, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -5,7 +6,6 @@ import { useTranslation } from "react-i18next";
 
 import { createShopify } from "~/shopify.server";
 import { getEnv } from "~/request-context.server";
-import { ShopRepo } from "~/models/shops.server";
 import { useLocale } from "~/i18n/useLocale";
 import { formatDateTime } from "~/i18n/format";
 import { persistShopIdentity } from "~/wiring.server";
@@ -37,7 +37,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         }`,
     ),
     // A D1 read through the models layer, to prove that half is wired too.
-    new ShopRepo().get(session.shop),
+    shops().get(session.shop),
   ]);
   const body = await response.json();
 

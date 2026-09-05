@@ -6,27 +6,30 @@ import { ShopifyEventRepo } from "~/models/shopify-events.server";
 import { ShopSubscriptionRepo } from "~/models/shop-subscriptions.server";
 import { ShopRepo } from "~/models/shops.server";
 import { AdminUserRepo } from "~/models/admin-users.server";
-import { PasswordResetTokenRepo } from "~/models/password-reset-tokens.server";
 import { AiRepo } from "~/models/ai.server";
+import { OperationalHealthRepo } from "~/models/operational-health.server";
 import { SupportRepo } from "~/models/support.server";
 import { WebhookDeliveryRepo } from "~/models/webhook-deliveries.server";
-import { TenantPurgeRepo } from "~/models/tenant-purge.server";
 import { WebhookScopeObservationRepo } from "~/models/webhook-scope-observations.server";
+import { ShopSyncCheckpointRepo } from "~/models/shop-sync-checkpoints.server";
+import { PasswordResetTokenRepo } from "~/models/password-reset-tokens.server";
+import { TenantPurgeRepo } from "~/models/tenant-purge.server";
 import { KVSessionStorage } from "~/session-storage.server";
-import type { ConsumerDelivery } from "~/services/webhook-consumer";
+import type { ConsumerDelivery, WebhookHandlerRegistry } from "~/services/webhook-consumer";
 import { getEnv } from "~/request-context.server";
 import { notify } from "~/notifications/notify.server";
+import { notificationDependencies } from "~/wiring/notifications.server";
 import type { PasswordResetNotifier } from "~/services/password-reset.server";
 import { signAttachmentToken } from "~/support/file-token";
 import { AiService } from "~/services/ai.server";
 import { SupportService } from "~/services/support.server";
 import { reconcileHistory, reconcileShopHistory } from "~/services/reconcile-shopify-history";
-import { ShopSyncCheckpointRepo } from "~/models/shop-sync-checkpoints.server";
 import { refreshSubscription } from "~/services/reconcile-subscription";
 import type { AdminUserPort } from "~/ports/admin-users";
 import type { PasswordResetTokenPort } from "~/ports/password-reset-tokens";
 import { recordShopifyIdentity } from "~/services/record-shopify-identity";
 import { reconcileAfterUninstall } from "~/services/reconcile-after-uninstall";
+import type { AuthAttemptLimiter } from "~/ports/auth-rate-limit";
 
 const SHOP_IDENTITY_QUERY = `#graphql
   query AuthenticatedShopIdentity {
@@ -35,8 +38,8 @@ const SHOP_IDENTITY_QUERY = `#graphql
 `;
 
 export async function persistShopIdentity(admin: { graphql: (query: string) => Promise<Response> }, shop: string, now = Date.now()) {
-  const shops = new ShopRepo();
-  const existing = await shops.get(shop);
+  const repository = new ShopRepo();
+  const existing = await repository.get(shop);
   if (existing?.shopifyShopId) {
     return { status: "recorded" as const, shopifyShopId: existing.shopifyShopId };
   }
@@ -51,12 +54,69 @@ export async function persistShopIdentity(admin: { graphql: (query: string) => P
   return recordShopifyIdentity({
     shop,
     queryShop: async () => identity,
-    record: (tenant, shopifyShopId, at) => shops.recordAuthenticatedIdentity(tenant, shopifyShopId, at),
+    record: (tenant, shopifyShopId, at) => repository.recordAuthenticatedIdentity(tenant, shopifyShopId, at),
   }, now);
 }
 
 export function adminUsers(): AdminUserPort {
   return new AdminUserRepo();
+}
+
+/** Adapter factories are the only production boundary to repository classes. */
+export type ShopsPort = Pick<ShopRepo, "get" | "recordAuthenticatedIdentity" | "recordInstall" | "recordUninstall" | "markReconciled" | "listAll">;
+export type SupportPort = Pick<SupportRepo, "find" | "findForStaff" | "stageUpload" | "adoptPendingUploads" | "findAttachment" | "listForShop" | "listOpenForStaff" | "replyAsStaff" | "closeAsStaff" | "markReadAsStaff" | "setCcEmails" | "attach" | "open" | "reply" | "markRead" | "listExpiredUploads" | "deleteExpiredUploads">;
+export type ShopSubscriptionsPort = Pick<ShopSubscriptionRepo, "currentForShop" | "listCurrent" | "upsertObservation">;
+export type ShopifyEventsPort = Pick<ShopifyEventRepo, "listSubscriptionEvents" | "listRelationshipEvents" | "listRecentSubscriptionEvents" | "recordPartnerRelationship" | "recordPartnerSubscription">;
+export type ShopSyncCheckpointsPort = Pick<ShopSyncCheckpointRepo, "read" | "markSucceeded" | "markFailed" | "readCheckpoint" | "markCheckpointSucceeded" | "markCheckpointFailed">;
+export type WebhookScopeObservationsPort = Pick<WebhookScopeObservationRepo, "record" | "list" | "applyScopes">;
+export type WebhookDeliveryRepositoryPort = Pick<WebhookDeliveryRepo, "listForShop" | "claim" | "get" | "markQueued" | "markProcessing" | "markProcessed" | "markFailed" | "markDeadLetter">;
+export type OperationalHealthPort = Pick<OperationalHealthRepo, "read">;
+export type AiRepositoryPort = Pick<AiRepo, "chainFor" | "markHealth" | "recordRun" | "allModels" | "tokensSince" | "recentRuns" | "addToChain" | "removeFromChain" | "reorder" | "setEnabled">;
+
+export function shops(): ShopsPort { return new ShopRepo(); }
+export function support(): SupportPort { return new SupportRepo(); }
+export function shopSubscriptions(): ShopSubscriptionsPort { return new ShopSubscriptionRepo(); }
+export function shopifyEvents(): ShopifyEventsPort { return new ShopifyEventRepo(); }
+export function shopSyncCheckpoints(): ShopSyncCheckpointsPort { return new ShopSyncCheckpointRepo(); }
+export function webhookScopeObservations(): WebhookScopeObservationsPort { return new WebhookScopeObservationRepo(); }
+export function webhookDeliveryRepository(): WebhookDeliveryRepositoryPort { return new WebhookDeliveryRepo(); }
+export function operationalHealth(): OperationalHealthPort { return new OperationalHealthRepo(); }
+export function aiRepository(): AiRepositoryPort { return new AiRepo(); }
+
+function authLimiter(binding: RateLimit | undefined): AuthAttemptLimiter {
+  return {
+    async check(key) {
+      if (!binding) return "unavailable";
+      try {
+        const outcome = await binding.limit({ key });
+        return outcome.success ? "allowed" : "limited";
+      } catch (error) {
+        console.error(JSON.stringify({
+          event: "auth.rate_limit_unavailable",
+          error: error instanceof Error ? error.message : "unknown",
+        }));
+        return "unavailable";
+      }
+    },
+  };
+}
+
+export function requireAttachmentTokenSecret(env: { readonly ATTACHMENT_TOKEN_SECRET?: string; readonly SHOPIFY_API_SECRET?: string }): string {
+  if (!env.ATTACHMENT_TOKEN_SECRET) {
+    throw new Error("ATTACHMENT_TOKEN_SECRET is not configured");
+  }
+  return env.ATTACHMENT_TOKEN_SECRET;
+}
+
+export function authLimiters(): {
+  readonly login: AuthAttemptLimiter;
+  readonly passwordReset: AuthAttemptLimiter;
+} {
+  const env = getEnv();
+  return {
+    login: authLimiter(env.LOGIN_LIMITER),
+    passwordReset: authLimiter(env.RESET_LIMITER),
+  };
 }
 
 export function passwordResetTokens(): PasswordResetTokenPort {
@@ -71,12 +131,12 @@ export function passwordResetTokens(): PasswordResetTokenPort {
 }
 
 export function passwordResetNotifier(): PasswordResetNotifier {
-  return { send: (input) => notify(input) };
+  return { send: (input) => notify(input, notificationDependencies()) };
 }
 
 /** Targeted billing refresh composition. Missing Partner credentials stay observable. */
 export async function refreshShopSubscription(env: Env, shop: string, now = Date.now()) {
-  const identity = await new ShopRepo().get(shop);
+  const identity = await shops().get(shop);
   const partner = new ShopifyPartnerAdapter({
     token: env.SHOPIFY_PARTNER_API_TOKEN || "",
     organizationId: env.SHOPIFY_PARTNER_ORGANIZATION_ID || "",
@@ -85,15 +145,15 @@ export async function refreshShopSubscription(env: Env, shop: string, now = Date
   });
   return refreshSubscription({
     partner,
-    subscriptions: { upsertSubscriptionProjection: (tenant, observation) => new ShopSubscriptionRepo().upsertObservation(tenant, observation) },
+    subscriptions: { upsertSubscriptionProjection: (tenant, observation) => shopSubscriptions().upsertObservation(tenant, observation) },
     clock: { now: () => now },
     appId: env.SHOPIFY_PARTNER_APP_ID || null,
   }, { shop, shopifyShopId: identity?.shopifyShopId ?? null, installedAt: identity?.installedAt ?? null }, now);
 }
 
 export async function refreshShopHistory(env: Env, shop: string, now = Date.now()) {
-  const identity = await new ShopRepo().get(shop);
-  const checkpoints = new ShopSyncCheckpointRepo();
+  const identity = await shops().get(shop);
+  const checkpoints = shopSyncCheckpoints();
   const result = await reconcileShopHistory({
     partner: new ShopifyPartnerAdapter({ token: env.SHOPIFY_PARTNER_API_TOKEN || "", organizationId: env.SHOPIFY_PARTNER_ORGANIZATION_ID || "", apiVersion: env.SHOPIFY_PARTNER_API_VERSION || "", fetch }),
     ledger: historyLedger(),
@@ -103,7 +163,7 @@ export async function refreshShopHistory(env: Env, shop: string, now = Date.now(
   const checkpointName = `partner_history:${shop}`;
   if (result.status === "succeeded") {
     await Promise.all([
-      new ShopRepo().markReconciled(shop, now),
+      shops().markReconciled(shop, now),
       checkpoints.markSucceeded(checkpointName, null, now, now),
     ]);
   } else {
@@ -114,7 +174,7 @@ export async function refreshShopHistory(env: Env, shop: string, now = Date.now(
 
 /** History ledger adapter binding kept here so services never import models. */
 export function historyLedger() {
-  const repo = new ShopifyEventRepo();
+  const repo = shopifyEvents();
   return {
     recordPartnerRelationship: (event: Parameters<ShopifyEventRepo["recordPartnerRelationship"]>[0]) => repo.recordPartnerRelationship(event),
     recordPartnerSubscription: (event: Parameters<ShopifyEventRepo["recordPartnerSubscription"]>[0]) => repo.recordPartnerSubscription(event),
@@ -147,24 +207,24 @@ export function aiGenerator(): TextGenerator {
 }
 
 export function aiService(): AiService {
-  return new AiService({ repo: new AiRepo(), generator: aiGenerator(), clock: { now: () => Date.now() }, gate: aiGate() });
+  return new AiService({ repo: aiRepository(), generator: aiGenerator(), clock: { now: () => Date.now() }, gate: aiGate() });
 }
 
 export function supportService(): SupportService {
   const env = getEnv();
   return new SupportService({
-    repo: new SupportRepo(),
-    admins: new AdminUserRepo(),
+    repo: support(),
+    admins: adminUsers(),
     clock: { now: () => Date.now() },
-    notifier: { send: async (input) => { await notify(input); } },
+    notifier: { send: async (input) => { await notify(input, notificationDependencies()); } },
     appUrl: env.SHOPIFY_APP_URL,
     withinRateLimit: async (shop) => env.SUPPORT_LIMITER ? (await env.SUPPORT_LIMITER.limit({ key: shop })).success : true,
-    signAttachment: async (attachmentId, expiresAt) => signAttachmentToken({ secret: env.SHOPIFY_API_SECRET, attachmentId, expiresAt }),
+    signAttachment: async (attachmentId, expiresAt) => signAttachmentToken({ secret: requireAttachmentTokenSecret(env), attachmentId, expiresAt }),
   });
 }
 
 export function webhookDeliveries() {
-  return new WebhookDeliveryRepo();
+  return webhookDeliveryRepository();
 }
 
 export function tenantPurgeDependencies() {
@@ -190,36 +250,45 @@ export function tenantPurgeDependencies() {
 export function webhookConsumer() {
   const env = getEnv();
   const sessions = new KVSessionStorage(env.SESSION);
-  const scopes = new WebhookScopeObservationRepo();
-  return {
-    deliveries: new WebhookDeliveryRepo(),
-    now: Date.now,
-    isRedactedShop: async (shop: string) => (await new ShopRepo().get(shop)) === undefined,
-    handlers: {
-      "app/uninstalled": async (delivery: ConsumerDelivery) => {
-        await new ShopRepo().recordUninstall(delivery.shop, Date.now());
-        const found = await sessions.findSessionsByShop(delivery.shop);
-        await sessions.deleteSessions(found.map(({ id }) => id));
-        const result = await reconcileAfterUninstall({
-          refreshSubscription: () => refreshShopSubscription(env, delivery.shop),
-          refreshHistory: () => refreshShopHistory(env, delivery.shop),
-        });
-        if (!result.ok) throw new Error(`Uninstall billing reconciliation failed: ${result.code}: ${result.detail}`);
-      },
-      "app/scopes_update": async (delivery: ConsumerDelivery) => {
-        const current = await scopes.list(delivery.id, delivery.shop);
-        await scopes.applyScopes(delivery.id, delivery.shop, current, Date.now());
-        const found = await sessions.findSessionsByShop(delivery.shop);
-        await Promise.all(found.map(async (session) => { session.scope = current.join(","); await sessions.storeSession(session); }));
-      },
+  const scopes = webhookScopeObservations();
+  const handlers = {
+    "app/uninstalled": async (delivery: ConsumerDelivery) => {
+      await shops().recordUninstall(delivery.shop, Date.now());
+      const found = await sessions.findSessionsByShop(delivery.shop);
+      await sessions.deleteSessions(found.map(({ id }) => id));
+      const result = await reconcileAfterUninstall({
+        refreshSubscription: () => refreshShopSubscription(env, delivery.shop),
+        refreshHistory: () => refreshShopHistory(env, delivery.shop),
+      });
+      if (!result.ok) throw new Error(`Uninstall billing reconciliation failed: ${result.code}: ${result.detail}`);
     },
+    "app/scopes_update": async (delivery: ConsumerDelivery) => {
+      const current = await scopes.list(delivery.id, delivery.shop);
+      await scopes.applyScopes(delivery.id, delivery.shop, current, Date.now());
+      const found = await sessions.findSessionsByShop(delivery.shop);
+      await Promise.all(found.map(async (session) => { session.scope = current.join(","); await sessions.storeSession(session); }));
+    },
+  } satisfies WebhookHandlerRegistry;
+  return {
+    deliveries: webhookDeliveryRepository(),
+    now: Date.now,
+    isRedactedShop: async (shop: string) => (await shops().get(shop)) === undefined,
+    handlers,
   };
 }
 
 export function scheduledDependencies() {
   const env = getEnv();
+  const uploads = support();
   return {
     tokens: new PasswordResetTokenRepo(),
+    uploads: {
+      listExpiredUploads: (cutoff: number) => uploads.listExpiredUploads(cutoff),
+      deleteExpiredUploads: (ids: readonly string[], cutoff: number) => uploads.deleteExpiredUploads(ids, cutoff),
+      deleteUploadObjects: async (keys: readonly string[]) => {
+        await env.UPLOADS.delete([...keys]);
+      },
+    },
     history: {
       reconcile: (now: number) => reconcileHistory({
         partner: new ShopifyPartnerAdapter({
@@ -228,7 +297,7 @@ export function scheduledDependencies() {
           apiVersion: env.SHOPIFY_PARTNER_API_VERSION || "",
           fetch,
         }),
-        checkpoint: new ShopSyncCheckpointRepo(),
+        checkpoint: shopSyncCheckpoints(),
         ledger: historyLedger(),
         clock: { now: () => now },
         appId: env.SHOPIFY_PARTNER_APP_ID || null,

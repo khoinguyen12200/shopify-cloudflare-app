@@ -16,7 +16,7 @@ describe("worker webhook queue", () => {
     expect(actions).toEqual(["ack-invalid", "ack-missing"]);
   });
 
-  it("retries failed delivery and persists dead-letter state on final attempt", async () => {
+  it("acks unsupported delivery after persisting dead-letter state", async () => {
     await env.DB.prepare("INSERT INTO shops (shop, installed_at) VALUES (?, ?)").bind("worker.myshopify.com", 1).run();
     await env.DB.prepare("INSERT INTO webhook_deliveries (id, event_id, topic, api_version, shop, triggered_at, received_at, payload_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
       .bind("worker-delivery", "worker-event", "unsupported/topic", "2026-10", "worker.myshopify.com", 1, 1, "hash").run();
@@ -29,7 +29,7 @@ describe("worker webhook queue", () => {
 
     const row = await env.DB.prepare("SELECT status, attempts FROM webhook_deliveries WHERE id = ?")
       .bind("worker-delivery").first<{ status: string; attempts: number }>();
-    expect(actions).toEqual(["retry"]);
+    expect(actions).toEqual(["ack"]);
     expect(row).toEqual({ status: "dead_letter", attempts: 1 });
   });
 

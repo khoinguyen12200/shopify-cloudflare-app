@@ -21,6 +21,7 @@ function dependencies(): WebhookConsumerDependencies & { readonly handled: strin
     },
     handlers: {
       "app/uninstalled": async (delivery) => { handled.push(delivery.id); },
+      "app/scopes_update": async () => {},
     },
     now: () => 100,
     handled,
@@ -77,7 +78,7 @@ describe("consumeWebhook", () => {
         deadLetters.push(detail);
       },
     };
-    const failing = { ...deps, deliveries, handlers: { "app/uninstalled": async () => { throw new Error("broken"); } } };
+    const failing = { ...deps, deliveries, handlers: { ...deps.handlers, "app/uninstalled": async () => { throw new Error("broken"); } } };
 
     await expect(consumeWebhook(failing, { shop: "example.myshopify.com", id: "delivery-1", attempts: 9 }))
       .rejects.toThrow("broken");
@@ -91,10 +92,28 @@ describe("consumeWebhook", () => {
       ...deps.deliveries,
       async markDeadLetter(_shop: string, _id: string, _at: number, detail: string) { deadLetters.push(detail); },
     };
-    const failing = { ...deps, deliveries, handlers: { "app/uninstalled": async () => { throw new Error("broken"); } } };
+    const failing = { ...deps, deliveries, handlers: { ...deps.handlers, "app/uninstalled": async () => { throw new Error("broken"); } } };
 
     await expect(consumeWebhook(failing, { shop: "example.myshopify.com", id: "delivery-1", attempts: 8 }))
       .rejects.toThrow("broken");
     expect(deadLetters).toEqual([]);
+  });
+
+  it("dead-letters an unknown stored topic and returns unsupported on retries", async () => {
+    const deps = dependencies();
+    const states: string[] = [];
+    const deliveries = {
+      ...deps.deliveries,
+      async get() {
+        return { id: "delivery-1", shop: "example.myshopify.com", topic: "retired/topic", status: states.includes("dead_letter") ? "dead_letter" : "queued", failureCode: states.includes("dead_letter") ? "dead_letter" : null, processingStartedAt: null };
+      },
+      async markFailed() { states.push("failed"); },
+      async markDeadLetter() { states.push("dead_letter"); },
+    };
+    const first = await consumeWebhook({ ...deps, deliveries }, { shop: "example.myshopify.com", id: "delivery-1" });
+    const second = await consumeWebhook({ ...deps, deliveries }, { shop: "example.myshopify.com", id: "delivery-1" });
+    expect(first).toEqual({ outcome: "unsupported", topic: "retired/topic" });
+    expect(second).toEqual({ outcome: "unsupported", topic: "retired/topic" });
+    expect(states).toEqual(["failed", "dead_letter"]);
   });
 });

@@ -12,9 +12,35 @@ import { i18nOptions } from "~/i18n/options";
 import { fromMinorUnits, toCurrency } from "~/money";
 import { unwrap } from "~/lib/result";
 import type { BillingStatus } from "~/billing/subscription-status";
-import Billing, { shouldRefreshSubscription, shouldShowProcessing } from "./billing";
+import Billing, {
+  parseCurrentAppInstallationHandle,
+  shouldRefreshSubscription,
+  shouldShowProcessing,
+} from "./billing";
 
 describe("billing refresh trigger", () => {
+  it("turns a missing Shopify app handle into a controlled 502", () => {
+    expect(() => parseCurrentAppInstallationHandle({ data: {} })).toThrowError(
+      expect.objectContaining({ status: 502 }),
+    );
+  });
+
+  it("turns an empty Shopify app handle into a controlled 502", () => {
+    expect(() =>
+      parseCurrentAppInstallationHandle({
+        data: { currentAppInstallation: { app: { handle: "   " } } },
+      }),
+    ).toThrowError(expect.objectContaining({ status: 502 }));
+  });
+
+  it("rejects a padded Shopify app handle without coercing it", () => {
+    expect(() =>
+      parseCurrentAppInstallationHandle({
+        data: { currentAppInstallation: { app: { handle: " pro " } } },
+      }),
+    ).toThrowError(expect.objectContaining({ status: 502 }));
+  });
+
   it("does not call Shopify on ordinary billing navigation", () => {
     expect(shouldRefreshSubscription("https://example.test/app/billing?shop=one.myshopify.com")).toBe(false);
   });

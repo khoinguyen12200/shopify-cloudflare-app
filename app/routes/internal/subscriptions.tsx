@@ -1,3 +1,4 @@
+import { shopifyEvents } from "~/wiring.server";
 import { useLoaderData } from "react-router";
 import type { LoaderFunctionArgs } from "react-router";
 import {
@@ -16,7 +17,6 @@ import {
 import { Receipt } from "lucide-react";
 import { requireAdminUser } from "~/services/admin-auth.server";
 import { adminUsers } from "~/wiring.server";
-import { ShopifyEventRepo } from "~/models/shopify-events.server";
 import { planForShopifyHandle } from "~/billing/plans";
 import { formatDateTime } from "~/i18n/format";
 import type { Locale } from "~/i18n/config";
@@ -30,7 +30,7 @@ const RECENT_LIMIT = 200;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await requireAdminUser(request, { users: adminUsers() });
-  const events = await new ShopifyEventRepo().listRecentSubscriptionEvents(RECENT_LIMIT);
+  const events = await shopifyEvents().listRecentSubscriptionEvents(RECENT_LIMIT);
   return { events };
 };
 

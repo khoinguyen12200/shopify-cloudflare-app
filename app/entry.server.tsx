@@ -8,6 +8,8 @@ import { createShopify } from "~/shopify.server";
 import { getEnv } from "~/request-context.server";
 import { i18nServer, getLocale } from "~/i18n/i18n.server";
 import { i18nOptions } from "~/i18n/options";
+import { onPromiseSettled } from "~/lib/promise-settlement";
+import { applySecurityHeaders } from "~/security/response-headers";
 
 export const streamTimeout = 5000;
 
@@ -28,6 +30,7 @@ export default async function handleRequest(
 ) {
   // Sets the embedded-app CSP (frame-ancestors for the shop + Shopify admin).
   createShopify(getEnv()).addDocumentResponseHeaders(request, responseHeaders);
+  applySecurityHeaders(request, responseHeaders);
 
   const locale = await getLocale(request);
   const instance = createInstance();
@@ -63,7 +66,7 @@ export default async function handleRequest(
     await stream.allReady;
   }
 
-  stream.allReady.then(() => clearTimeout(timeout));
+  onPromiseSettled(stream.allReady, () => clearTimeout(timeout));
 
   responseHeaders.set("Content-Type", "text/html");
   return new Response(stream, {

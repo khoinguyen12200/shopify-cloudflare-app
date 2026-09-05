@@ -1,3 +1,4 @@
+import { support } from "~/wiring.server";
 import { data } from "react-router";
 import type { ActionFunctionArgs } from "react-router";
 import { createShopify } from "~/shopify.server";
@@ -5,7 +6,6 @@ import { getEnv } from "~/request-context.server";
 import { attachmentKey, safeFilename, validateUpload } from "~/support/attachment";
 import { getAdminUser } from "~/services/admin-auth.server";
 import { adminUsers } from "~/wiring.server";
-import { SupportRepo } from "~/models/support.server";
 
 /**
  * One file, streamed straight into R2.
@@ -19,7 +19,7 @@ import { SupportRepo } from "~/models/support.server";
  *
  * The object is written BEFORE any row exists, keyed by a fresh upload id. A
  * merchant who attaches a file and then abandons the form leaves an orphan
- * blob; the daily cron sweeps them (see workers/app.ts). That is the deliberate
+ * blob; the daily cron runs `runScheduledSweeps` to remove them. That is the deliberate
  * trade for never buffering.
  */
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -32,10 +32,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const ticketId = request.headers.get("X-Support-Ticket") ?? "new";
   const staff = await getAdminUser(request, { users: adminUsers() });
   const shop = staff
-    ? (await new SupportRepo().findForStaff(ticketId))?.ticket.shop
+    ? (await support().findForStaff(ticketId))?.ticket.shop
     : (await createShopify(env).authenticate.admin(request)).session.shop;
   if (!shop) return data({ error: "not_found" as const }, { status: 404 });
-  if (!staff && ticketId !== "new" && !(await new SupportRepo().find(shop, ticketId))) {
+  if (!staff && ticketId !== "new" && !(await support().find(shop, ticketId))) {
     return data({ error: "not_found" as const }, { status: 404 });
   }
 
@@ -50,6 +50,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   // is refused before a byte is stored. The real size is verified after the
   // write, from what R2 actually received.
   const declared = Number(request.headers.get("Content-Length") ?? "0");
+
+  if (!Number.isFinite(declared) || !Number.isInteger(declared) || declared <= 0) {
+    return data({ error: "empty" as const }, { status: 400 });
+  }
 
   const check = validateUpload({ contentType, sizeBytes: declared });
   if (!check.ok) {
@@ -74,15 +78,48 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   // Content-Length to get past the check above is caught here, and the object
   // is removed rather than left paid for.
   if (object.size > check.value.maxBytes) {
-    await env.UPLOADS.delete(key);
+    try {
+      await env.UPLOADS.delete(key);
+    } catch (cleanupError) {
+      console.error(JSON.stringify({
+        event: "support.upload_size_cleanup_failed",
+        error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+      }));
+      try {
+        await support().stageUpload({
+          id: uploadId, shop, ticketId: ticketId === "new" ? null : ticketId,
+          r2Key: key, filename, contentType, sizeBytes: object.size,
+          createdAt: Date.now(), expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+        });
+      } catch (stagingError) {
+        console.error(JSON.stringify({
+          event: "support.upload_size_staging_failed",
+          error: stagingError instanceof Error ? stagingError.message : String(stagingError),
+        }));
+      }
+    }
     return data({ error: "too_large" as const }, { status: 413 });
   }
 
-  await new SupportRepo().stageUpload({
-    id: uploadId, shop, ticketId: ticketId === "new" ? null : ticketId,
-    r2Key: key, filename, contentType, sizeBytes: object.size,
-    createdAt: Date.now(), expiresAt: Date.now() + 24 * 60 * 60 * 1000,
-  });
+  try {
+    await support().stageUpload({
+      id: uploadId, shop, ticketId: ticketId === "new" ? null : ticketId,
+      r2Key: key, filename, contentType, sizeBytes: object.size,
+      createdAt: Date.now(), expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+    });
+  } catch (stagingError) {
+    // Cron discovers abandoned objects through D1, so a failed insert must
+    // compensate immediately rather than leave an unreachable R2 object.
+    try {
+      await env.UPLOADS.delete(key);
+    } catch (cleanupError) {
+      console.error(JSON.stringify({
+        event: "support.upload_staging_cleanup_failed",
+        error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+      }));
+    }
+    throw stagingError;
+  }
 
   return data({
     uploadId,

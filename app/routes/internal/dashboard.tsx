@@ -1,3 +1,4 @@
+import { operationalHealth, shops, shopSubscriptions } from "~/wiring.server";
 import { Suspense, lazy, useSyncExternalStore } from "react";
 import { useLoaderData } from "react-router";
 import type { LoaderFunctionArgs } from "react-router";
@@ -5,10 +6,6 @@ import { BlockStack, Card, InlineStack, Page, StatCard } from "ngk-dashboard";
 import { CircleDollarSign, Crown, Store, Users } from "lucide-react";
 import { requireAdminUser } from "~/services/admin-auth.server";
 import { adminUsers } from "~/wiring.server";
-import { AdminUserRepo } from "~/models/admin-users.server";
-import { OperationalHealthRepo } from "~/models/operational-health.server";
-import { ShopRepo } from "~/models/shops.server";
-import { ShopSubscriptionRepo } from "~/models/shop-subscriptions.server";
 import { computeBillingStats } from "~/billing/dashboard-stats";
 import { merchantTrend } from "~/domain/merchant-trend";
 import { formatMoney, toCurrency, zero } from "~/money";
@@ -37,10 +34,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const user = await requireAdminUser(request, { users: adminUsers() });
 
   const [admins, allShops, currentSubscriptions, health] = await Promise.all([
-    new AdminUserRepo().countAll(),
-    new ShopRepo().listAll(),
-    new ShopSubscriptionRepo().listCurrent(),
-    new OperationalHealthRepo().read(),
+    adminUsers().countAll(),
+    shops().listAll(),
+    shopSubscriptions().listCurrent(),
+    operationalHealth().read(),
   ]);
 
   const activeShops = allShops.filter((shop) => shop.uninstalledAt === null);

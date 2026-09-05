@@ -1,3 +1,4 @@
+import { support, shopSubscriptions } from "~/wiring.server";
 import { Form, useActionData, useLoaderData, useNavigation } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { useState } from "react";
@@ -23,8 +24,6 @@ import {
 import { requireAdminUser } from "~/services/admin-auth.server";
 import { adminUsers } from "~/wiring.server";
 import { supportService } from "~/wiring.server";
-import { SupportRepo } from "~/models/support.server";
-import { ShopSubscriptionRepo } from "~/models/shop-subscriptions.server";
 import { planForShopifyHandle } from "~/billing/plans";
 import { statusOf, type SupportStatus } from "~/support/status";
 import { CATEGORY_LABEL_EN } from "~/support/categories";
@@ -34,7 +33,7 @@ import { formatDateTime, formatNumber } from "~/i18n/format";
 import type { Locale } from "~/i18n/config";
 import { Sparkles } from "lucide-react";
 import { useReplyDraft } from "~/internal/use-reply-draft";
-import { usePendingUploads } from "~/components/support/AttachmentPicker";
+import { usePendingUploads } from "~/routes/app/support/use-pending-uploads";
 import { InternalAttachmentPicker } from "~/components/support/InternalAttachmentPicker";
 import {
   DEFAULT_TONE,
@@ -58,7 +57,7 @@ export const loader = async ({ params, request }: LoaderFunctionArgs) => {
   // Opening it counts as reading it, so the queue's New badge clears by looking.
   await service.markStaffRead(ticketId);
 
-  const current = await new ShopSubscriptionRepo().currentForShop(thread.ticket.shop);
+  const current = await shopSubscriptions().currentForShop(thread.ticket.shop);
 
   const messages: ThreadMessage[] = thread.messages.map((message) => ({
     id: message.id,
@@ -127,7 +126,7 @@ export const action = async ({ params, request }: ActionFunctionArgs) => {
   });
   if (!replied.ok) return { error: "That ticket no longer exists." as const };
 
-  if (!(await new SupportRepo().adoptPendingUploads(replied.value.shop, replied.value.messageId, uploadIds, Date.now()))) {
+  if (!(await support().adoptPendingUploads(replied.value.shop, replied.value.messageId, uploadIds, Date.now()))) {
     return { error: "invalid_upload" as const };
   }
   return { success: "replied" as const };

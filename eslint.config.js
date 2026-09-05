@@ -33,8 +33,14 @@ export default tseslint.config(
     files: ["**/*.{ts,tsx}"],
     languageOptions: {
       globals: { ...globals.browser, ...globals.serviceworker },
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
     },
     rules: {
+      "@typescript-eslint/no-floating-promises": "error",
+      "@typescript-eslint/no-misused-promises": "error",
       // `const { passwordHash: _x, ...safe } = user` is how a field is
       // deliberately DISCARDED. Allow the underscore convention so stripping a
       // secret from an object does not need an eslint-disable.
@@ -69,9 +75,16 @@ export default tseslint.config(
       "react-router.config.ts",
       "scripts/**/*.mjs",
     ],
-    languageOptions: { globals: { ...globals.node } },
+    languageOptions: {
+      globals: { ...globals.node },
+      parserOptions: {
+        projectService: false,
+      },
+    },
     rules: {
       "no-restricted-globals": "off",
+      "@typescript-eslint/no-floating-promises": "off",
+      "@typescript-eslint/no-misused-promises": "off",
       // Same underscore convention as the app code: `const { env: _env, ...rest }`
       // is how a key is deliberately discarded. Repeated here because the .ts
       // block above does not match .mjs scripts — and it must be the
@@ -84,6 +97,34 @@ export default tseslint.config(
           varsIgnorePattern: "^_",
           caughtErrorsIgnorePattern: "^_",
           ignoreRestSiblings: true,
+        },
+      ],
+    },
+  },
+  {
+    files: ["app/**/*.{ts,tsx}"],
+    ignores: ["app/models/**", "app/wiring.server.ts", "app/wiring/**", "app/**/*.test.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "~/models/*",
+                "~/models/**",
+                "../models/*",
+                "../models/**",
+                "../../models/*",
+                "../../models/**",
+                "../../../models/*",
+                "../../../models/**",
+                "../../../../models/*",
+                "../../../../models/**",
+              ],
+              message: "Repository adapters are constructed only in the composition root (~/wiring.server).",
+            },
+          ],
         },
       ],
     },

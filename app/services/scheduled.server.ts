@@ -16,6 +16,16 @@ export async function runScheduledSweeps(now: number, dependencies: ScheduledDep
     );
     return { deleted };
   });
+  await sweep("pending_uploads", async () => {
+    const uploads = await dependencies.uploads.listExpiredUploads(now);
+    if (uploads.length === 0) return { deleted: 0 };
+    await dependencies.uploads.deleteUploadObjects(uploads.map((upload) => upload.r2Key));
+    const deleted = await dependencies.uploads.deleteExpiredUploads(
+      uploads.map((upload) => upload.id),
+      now,
+    );
+    return { deleted };
+  });
   await sweep("partner_history", async () => {
     const result = await dependencies.history.reconcile(now);
     if (result.status === "failed") throw new Error(`${result.code}: ${result.detail}`);

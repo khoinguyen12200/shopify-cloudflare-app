@@ -54,7 +54,7 @@ describe("handleWebhookQueueBatch", () => {
       }] }, {
         consume: (work) => consumeWebhook({
           deliveries: new WebhookDeliveryRepo(), now: () => 100,
-          handlers: { "app/uninstalled": async () => { handlerWrites += 1; } },
+          handlers: { "app/uninstalled": async () => { handlerWrites += 1; }, "app/scopes_update": async () => {} },
         }, work),
         log: () => {},
       });
@@ -76,7 +76,7 @@ describe("handleWebhookQueueBatch", () => {
       }] }, {
         consume: (work) => consumeWebhook({
           deliveries: new WebhookDeliveryRepo(), now: () => 100,
-          handlers: { "app/uninstalled": async () => { throw new Error("broken"); } },
+          handlers: { "app/uninstalled": async () => { throw new Error("broken"); }, "app/scopes_update": async () => {} },
         }, work),
         log: () => {},
       });
@@ -99,13 +99,13 @@ describe("handleWebhookQueueBatch", () => {
       }] }, {
         consume: (work) => consumeWebhook({
           deliveries: new WebhookDeliveryRepo(), now: () => 100,
-          handlers: { "app/uninstalled": async () => {} },
+          handlers: { "app/uninstalled": async () => {}, "app/scopes_update": async () => {} },
         }, work),
         log: () => {},
       });
       const row = await env.DB.prepare("SELECT status, failure_code FROM webhook_deliveries WHERE id = ?").bind(id).first<{ status: string; failure_code: string }>();
       expect(row).toEqual({ status: "dead_letter", failure_code: "dead_letter" });
-      expect(events).toEqual(["retry"]);
+      expect(events).toEqual(["ack"]);
     });
   });
 });

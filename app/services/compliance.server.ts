@@ -1,4 +1,5 @@
 import { purgeTenant, type TenantPurgeD1Port, type TenantPurgeKvPort, type TenantPurgeR2Port } from "~/services/tenant-purge.server";
+import { shopLog } from "~/observability/shop-log";
 
 /**
  * The three mandatory compliance webhook topics. Every app distributed through
@@ -82,16 +83,12 @@ function orderCount(payload: Record<string, unknown>, key: "orders_requested" | 
  * the STORE OWNER directly — the webhook response carries no data.
  */
 const customersDataRequest: ComplianceHandler = async ({ shop, payload }) => {
-  console.log(
-    JSON.stringify({
-      event: "compliance.customers_data_request.no_customer_data",
-      shop,
+  await shopLog("compliance.customers_data_request.no_customer_data", shop, {
       customerId: customerId(payload),
       ordersRequested: orderCount(payload, "orders_requested"),
       collected: 0,
       note: "placeholder: this app declares it stores no customer data",
-    }),
-  );
+    });
 
   return {
     topic: "CUSTOMERS_DATA_REQUEST",
@@ -104,16 +101,12 @@ const customersDataRequest: ComplianceHandler = async ({ shop, payload }) => {
 
 /** The merchant asked, on a customer's behalf, that their data be deleted. */
 const customersRedact: ComplianceHandler = async ({ shop, payload }) => {
-  console.log(
-    JSON.stringify({
-      event: "compliance.customers_redact.no_customer_data",
-      shop,
+  await shopLog("compliance.customers_redact.no_customer_data", shop, {
       customerId: customerId(payload),
       ordersToRedact: orderCount(payload, "orders_to_redact"),
       erased: 0,
       note: "placeholder: this app declares it stores no customer data",
-    }),
-  );
+    });
 
   return {
     topic: "CUSTOMERS_REDACT",
@@ -132,16 +125,12 @@ const customersRedact: ComplianceHandler = async ({ shop, payload }) => {
 const shopRedact: ComplianceHandler = async ({ shop }, deps) => {
   const erased = await purgeTenant(deps.tenantPurge, shop);
 
-  console.log(
-    JSON.stringify({
-      event: "compliance.shop_redact",
-      shop,
+  await shopLog("compliance.shop_redact", shop, {
       erased: erased.rows,
       // Called out separately: "did the screenshots go too?" is the question
       // a data-deletion request actually has to answer.
       attachmentsDeleted: erased.attachments,
-    }),
-  );
+    });
 
   return {
     topic: "SHOP_REDACT",
@@ -175,13 +164,7 @@ export async function handleCompliance(
   if (!isComplianceTopic(topic)) {
     // Stored data outlives code, and Shopify can add topics. Degrade
     // predictably instead of crashing the endpoint.
-    console.log(
-      JSON.stringify({
-        event: "compliance.unknown_topic",
-        shop: ctx.shop,
-        topic,
-      }),
-    );
+    await shopLog("compliance.unknown_topic", ctx.shop, { topic });
     return null;
   }
   return complianceHandlers[topic](ctx, deps);

@@ -1,3 +1,4 @@
+import { shops, shopSubscriptions } from "~/wiring.server";
 import { Link, useLoaderData } from "react-router";
 import type { LoaderFunctionArgs } from "react-router";
 import {
@@ -16,8 +17,6 @@ import {
 import { Store } from "lucide-react";
 import { requireAdminUser } from "~/services/admin-auth.server";
 import { adminUsers } from "~/wiring.server";
-import { ShopRepo } from "~/models/shops.server";
-import { ShopSubscriptionRepo } from "~/models/shop-subscriptions.server";
 import { planForShopifyHandle } from "~/billing/plans";
 import { formatDate } from "~/i18n/format";
 import type { Locale } from "~/i18n/config";
@@ -29,14 +28,14 @@ const PAID_STATUSES = new Set(["ACTIVE", "ACCEPTED"]);
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await requireAdminUser(request, { users: adminUsers() });
-  const [shops, currentSubscriptions] = await Promise.all([
-    new ShopRepo().listAll(),
-    new ShopSubscriptionRepo().listCurrent(),
+  const [shopRows, currentSubscriptions] = await Promise.all([
+    shops().listAll(),
+    shopSubscriptions().listCurrent(),
   ]);
   const currentByShop = new Map(currentSubscriptions.map((subscription) => [subscription.shop, subscription]));
 
   return {
-    shops: shops.map((shop) => {
+    shops: shopRows.map((shop) => {
       const current = currentByShop.get(shop.shop);
       const paid = current && PAID_STATUSES.has(current.status) ? current : undefined;
       return {

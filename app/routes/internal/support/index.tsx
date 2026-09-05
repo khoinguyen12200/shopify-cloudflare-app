@@ -1,3 +1,4 @@
+import { shopSubscriptions } from "~/wiring.server";
 import { Link, useLoaderData, useNavigation, useSubmit } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import {
@@ -20,9 +21,7 @@ import {
 import { LifeBuoy } from "lucide-react";
 import { requireAdminUser } from "~/services/admin-auth.server";
 import { adminUsers } from "~/wiring.server";
-import { AdminUserRepo } from "~/models/admin-users.server";
 import { supportService } from "~/wiring.server";
-import { ShopSubscriptionRepo } from "~/models/shop-subscriptions.server";
 import { planForShopifyHandle } from "~/billing/plans";
 import { isUnreadFor, statusOf, type SupportStatus } from "~/support/status";
 import { CATEGORY_LABEL_EN } from "~/support/categories";
@@ -39,7 +38,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const [tickets, currentSubscriptions] = await Promise.all([
     supportService().listOpenForStaff(),
-    new ShopSubscriptionRepo().listCurrent(),
+    shopSubscriptions().listCurrent(),
   ]);
   const currentByShop = new Map(currentSubscriptions.map((subscription) => [subscription.shop, subscription]));
 
@@ -72,7 +71,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   // The only action here is the signed-in person's own preference, so there is
   // no id to trust from the form — it is always the actor's own row.
-  await new AdminUserRepo().setNotifySupport(
+  await adminUsers().setNotifySupport(
     actor.id,
     form.get("notifySupport") === "on",
     Date.now(),
@@ -119,12 +118,12 @@ export default function InternalSupport() {
               <Switch
                 defaultChecked={notifySupport}
                 disabled={busy}
-                onCheckedChange={(checked) =>
-                  submit(
+                onCheckedChange={(checked) => {
+                  void submit(
                     { notifySupport: checked ? "on" : "off" },
                     { method: "post" },
-                  )
-                }
+                  );
+                }}
               />
               <Text as="p" className="text-sm text-muted-foreground">
                 Send me an email when a merchant opens or replies to a ticket.

@@ -62,8 +62,9 @@ simulates each binding by name and ignores the placeholder ids in the top-level
 `wrangler.jsonc`.
 
 When you are ready to deploy, set the production `client_id` into `wrangler.jsonc`
-(`env.production.vars.SHOPIFY_API_KEY`) and `SHOPIFY_APP_URL`, and
-`npx wrangler secret put SHOPIFY_API_SECRET --env production`.
+(`env.production.vars.SHOPIFY_API_KEY`) and `SHOPIFY_APP_URL`, and set
+`SHOPIFY_API_SECRET` with `npx wrangler secret put SHOPIFY_API_SECRET --env production`.
+The client ID is public configuration; the API secret is not.
 
 Secret **names** are declared in `wrangler.jsonc` under `secrets.required`, so
 `npm run cf-typegen` types `Env` correctly with no `.dev.vars` present — a fresh
@@ -184,8 +185,10 @@ The same guard checks production `client_id`, app URL and callback drift against
 `shopify.app.toml`, matching dev/production scopes, Managed Pricing handles,
 legal identity/contact/effective date, and public privacy/support/pricing copy.
 Template TODOs are intentional: replace them before launch. Required secrets are
-`SHOPIFY_API_SECRET`, `SHOPIFY_CUSTOM_DOMAIN`, `INTERNAL_SESSION_SECRET`, and
-`SHOPIFY_PARTNER_API_TOKEN`; set them with `wrangler secret put` in production.
+`SHOPIFY_API_SECRET`, `SHOP_CUSTOM_DOMAIN`, `INTERNAL_SESSION_SECRET`,
+`SHOPIFY_PARTNER_API_TOKEN`, and `ATTACHMENT_TOKEN_SECRET`; set them with
+`wrangler secret put` in production. `SHOPIFY_API_KEY` is a public client ID,
+not a secret.
 Create D1/KV/R2 resources first, copy IDs into `wrangler.jsonc`, then run
 migrations before deploy. Keep Shopify Partner app ID and plan handles aligned
 with TOML and billing plan registry. Set `SHOPIFY_PARTNER_ORGANIZATION_ID` to
@@ -660,6 +663,16 @@ is reused across shops and module state would leak between tenants.
 | `npm run cf:deploy`      | Verify, production build, migrate, deploy          |
 | `npm run install:skill`  | Install every AI-agent skill, for every agent host |
 | `npm run check:placeholders` | Fail if production bindings still hold `REPLACE_ME` ids |
+
+## Operating and adopting a derived app
+
+The template separates reusable implementation from decisions that belong to
+the app owner. Before a launch, complete the
+[adoption checklist](docs/ADOPTING_THE_TEMPLATE.md), including legal copy,
+Shopify configuration, billing, AI policy, customer-data handling, resources,
+alerts, and App Store self-review. For production deployment, rollback, D1
+recovery, scheduled cleanup, secret rotation, and webhook DLQ procedures, use
+the [operations runbook](docs/OPERATIONS.md).
 
 Two generated files are committed on purpose:
 

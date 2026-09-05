@@ -1,3 +1,4 @@
+import { shopSubscriptions } from "~/wiring.server";
 import { useEffect } from "react";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { data, useFetcher, useLoaderData, useNavigate } from "react-router";
@@ -6,6 +7,7 @@ import { useTranslation } from "react-i18next";
 
 import { createShopify } from "~/shopify.server";
 import { getEnv } from "~/request-context.server";
+import { currentAppInstallationSchema } from "~/schemas/current-app-installation";
 import { useLocale } from "~/i18n/useLocale";
 import { formatDateTime } from "~/i18n/format";
 import { formatMoney } from "~/money";
@@ -15,7 +17,6 @@ import { planPriceLine, type PriceCadence } from "~/billing/plan-price-line";
 import { pricingPlansUrl } from "~/billing/pricing-plans-url";
 import { FEATURED_PLAN_HANDLE, PLANS, PLAN_LIST, planForShopifyHandle } from "~/billing/plans";
 import { persistShopIdentity, refreshShopHistory, refreshShopSubscription } from "~/wiring.server";
-import { ShopSubscriptionRepo } from "~/models/shop-subscriptions.server";
 import { PlanCard, PLAN_CARD_CSS } from "~/components/billing/PlanCard";
 import type { SubscriptionStatus } from "~/billing/subscription-status";
 import { isPricingReturn } from "~/billing/pricing-return";
@@ -64,6 +65,15 @@ const APP_HANDLE_QUERY = `#graphql
 
 type BillingReconciliationResponse = { readonly ok: true } | { readonly ok: false };
 
+export function parseCurrentAppInstallationHandle(payload: unknown): string {
+  const parsed = currentAppInstallationSchema.safeParse(payload);
+  if (!parsed.success) {
+    console.error(JSON.stringify({ event: "billing.current_app_installation.invalid_payload" }));
+    throw new Response("Invalid current app installation response", { status: 502 });
+  }
+  return parsed.data.data.currentAppInstallation.app.handle;
+}
+
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin, session } = await createShopify(getEnv()).authenticate.admin(request);
   await persistShopIdentity(admin, session.shop);
@@ -85,13 +95,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Shopify owns the actual subscribe/upgrade/cancel flow (Managed Pricing);
   // this page only ever reads status. There's no in-app request()/cancel() —
   // Partner history projects entitlement changes, and D1 serves normal visits.
-  const projection = await new ShopSubscriptionRepo().currentForShop(session.shop);
+  const projection = await shopSubscriptions().currentForShop(session.shop);
   const planName = planForShopifyHandle(projection?.planHandle)?.name ?? PLANS.free.name;
   const status = resolveProjectionBillingStatus(projection, planName, Date.now());
 
   const response = await admin.graphql(APP_HANDLE_QUERY);
-  const body = await response.json();
-  const appHandle: string = body.data?.currentAppInstallation?.app?.handle ?? "";
+  const appHandle = parseCurrentAppInstallationHandle(await response.json());
 
   return {
     status,
@@ -204,12 +213,12 @@ function BillingProcessing() {
 
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data === undefined) {
-      fetcher.submit(null, { method: "post" });
+      void fetcher.submit(null, { method: "post" });
     }
   }, [fetcher]);
 
   useEffect(() => {
-    if (fetcher.data?.ok) navigate("/app/billing", { replace: true });
+    if (fetcher.data?.ok) void navigate("/app/billing", { replace: true });
   }, [fetcher.data, navigate]);
 
   const failed = fetcher.data?.ok === false;

@@ -1,4 +1,4 @@
-import { data, Form, Link, useActionData, useNavigation } from "react-router";
+import { Form, Link, useActionData, useNavigation } from "react-router";
 import type {
   ActionFunctionArgs,
   LinksFunction,
@@ -16,12 +16,15 @@ import { requestPasswordReset } from "~/services/password-reset.server";
 import { isProductionLike } from "~/lib/deployment";
 import { getEnv } from "~/request-context.server";
 import { adminUsers, passwordResetNotifier, passwordResetTokens } from "~/wiring.server";
+import { authLimiters } from "~/wiring.server";
+import { handleForgotPasswordAction } from "./forgot-password.server";
 import { paths } from "~/urls";
 import { INTERNAL_FONT_LINKS, THEME_INIT_SCRIPT } from "~/internal/components";
 import internalStyles from "~/styles/internal/internal.tailwind.css?url";
 
 const FORGOT_PASSWORD_ERRORS = {
   emailRequired: "Enter your email address.",
+  rateLimited: "Too many reset attempts. Try again later.",
 } as const;
 
 export const links: LinksFunction = () => [
@@ -34,35 +37,15 @@ export const meta: MetaFunction = () => [
   { name: "robots", content: "noindex, nofollow" },
 ];
 
-export const action = async ({ request }: ActionFunctionArgs) => {
-  const form = await request.formData();
-  const email = String(form.get("email") ?? "").trim();
-
-  if (!email) {
-    return data({ error: "emailRequired" as const }, { status: 400 });
-  }
-
-  const result = await requestPasswordReset({
-    email,
-    // Derived from the request, so the link always points back at whichever
-    // deployment (or tunnel) the person is actually using.
-    origin: new URL(request.url).origin,
-  }, { users: adminUsers(), tokens: passwordResetTokens(), notifier: passwordResetNotifier() });
-
-  // ALWAYS the same shape, whatever happened — see requestPasswordReset. Never
-  // branch the response on whether the account exists.
-  //
-  // The one exception is a LOCAL development convenience: when email is not
-  // configured and this is not a real deployment, show the link so the flow can
-  // be walked through without a mail server. Both conditions are required —
-  // surfacing it on a real deployment would let anyone who can POST this form
-  // obtain a reset link for any account.
-  const showLink = !result.emailSent && !isProductionLike(getEnv().SHOPIFY_APP_URL ?? "");
-  return data({
-    sent: true as const,
-    devToken: showLink ? result.token : undefined,
-  });
-};
+export const action = async ({ request }: ActionFunctionArgs) => handleForgotPasswordAction(request, {
+  limiter: authLimiters().passwordReset,
+  productionLike: isProductionLike(getEnv().SHOPIFY_APP_URL ?? ""),
+  requestReset: (email, origin) => requestPasswordReset({ email, origin }, {
+    users: adminUsers(),
+    tokens: passwordResetTokens(),
+    notifier: passwordResetNotifier(),
+  }),
+});
 
 export default function ForgotPassword() {
   const actionData = useActionData<typeof action>();

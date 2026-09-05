@@ -33,6 +33,65 @@ function open(
 }
 
 describe("SupportRepo", () => {
+  it("lists and deletes only expired pending uploads across shops", async () => {
+    await run(async () => {
+      const repo = new SupportRepo();
+      await Promise.all([
+        repo.stageUpload({
+          id: "expired-alpha", shop: SHOP, ticketId: null,
+          r2Key: "support/alpha/expired", filename: "old-a.txt",
+          contentType: "text/plain", sizeBytes: 1, createdAt: 1, expiresAt: 100,
+        }),
+        repo.stageUpload({
+          id: "active-alpha", shop: SHOP, ticketId: null,
+          r2Key: "support/alpha/active", filename: "new-a.txt",
+          contentType: "text/plain", sizeBytes: 1, createdAt: 2, expiresAt: 300,
+        }),
+        repo.stageUpload({
+          id: "expired-beta", shop: OTHER, ticketId: null,
+          r2Key: "support/beta/expired", filename: "old-b.txt",
+          contentType: "text/plain", sizeBytes: 1, createdAt: 3, expiresAt: 100,
+        }),
+        repo.stageUpload({
+          id: "boundary-alpha", shop: SHOP, ticketId: null,
+          r2Key: "support/alpha/boundary", filename: "boundary.txt",
+          contentType: "text/plain", sizeBytes: 1, createdAt: 4, expiresAt: 200,
+        }),
+      ]);
+
+      const expired = await repo.listExpiredUploads(200);
+      expect(expired).toEqual([
+        { id: "expired-alpha", r2Key: "support/alpha/expired" },
+        { id: "expired-beta", r2Key: "support/beta/expired" },
+        { id: "boundary-alpha", r2Key: "support/alpha/boundary" },
+      ]);
+
+      expect(await repo.deleteExpiredUploads(["expired-alpha", "active-alpha", "boundary-alpha", "missing"], 200)).toBe(2);
+      expect(await repo.listExpiredUploads(200)).toEqual([
+        { id: "expired-beta", r2Key: "support/beta/expired" },
+      ]);
+    });
+  });
+
+  it("limits an expired-upload sweep to one R2 deletion batch", async () => {
+    await run(async () => {
+      const repo = new SupportRepo();
+      await Promise.all(Array.from({ length: 1_001 }, (_, index) => repo.stageUpload({
+        id: `expired-${index}`,
+        shop: SHOP,
+        ticketId: null,
+        r2Key: `support/alpha/expired-${index}`,
+        filename: "old.txt",
+        contentType: "text/plain",
+        sizeBytes: 1,
+        createdAt: index,
+        expiresAt: 100,
+      })));
+
+      expect(await repo.listExpiredUploads(200)).toHaveLength(1_000);
+    });
+  });
+
   it("stages upload metadata under its owning shop", async () => {
     await run(async () => {
       const repo = new SupportRepo();

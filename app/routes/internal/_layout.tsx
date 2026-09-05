@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import {
+  Form,
   Link,
   Outlet,
   isRouteErrorResponse,
@@ -113,7 +114,7 @@ function NavProgress() {
   );
 }
 
-function UserMenu({ user }: { user: { name: string; email: string } }) {
+export function UserMenu({ user }: { user: { name: string; email: string } }) {
   const initial = (user.name || "?").charAt(0).toUpperCase();
 
   return (
@@ -140,13 +141,21 @@ function UserMenu({ user }: { user: { name: string; email: string } }) {
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild variant="destructive">
-          <Link to="/internal/logout">
-            <LogOut />
-            Sign out
-          </Link>
+          <SignOutControl />
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+export function SignOutControl() {
+  return (
+    <Form method="post" action="/internal/logout">
+      <button type="submit">
+        <LogOut />
+        Sign out
+      </button>
+    </Form>
   );
 }
 

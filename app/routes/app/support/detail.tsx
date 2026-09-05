@@ -1,3 +1,4 @@
+import { support } from "~/wiring.server";
 import { useEffect, useRef, useState } from "react";
 import type {
   ActionFunctionArgs,
@@ -22,7 +23,6 @@ import { getEnv } from "~/request-context.server";
 import { useLocale } from "~/i18n/useLocale";
 import { formatDate, formatDateTime, formatNumber } from "~/i18n/format";
 import { supportService } from "~/wiring.server";
-import { SupportRepo } from "~/models/support.server";
 import { statusOf, type SupportStatus } from "~/support/status";
 import { CATEGORY_LABEL_KEY } from "~/support/categories";
 import { replySchema, updateCcSchema, BODY_MAX } from "~/schemas/support";
@@ -31,7 +31,8 @@ import { supportErrorKey } from "~/support/error-keys";
 import { useActionToast } from "~/admin/use-action-toast";
 import { Thread, THREAD_CSS, type ThreadMessage } from "~/components/support/Thread";
 import { CcEmails, ccLabels } from "~/components/support/CcEmails";
-import { AttachmentPicker, usePendingUploads } from "~/components/support/AttachmentPicker";
+import { AttachmentPicker } from "~/components/support/AttachmentPicker";
+import { usePendingUploads } from "./use-pending-uploads";
 
 export const handle = { i18n: ["common", "admin"] };
 
@@ -132,7 +133,7 @@ export const action = async ({ params, request }: ActionFunctionArgs) => {
 
   const thread = await service.find(session.shop, ticketId);
   const newest = thread?.messages.at(-1);
-  if (!newest || !(await new SupportRepo().adoptPendingUploads(session.shop, newest.id, parsed.data.uploadIds, Date.now()))) {
+  if (!newest || !(await support().adoptPendingUploads(session.shop, newest.id, parsed.data.uploadIds, Date.now()))) {
     return data({ error: "invalid_upload" as const }, { status: 400 });
   }
 

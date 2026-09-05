@@ -91,6 +91,16 @@
       "namespace_id": "1001",
       // 10 writes per minute per shop: far above real use, far below a flood.
       "simple": { "limit": 10, "period": 60 }
+    },
+    {
+      "name": "LOGIN_LIMITER",
+      "namespace_id": "1002",
+      "simple": { "limit": 5, "period": 60 }
+    },
+    {
+      "name": "RESET_LIMITER",
+      "namespace_id": "1003",
+      "simple": { "limit": 3, "period": 60 }
     }
   ],
 
@@ -112,7 +122,8 @@
       "SHOPIFY_API_SECRET",
       "SHOP_CUSTOM_DOMAIN",
       "INTERNAL_SESSION_SECRET",
-      "SHOPIFY_PARTNER_API_TOKEN"
+      "SHOPIFY_PARTNER_API_TOKEN",
+      "ATTACHMENT_TOKEN_SECRET"
     ]
   },
 
@@ -170,6 +181,16 @@
           "name": "SUPPORT_LIMITER",
           "namespace_id": "1001",
           "simple": { "limit": 10, "period": 60 }
+        },
+        {
+          "name": "LOGIN_LIMITER",
+          "namespace_id": "1002",
+          "simple": { "limit": 5, "period": 60 }
+        },
+        {
+          "name": "RESET_LIMITER",
+          "namespace_id": "1003",
+          "simple": { "limit": 3, "period": 60 }
         }
       ],
       "triggers": { "crons": ["30 3 * * *"] },
@@ -190,7 +211,8 @@
           "SHOPIFY_API_SECRET",
           "SHOP_CUSTOM_DOMAIN",
           "INTERNAL_SESSION_SECRET",
-          "SHOPIFY_PARTNER_API_TOKEN"
+          "SHOPIFY_PARTNER_API_TOKEN",
+          "ATTACHMENT_TOKEN_SECRET"
         ]
       },
       "vars": {
@@ -203,7 +225,8 @@
         "EMAIL_FROM_NAME": "",
         "SHOPIFY_PARTNER_APP_ID": "",
         "SHOPIFY_PARTNER_ORGANIZATION_ID": "",
-        "SHOPIFY_PARTNER_API_VERSION": "2026-07"
+        "SHOPIFY_PARTNER_API_VERSION": "2026-07",
+        "AI_GATEWAY_ID": ""
       }
     }
   }

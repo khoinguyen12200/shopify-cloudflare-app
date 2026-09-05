@@ -13,9 +13,7 @@ export function writeWebhookLog(log: Record<string, string | number>): void {
 }
 
 export async function formatWebhookLog(input: WebhookLogInput): Promise<Record<string, string | number>> {
-  const bytes = new TextEncoder().encode(input.shop);
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  const shopHash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  const shopHash = await hashShop(input.shop);
   return {
     event: "webhook.process",
     deliveryId: input.deliveryId,
@@ -27,3 +25,4 @@ export async function formatWebhookLog(input: WebhookLogInput): Promise<Record<s
     latencyMs: input.latencyMs,
   };
 }
+import { hashShop } from "~/observability/shop-log";

@@ -1,10 +1,9 @@
-import {
-  GLOBAL_SCOPE,
-  NotificationSettingsRepo,
-} from "~/models/notification-settings.server";
 import { getEnv } from "~/request-context.server";
 import type { ChannelKey, NotificationEvent } from "../types";
 import type { EligibilityContext } from "./types";
+import type { NotificationSettingsPort } from "~/ports/notification-settings";
+
+const GLOBAL_SCOPE = "global";
 
 /**
  * PATTERN: Imperative Shell around a Functional Core.
@@ -27,8 +26,7 @@ import type { EligibilityContext } from "./types";
  * Extend this as channels arrive — an SMS entry would check for the provider
  * credentials the same way.
  */
-export function availableChannels(): ChannelKey[] {
-  const env = getEnv();
+export function availableChannels(env: Pick<Env, "EMAIL" | "EMAIL_FROM"> = getEnv()): ChannelKey[] {
   const channels: ChannelKey[] = [];
   if (env.EMAIL && env.EMAIL_FROM) channels.push("email");
   return channels;
@@ -41,9 +39,8 @@ export async function loadEligibilityContext(input: {
   addresses: Partial<Record<ChannelKey, string>>;
   /** Tenant scope. Defaults to the app-wide scope. */
   scope?: string;
-}): Promise<EligibilityContext> {
+}, settings: NotificationSettingsPort): Promise<EligibilityContext> {
   const scope = input.scope ?? GLOBAL_SCOPE;
-  const settings = new NotificationSettingsRepo();
 
   const [selection, optedOut] = await Promise.all([
     settings.selection(scope),

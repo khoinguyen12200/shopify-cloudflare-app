@@ -1,5 +1,4 @@
 import {
-  data,
   redirect,
   Form,
   Link,
@@ -14,15 +13,11 @@ import type {
   MetaFunction,
 } from "react-router";
 import { Alert, AlertDescription, Button, Input, Label } from "ngk-dashboard";
-import {
-  createAdminSession,
-  getAdminUser,
-  safeRedirectPath,
-  verifyAdminCredentials,
-  HOME_PATH,
-} from "~/services/admin-auth.server";
+import { createAdminSession, getAdminUser, safeRedirectPath, verifyAdminCredentials, HOME_PATH } from "~/services/admin-auth.server";
 import { getEnv } from "~/request-context.server";
-import { adminUsers } from "~/wiring.server";
+import { adminUsers, authLimiters } from "~/wiring.server";
+import { isProductionLike } from "~/lib/deployment";
+import { handleLoginAction } from "./login.server";
 import { INTERNAL_FONT_LINKS, THEME_INIT_SCRIPT } from "~/internal/components";
 // Login sits OUTSIDE the /internal layout (see app/routes.ts), so it does not
 // inherit that layout's links() and must load the console stylesheet itself —
@@ -33,6 +28,7 @@ const LOGIN_ERRORS = {
   invalidCredentials: "That email and password do not match an account.",
   disabled: "This account has been disabled.",
   missingFields: "Email and password are both required.",
+  rateLimited: "Too many sign-in attempts. Try again later.",
 } as const;
 
 export const links: LinksFunction = () => [
@@ -59,23 +55,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const form = await request.formData();
-  const email = String(form.get("email") ?? "");
-  const password = String(form.get("password") ?? "");
-  const next = safeRedirectPath(form.get("next"));
-
-  if (!email || !password) {
-    return data({ error: "missingFields" as const }, { status: 400 });
-  }
-
-  const result = await verifyAdminCredentials(email, password, { users: adminUsers() });
-  if (!result.ok) {
-    // 401, and the same generic message for a wrong password as for an unknown
-    // email — anything else tells an attacker which emails exist.
-    return data({ error: result.reason }, { status: 401 });
-  }
-
-  return createAdminSession(result.user.id, next);
+  const users = adminUsers();
+  return handleLoginAction(request, {
+    limiter: authLimiters().login,
+    verifyCredentials: (email, password) => verifyAdminCredentials(email, password, { users }),
+    createSession: createAdminSession,
+    productionLike: isProductionLike(getEnv().SHOPIFY_APP_URL ?? ""),
+  });
 };
 
 export default function InternalLogin() {

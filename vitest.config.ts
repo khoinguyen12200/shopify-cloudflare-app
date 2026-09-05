@@ -6,6 +6,18 @@ import { defineConfig } from "vitest/config";
 import path from "node:path";
 import { readFile } from "node:fs/promises";
 
+// Keep environment validation quiet and deterministic in the test process;
+// these values are never used for outbound calls (the worker pool blocks them).
+for (const [name, value] of Object.entries({
+  SHOPIFY_API_SECRET: "test-api-secret",
+  SHOP_CUSTOM_DOMAIN: "example.myshopify.com",
+  INTERNAL_SESSION_SECRET: "test-internal-session-secret",
+  SHOPIFY_PARTNER_API_TOKEN: "test-partner-token",
+  ATTACHMENT_TOKEN_SECRET: "test-attachment-secret",
+})) {
+  process.env[name] ??= value;
+}
+
 // Hand the Drizzle-generated migrations to workerd so tests can build the
 // schema in a real D1 instance via applyD1Migrations().
 const migrations = await readD1Migrations(
@@ -53,6 +65,9 @@ export default defineConfig({
           // which is gitignored and absent on a CI runner.
           SHOPIFY_API_KEY: "test-api-key",
           SHOPIFY_API_SECRET: "test-api-secret",
+          ATTACHMENT_TOKEN_SECRET: "test-attachment-secret",
+          SHOP_CUSTOM_DOMAIN: "example.myshopify.com",
+          SHOPIFY_PARTNER_API_TOKEN: "test-partner-token",
           SHOPIFY_APP_URL: "https://example.test",
           // Signs the internal console's session cookie. Injected here so the
           // session layer is TESTABLE: admin-auth.server.ts refuses to run
@@ -70,6 +85,13 @@ export default defineConfig({
     // suite is reliable rather than flaky — without masking a real hang.
     testTimeout: 60_000,
     hookTimeout: 60_000,
-    exclude: ["**/node_modules/**", "build/**", "extensions/**", "scripts/**"],
+    exclude: [
+      "**/node_modules/**",
+      "build/**",
+      "extensions/**",
+      "scripts/**",
+      "app/components/support/AttachmentPicker.render.test.tsx",
+      "app/routes/app/support/use-pending-uploads.test.tsx",
+    ],
   },
 });

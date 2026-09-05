@@ -8,7 +8,7 @@ import { signAttachmentToken } from "~/support/file-token";
 import { loader } from "./support-file";
 
 const SHOP = "alpha.myshopify.com";
-const SECRET = "test-api-secret"; // matches vitest.config.ts
+const SECRET = "test-attachment-secret"; // matches vitest.config.ts
 
 setupTestDatabase();
 
