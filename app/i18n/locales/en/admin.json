@@ -67,7 +67,9 @@
       "annual": "or {{price}} billed yearly",
       "annualSaving": "or {{price}} billed yearly — save {{percent}}%",
       "freeForever": "Free forever",
-      "buildsOn": "Everything in {{plan}}, plus"
+      "buildsOn": "Everything in {{plan}}, plus",
+      "levelOneImageAlt": "Illustration for the starter plan",
+      "levelTwoImageAlt": "Illustration for the growing plan"
     },
     "planLabel": "Your plan",
     "managedNote": "Plans are managed by Shopify. Use the button above to view available plans, upgrade, or change your subscription.",

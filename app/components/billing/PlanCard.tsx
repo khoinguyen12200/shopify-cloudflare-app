@@ -71,6 +71,11 @@ export const PLAN_CARD_CSS = `
   white-space: nowrap;
 }
 .bp-head { display: flex; flex-direction: column; gap: 0.375rem; }
+.bp-card > s-image {
+  display: block;
+  width: min(100%, 220px);
+  align-self: center;
+}
 .bp-name { font-size: 1rem; font-weight: 650; line-height: 1.2; }
 .bp-price { display: flex; align-items: baseline; gap: 0.375rem; }
 .bp-amount {
@@ -135,11 +140,15 @@ export function PlanCard({
   buildsOn,
   isCurrent,
   isFeatured,
+  illustrationSrc,
+  illustrationAlt,
 }: {
   plan: Plan;
   buildsOn: Plan | null;
   isCurrent: boolean;
   isFeatured: boolean;
+  illustrationSrc?: string;
+  illustrationAlt?: string;
 }) {
   const { t } = useTranslation(["admin", "common"]);
   const locale = useLocale();
@@ -164,6 +173,16 @@ export function PlanCard({
             {t("billing.plans.mostPopular")}
           </span>
         )
+      )}
+
+      {illustrationSrc && illustrationAlt && (
+        <s-image
+          src={illustrationSrc}
+          alt={illustrationAlt}
+          aspectRatio="1/1"
+          objectFit="contain"
+          loading="lazy"
+        ></s-image>
       )}
 
       <div className="bp-head">

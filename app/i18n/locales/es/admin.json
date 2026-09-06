@@ -67,7 +67,9 @@
       "annual": "o {{price}} con facturación anual",
       "annualSaving": "o {{price}} con facturación anual — ahorra {{percent}}%",
       "freeForever": "Gratis para siempre",
-      "buildsOn": "Todo lo del plan {{plan}}, y además"
+      "buildsOn": "Todo lo del plan {{plan}}, y además",
+      "levelOneImageAlt": "Ilustración del plan inicial",
+      "levelTwoImageAlt": "Ilustración del plan de crecimiento"
     },
     "planLabel": "Tu plan",
     "managedNote": "Los planes los gestiona Shopify. Usa el botón de arriba para ver los planes disponibles, mejorar tu plan o cambiar tu suscripción.",

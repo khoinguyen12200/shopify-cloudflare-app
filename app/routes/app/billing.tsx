@@ -198,6 +198,14 @@ export default function Billing() {
               buildsOn={index > 0 ? PLAN_LIST[index - 1] : null}
               isCurrent={plan.handle === currentPlanHandle}
               isFeatured={plan.handle === FEATURED_PLAN_HANDLE}
+              illustrationSrc={index === 0 ? "/plan-cards/lv1.svg" : index === 1 ? "/plan-cards/lv2.svg" : undefined}
+              illustrationAlt={
+                index === 0
+                  ? t("billing.plans.levelOneImageAlt")
+                  : index === 1
+                    ? t("billing.plans.levelTwoImageAlt")
+                    : undefined
+              }
             />
           ))}
         </div>
