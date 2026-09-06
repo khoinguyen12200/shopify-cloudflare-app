@@ -2,7 +2,6 @@ import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { Outlet, useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
-import { NavMenu } from "@shopify/app-bridge-react";
 import { useTranslation } from "react-i18next";
 
 import { createShopify } from "~/shopify.server";
@@ -38,14 +37,11 @@ export default function App() {
 
   return (
     <AppProvider apiKey={apiKey}>
-      <NavMenu>
-        {/* App Bridge requires the first child to be the app-root link. */}
-        <a href="/app" rel="home">
-          {t("nav.home")}
-        </a>
-        <a href="/app/billing">{t("nav.billing")}</a>
-        <a href="/app/support">{t("nav.support")}</a>
-      </NavMenu>
+      <s-app-nav>
+        <s-link href="/app" rel="home">{t("nav.home")}</s-link>
+        <s-link href="/app/billing">{t("nav.billing")}</s-link>
+        <s-link href="/app/support">{t("nav.support")}</s-link>
+      </s-app-nav>
       <Outlet />
     </AppProvider>
   );

@@ -1,5 +1,4 @@
 import { useEffect, useRef } from "react";
-import { useAppBridge } from "@shopify/app-bridge-react";
 import { resolveToast, type ActionMessage } from "~/lib/action-feedback";
 
 /**
@@ -26,7 +25,6 @@ import { resolveToast, type ActionMessage } from "~/lib/action-feedback";
  * carries the actual decision and IS unit-tested (`~/lib/action-feedback.test.ts`).
  */
 export function useActionToast(actionData: unknown, message: ActionMessage) {
-  const shopify = useAppBridge();
   const messageRef = useRef(message);
 
   // Runs after every render, before the effect below — refs are written
@@ -39,6 +37,6 @@ export function useActionToast(actionData: unknown, message: ActionMessage) {
     if (!actionData) return;
     const resolved = resolveToast(messageRef.current);
     if (!resolved) return;
-    shopify.toast.show(resolved.message, { isError: resolved.tone === "error" });
-  }, [actionData, shopify]);
+    globalThis.shopify.toast.show(resolved.message, { isError: resolved.tone === "error" });
+  }, [actionData]);
 }

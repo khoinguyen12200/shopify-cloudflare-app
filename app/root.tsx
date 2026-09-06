@@ -9,6 +9,7 @@ import {
 import type { LoaderFunctionArgs } from "react-router";
 import { getLocale } from "~/i18n/i18n.server";
 import { LOCALE_DIRECTION } from "~/i18n/config";
+import "@shopify/app-bridge-types";
 
 /**
  * The root loader resolves the locale once per request. Everything below reads

@@ -15,7 +15,6 @@ import {
   useSubmit,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { SaveBar, useAppBridge } from "@shopify/app-bridge-react";
 import { useTranslation } from "react-i18next";
 
 import { createShopify } from "~/shopify.server";
@@ -165,6 +164,13 @@ export default function SupportThreadPage() {
   const ccSaving = busy && pendingIntent === "cc";
   const ccDirty = !sameCcList(ccEmails, ticket.ccEmails);
 
+  useEffect(() => {
+    const update = ccDirty
+      ? globalThis.shopify.saveBar.show?.("thread-cc-save-bar")
+      : globalThis.shopify.saveBar.hide?.("thread-cc-save-bar");
+    void update;
+  }, [ccDirty]);
+
   useActionToast(actionData, {
     error: error ? t(supportErrorKey(error)) : undefined,
     success: success ? t(`support.success.${success}`) : undefined,
@@ -181,7 +187,7 @@ export default function SupportThreadPage() {
        * removing an address and adding it straight back correctly counts as no
        * change.
        */}
-      <SaveBar id="thread-cc-save-bar" open={ccDirty}>
+      <ui-save-bar id="thread-cc-save-bar" discardConfirmation>
         {/* `""` is the HTML boolean-attribute form, and `undefined` omits the
             attribute — `loading={false}` would render `loading="false"`, which
             the element reads as present. */}
@@ -198,7 +204,7 @@ export default function SupportThreadPage() {
         <button onClick={() => setCcEmails([...ticket.ccEmails])}>
           {t("common:actions.discard")}
         </button>
-      </SaveBar>
+      </ui-save-bar>
 
       <s-page heading={ticket.subject}>
         <style dangerouslySetInnerHTML={{ __html: THREAD_CSS }} />
@@ -322,13 +328,12 @@ export default function SupportThreadPage() {
  */
 function useCreatedToast() {
   const { t } = useTranslation(["admin", "common"]);
-  const shopify = useAppBridge();
   const [searchParams, setSearchParams] = useSearchParams();
   const created = searchParams.get("created") === "1";
 
   useEffect(() => {
     if (!created) return;
-    shopify.toast.show(t("support.success.created"));
+    globalThis.shopify.toast.show(t("support.success.created"));
     setSearchParams(
       (current) => {
         const next = new URLSearchParams(current);
@@ -337,7 +342,7 @@ function useCreatedToast() {
       },
       { replace: true, preventScrollReset: true },
     );
-  }, [created, shopify, t, setSearchParams]);
+  }, [created, t, setSearchParams]);
 }
 
 export const headers: HeadersFunction = (headersArgs) => boundary.headers(headersArgs);

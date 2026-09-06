@@ -69,7 +69,4 @@ export default defineConfig(({ command }) => ({
   build: {
     assetsInlineLimit: 0,
   },
-  optimizeDeps: {
-    include: ["@shopify/app-bridge-react"],
-  },
 }));
