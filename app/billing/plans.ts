@@ -13,6 +13,13 @@ export type PlanFeatureKey =
   | "pro.features.1"
   | "pro.features.2";
 
+export type EntitlementKey = "ai.reply_draft" | "ai.monthly_tokens" | "projects.max";
+export type Entitlement =
+  | { readonly kind: "disabled" }
+  | { readonly kind: "enabled" }
+  | { readonly kind: "limit"; readonly maximum: number }
+  | { readonly kind: "unlimited" };
+
 export interface Plan {
   /** The Shopify Managed Pricing handle; this is the plan identity. */
   readonly handle: PlanHandle;
@@ -33,6 +40,7 @@ export interface Plan {
   readonly priceAnnual: Money;
   /** i18n keys under `common:plans.<key>.features.*` — TODO: what it includes. */
   readonly featureKeys: readonly PlanFeatureKey[];
+  readonly entitlements: Readonly<Record<EntitlementKey, Entitlement>>;
 }
 
 const USD = unwrap(toCurrency("USD"));
@@ -49,6 +57,7 @@ export const PLANS: Readonly<Record<PlanHandle, Plan>> = {
     priceMonthly: unwrap(fromMinorUnits(0, USD)),
     priceAnnual: unwrap(fromMinorUnits(0, USD)),
     featureKeys: ["free.features.0", "free.features.1"],
+    entitlements: { "ai.reply_draft": { kind: "enabled" }, "ai.monthly_tokens": { kind: "limit", maximum: 10_000 }, "projects.max": { kind: "limit", maximum: 1 } },
   },
   pro: {
     handle: "pro",
@@ -57,6 +66,7 @@ export const PLANS: Readonly<Record<PlanHandle, Plan>> = {
     // ~2 months free versus paying monthly — TODO: your real annual price.
     priceAnnual: unwrap(fromMinorUnits(19000, USD)),
     featureKeys: ["pro.features.0", "pro.features.1", "pro.features.2"],
+    entitlements: { "ai.reply_draft": { kind: "enabled" }, "ai.monthly_tokens": { kind: "unlimited" }, "projects.max": { kind: "limit", maximum: 10 } },
   },
 };
 
