@@ -76,8 +76,12 @@ export function createEntitlements(deps: Dependencies): EntitlementService { con
     if (!deps.cache || !valid(shop)) return;
     try {
       await deps.cache.invalidate(shop);
-    } catch {
-      // Cache invalidation is advisory; authoritative state is unaffected.
+    } catch (error) {
+      console.error(JSON.stringify({
+        event: "entitlements.cache_invalidation_failed",
+        shop,
+        error: error instanceof Error ? error.message : "unknown",
+      }));
     }
   },
 }; }
