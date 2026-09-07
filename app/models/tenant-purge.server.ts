@@ -40,9 +40,6 @@ const PURGED_SHOP_TABLES = [
   "entitlement_operations",
   "entitlement_usage",
   "entitlement_allocations",
-  "entitlement_operations",
-  "entitlement_usage",
-  "entitlement_allocations",
 ] as const;
 
 export class TenantPurgeRepo {
@@ -80,9 +77,6 @@ export class TenantPurgeRepo {
       db.select({ count: sql<number>`count(*)` }).from(notificationPreferences).where(eq(notificationPreferences.scope, shop)),
       db.select({ count: sql<number>`count(*)` }).from(notificationOptOuts).where(eq(notificationOptOuts.scope, shop)),
       db.select({ count: sql<number>`count(*)` }).from(shops).where(eq(shops.shop, shop)),
-      db.select({ count: sql<number>`count(*)` }).from(entitlementOperations).where(eq(entitlementOperations.shop, shop)),
-      db.select({ count: sql<number>`count(*)` }).from(entitlementUsage).where(eq(entitlementUsage.shop, shop)),
-      db.select({ count: sql<number>`count(*)` }).from(entitlementAllocations).where(eq(entitlementAllocations.shop, shop)),
     ]);
     const deleted = await db.batch([
       db.delete(webhookScopeObservations).where(deliveryIds.length ? or(eq(webhookScopeObservations.shop, shop), inArray(webhookScopeObservations.deliveryId, deliveryIds)) : eq(webhookScopeObservations.shop, shop)),
@@ -104,9 +98,6 @@ export class TenantPurgeRepo {
       db.delete(notificationPreferences).where(eq(notificationPreferences.scope, shop)),
       db.delete(notificationOptOuts).where(eq(notificationOptOuts.scope, shop)),
       db.delete(shops).where(eq(shops.shop, shop)),
-      db.delete(entitlementOperations).where(eq(entitlementOperations.shop, shop)),
-      db.delete(entitlementUsage).where(eq(entitlementUsage.shop, shop)),
-      db.delete(entitlementAllocations).where(eq(entitlementAllocations.shop, shop)),
     ]);
     void deleted;
     return counts.reduce((total, rows) => total + Number(rows[0]?.count ?? 0), 0);

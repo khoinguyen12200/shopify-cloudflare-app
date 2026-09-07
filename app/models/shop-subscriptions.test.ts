@@ -156,6 +156,16 @@ describe("ShopSubscriptionRepo", () => {
     expect(invalidated).toEqual(["cache.myshopify.com", "cache.myshopify.com"]);
   });
 
+  it("keeps projection writes successful when cache invalidation fails", async () => {
+    await inRequest(async () => {
+      const repo = new ShopSubscriptionRepo({ invalidate: async () => { throw new Error("KV unavailable"); } });
+      await expect(repo.upsertObservation("cache-outage.myshopify.com", {
+        type: "ACTIVE_SUBSCRIPTION", status: "ACTIVE", subscriptionId: "sub-cache-outage", occurredAt: 1, externalId: "evt-cache-outage",
+      })).resolves.toBe("applied");
+      await expect(repo.get("cache-outage.myshopify.com", "sub-cache-outage")).resolves.toMatchObject({ status: "ACTIVE" });
+    });
+  });
+
   it("clears expired active-subscription metadata with explicit nulls", async () => {
     const row = await inRequest(async () => {
       const repo = new ShopSubscriptionRepo();

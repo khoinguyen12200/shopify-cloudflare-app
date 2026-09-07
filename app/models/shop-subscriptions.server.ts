@@ -159,7 +159,13 @@ export class ShopSubscriptionRepo {
         db.delete(shopSubscriptions).where(and(eq(shopSubscriptions.shop, shop), ne(shopSubscriptions.subscriptionId, observation.subscriptionId), matchingProjection)),
       ]);
     }
-    if (this.cache && (duplicate || applied.length > 0)) await this.cache.invalidate(shop);
+    if (this.cache && (duplicate || applied.length > 0)) {
+      try {
+        await this.cache.invalidate(shop);
+      } catch {
+        // Cache invalidation is advisory; projection writes remain authoritative.
+      }
+    }
     return duplicate ? "duplicate" : "applied";
   }
 

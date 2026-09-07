@@ -120,6 +120,13 @@
       "when": 1788750555429,
       "tag": "0016_tricky_dark_beast",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1788783054017,
+      "tag": "0017_bitter_anthem",
+      "breakpoints": true
     }
   ]
 }

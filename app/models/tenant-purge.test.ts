@@ -52,6 +52,18 @@ describe("TenantPurgeRepo", () => {
     expect(affected).toBe(2);
   });
 
+  it("counts entitlement rows exactly once", async () => {
+    const affected = await runWithRequestContext(env, async () => {
+      const shop = "count-entitlements.myshopify.com";
+      await env.DB.prepare("INSERT INTO shops (shop, installed_at) VALUES (?, ?)").bind(shop, 1).run();
+      await env.DB.prepare("INSERT INTO entitlement_usage (shop,key,period,committed,held,updated_at) VALUES (?,?,?,?,?,?)").bind(shop, "quota", "lifetime", 1, 0, 1).run();
+      await env.DB.prepare("INSERT INTO entitlement_operations (shop,operation_id,key,period,requested_amount,reserved_amount,subscription_revision,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)").bind(shop, "op-count", "quota", "lifetime", 1, 1, 1, "held", 1, 1).run();
+      await env.DB.prepare("INSERT INTO entitlement_allocations (shop,key,allocation_id,subscription_revision,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?)").bind(shop, "quota", "alloc-count", 1, "allocated", 1, 1).run();
+      return new TenantPurgeRepo().deleteTenantRows(shop);
+    });
+    expect(affected).toBe(4);
+  });
+
   it("purges every tenant table without touching another tenant", async () => {
     const target = "target.myshopify.com";
     const other = "other.myshopify.com";
