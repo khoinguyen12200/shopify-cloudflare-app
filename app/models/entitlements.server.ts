@@ -1,4 +1,4 @@
-import { getDb } from "~/request-context.server";
+import { getDb, getEnv } from "~/request-context.server";
 import { sql } from "drizzle-orm";
 import { entitlementOperations, entitlementUsage } from "~/db/schema";
 import { entitlementAllocations } from "~/db/schema";
@@ -13,6 +13,23 @@ function isOperationState(value: string): value is OperationState {
 
 /** D1 adapter for quota reservations and reusable concurrent allocations. */
 export class EntitlementRepo {
+  async listHeld(shop: string): Promise<readonly { operationId: string; key: string; period: string; amount: number }[]> {
+    const rows = await getDb().select({ operationId: entitlementOperations.operationId, key: entitlementOperations.key, period: entitlementOperations.period, amount: entitlementOperations.reservedAmount }).from(entitlementOperations).where(sql`${entitlementOperations.shop} = ${shop} AND ${entitlementOperations.state} = 'held'`);
+    return rows;
+  }
+
+  async reconcileHeld(shop: string, operationId: string, action: "commit" | "release"): Promise<{ state: OperationState } | { reason: "not_found" | "invalid_state" }> {
+    if (action === "commit") {
+      const result = await this.commit({ shop, operationId });
+      if ("reason" in result && result.reason === "invalid_amount") return { reason: "invalid_state" };
+      if ("reason" in result) {
+        if (result.reason === "not_found") return { reason: "not_found" };
+        return { reason: "invalid_state" };
+      }
+      return result;
+    }
+    return this.release({ shop, operationId });
+  }
   async allocate(input: { shop: string; key: string; allocationId: string; maximum: number; subscriptionRevision: number; now?: number }): Promise<EntitlementOperationResult> {
     const db = getDb(); const now = input.now ?? Date.now();
     const existing = (await db.select().from(entitlementAllocations).where(sql`${entitlementAllocations.shop} = ${input.shop} AND ${entitlementAllocations.key} = ${input.key} AND ${entitlementAllocations.allocationId} = ${input.allocationId}`).limit(1))[0];
@@ -20,11 +37,12 @@ export class EntitlementRepo {
       if (existing.subscriptionRevision !== input.subscriptionRevision) return { allowed: false, reason: "conflict" };
       if (existing.state !== "released") return { allowed: true, allocationId: input.allocationId, remaining: Math.max(0, input.maximum - 1) };
     }
-    const active = await db.select({ count: sql<number>`count(*)` }).from(entitlementAllocations).where(sql`${entitlementAllocations.shop} = ${input.shop} AND ${entitlementAllocations.key} = ${input.key} AND ${entitlementAllocations.state} IN ('held','allocated')`);
-    if (Number(active[0]?.count ?? 0) >= input.maximum) return { allowed: false, reason: "capacity_exhausted" };
-    if (existing) await db.update(entitlementAllocations).set({ state: "allocated", updatedAt: now }).where(sql`${entitlementAllocations.shop} = ${input.shop} AND ${entitlementAllocations.key} = ${input.key} AND ${entitlementAllocations.allocationId} = ${input.allocationId}`);
-    else await db.insert(entitlementAllocations).values({ shop: input.shop, key: input.key, allocationId: input.allocationId, subscriptionRevision: input.subscriptionRevision, state: "allocated", createdAt: now, updatedAt: now });
-    return { allowed: true, allocationId: input.allocationId, remaining: input.maximum - Number(active[0]?.count ?? 0) - 1 };
+    const d1 = getEnv().DB;
+    const [held] = await d1.batch([d1.prepare("INSERT INTO entitlement_allocations (shop,key,allocation_id,subscription_revision,state,created_at,updated_at) SELECT ?,?,?,?,?,?,? WHERE (SELECT count(*) FROM entitlement_allocations WHERE shop=? AND key=? AND state IN ('held','allocated')) < ? ON CONFLICT(shop,key,allocation_id) DO UPDATE SET state='held',subscription_revision=excluded.subscription_revision,updated_at=excluded.updated_at WHERE entitlement_allocations.state='released'").bind(input.shop, input.key, input.allocationId, input.subscriptionRevision, "held", now, now, input.shop, input.key, input.maximum)]);
+    if (held.meta.changes !== 1) return { allowed: false, reason: "capacity_exhausted" };
+    await d1.batch([d1.prepare("UPDATE entitlement_allocations SET state='allocated', updated_at=? WHERE shop=? AND key=? AND allocation_id=? AND state='held'").bind(now, input.shop, input.key, input.allocationId)]);
+    const count = await d1.prepare("SELECT count(*) count FROM entitlement_allocations WHERE shop=? AND key=? AND state IN ('held','allocated')").bind(input.shop, input.key).first<{ count: number }>();
+    return { allowed: true, allocationId: input.allocationId, remaining: input.maximum - Number(count?.count ?? 0) };
   }
 
   async deallocate(input: { shop: string; key: string; allocationId: string; }): Promise<EntitlementOperationResult> {

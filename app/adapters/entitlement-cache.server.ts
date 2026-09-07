@@ -2,16 +2,24 @@ import type { SubscriptionSnapshot } from "~/domain/entitlement-policy";
 
 export interface EntitlementCacheValue { readonly catalogueVersion: number; readonly snapshot: SubscriptionSnapshot; }
 export interface EntitlementCachePort { get(shop: string): Promise<EntitlementCacheValue | null>; put(shop: string, value: EntitlementCacheValue): Promise<void>; delete(shop: string): Promise<void>; }
+interface EntitlementKv {
+  get(key: string): Promise<string | null>;
+  put(key: string, value: string, options?: KVNamespacePutOptions): Promise<void>;
+  delete(key: string): Promise<void>;
+}
 const PREFIX = "entitlements:v1:";
+const STATUSES = new Set(["NONE", "PENDING", "ACTIVE", "CANCELLATION_SCHEDULED", "FROZEN", "CANCELED", "UNKNOWN"]);
+function nonNegativeSafe(value: unknown): value is number { return typeof value === "number" && Number.isSafeInteger(value) && value >= 0; }
 function valid(value: unknown, now: number, ttl: number): value is EntitlementCacheValue & { cachedAt: number } {
   if (!value || typeof value !== "object") return false;
-  const record = value as Record<string, unknown>;
+  const record: Record<string, unknown> = Object.fromEntries(Object.entries(value));
   const snapshot = record.snapshot;
-  if (!Number.isSafeInteger(record.catalogueVersion) || typeof record.cachedAt !== "number" || now - record.cachedAt > ttl * 1000 || !snapshot || typeof snapshot !== "object") return false;
-  const s = snapshot as Record<string, unknown>;
-  return typeof s.status === "string" && (typeof s.planHandle === "string" || s.planHandle === null) && Number.isSafeInteger(s.revision);
+  if (record.catalogueVersion !== 1 || !Number.isSafeInteger(record.catalogueVersion) || typeof record.cachedAt !== "number" || record.cachedAt > now || now - record.cachedAt > ttl * 1000 || !snapshot || typeof snapshot !== "object") return false;
+  const s: Record<string, unknown> = Object.fromEntries(Object.entries(snapshot));
+  const timestamps = [s.cancellationEffectiveAt, s.periodStart, s.periodEnd].filter((v) => v !== undefined);
+  return typeof s.status === "string" && STATUSES.has(s.status) && (typeof s.planHandle === "string" || s.planHandle === null) && nonNegativeSafe(s.revision) && timestamps.every(nonNegativeSafe) && (s.periodStart === undefined || s.periodEnd === undefined || (nonNegativeSafe(s.periodStart) && nonNegativeSafe(s.periodEnd) && s.periodStart <= s.periodEnd));
 }
-export function createEntitlementCache(kv: Pick<KVNamespace, "get" | "put" | "delete">, options: { now?: () => number; ttlSeconds?: number } = {}): EntitlementCachePort {
+export function createEntitlementCache(kv: EntitlementKv, options: { now?: () => number; ttlSeconds?: number } = {}): EntitlementCachePort {
   const now = options.now ?? Date.now; const ttl = options.ttlSeconds ?? 60;
   return {
     async get(shop) { try { const raw = await kv.get(`${PREFIX}${shop}`); if (!raw) return null; const parsed: unknown = JSON.parse(raw); return valid(parsed, now(), ttl) ? { catalogueVersion: parsed.catalogueVersion, snapshot: parsed.snapshot } : null; } catch { return null; } },

@@ -1,8 +1,8 @@
-import type { EntitlementKey, SubscriptionSnapshot, UsagePeriod } from "~/domain/entitlement-policy";
+import type { EntitlementKey, SubscriptionSnapshot } from "~/domain/entitlement-policy";
 
 export type EntitlementOperationResult =
   | { readonly allowed: true; readonly remaining?: number; readonly allocationId?: string }
-  | { readonly allowed: false; readonly reason: "conflict" | "capacity_exhausted" | "not_found" | "invalid_request" };
+  | { readonly allowed: false; readonly reason: "conflict" | "capacity_exhausted" | "not_found" | "invalid_request" | "invalid_amount" | "invalid_state" };
 
 export interface SubscriptionPort {
   current(shop: string): Promise<SubscriptionSnapshot>;
@@ -14,7 +14,7 @@ export interface CapacityPort {
 }
 
 export interface UsagePort {
-  reserve(input: { readonly shop: string; readonly key: EntitlementKey; readonly operationId: string; readonly amount: number; readonly maximum: number; readonly period: UsagePeriod; readonly periodStart?: number; readonly periodEnd?: number; readonly subscriptionRevision: number }): Promise<EntitlementOperationResult>;
+  reserve(input: { readonly shop: string; readonly key: EntitlementKey; readonly operationId: string; readonly amount: number; readonly maximum: number; readonly period: string; readonly periodStart?: number; readonly periodEnd?: number; readonly subscriptionRevision: number }): Promise<EntitlementOperationResult>;
   commit(input: { readonly shop: string; readonly operationId: string; readonly actualAmount?: number }): Promise<EntitlementOperationResult>;
   release(input: { readonly shop: string; readonly operationId: string }): Promise<EntitlementOperationResult>;
 }

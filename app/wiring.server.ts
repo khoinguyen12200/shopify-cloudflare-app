@@ -33,7 +33,7 @@ import type { AuthAttemptLimiter } from "~/ports/auth-rate-limit";
 import { EntitlementRepo } from "~/models/entitlements.server";
 import { createEntitlements, type EntitlementService } from "~/services/entitlements.server";
 import type { SubscriptionPort } from "~/ports/entitlements";
-import { PLANS } from "~/billing/plans";
+import { ENTITLEMENT_CATALOGUE } from "~/billing/entitlement-catalogue";
 import { createEntitlementCache, type EntitlementCachePort } from "~/adapters/entitlement-cache.server";
 
 const SHOP_IDENTITY_QUERY = `#graphql
@@ -106,18 +106,10 @@ export function subscriptionsPort(): SubscriptionPort {
   } };
 }
 
-function entitlementCatalogue() {
-  const features: Record<string, import("~/domain/entitlement-policy").FeatureDefinition> = {};
-  for (const plan of Object.values(PLANS)) for (const key of Object.keys(plan.entitlements)) {
-    if (!(key in features)) features[key] = key.includes("monthly") ? { kind: "quota", period: "calendar_month" } : key.endsWith(".max") ? { kind: "capacity" } : { kind: "capability" };
-  }
-  return { version: 1, freePlan: "free", features, plans: Object.fromEntries(Object.values(PLANS).map((p) => [p.handle, p.entitlements])) };
-}
-
 export function entitlements(): EntitlementService {
   const repo = new EntitlementRepo();
   const cache = entitlementCache();
-  return createEntitlements({ subscriptions: subscriptionsPort(), usage: { reserve: async (i) => { const r = await repo.reserve(i); return "reason" in r ? { allowed: false, reason: r.reason === "limit_exceeded" ? "capacity_exhausted" : "conflict" } : { allowed: true, remaining: r.remaining }; }, commit: (i) => repo.commit(i).then((r) => "reason" in r ? { allowed: false, reason: "not_found" } : { allowed: true }), release: (i) => repo.release(i).then((r) => "reason" in r ? { allowed: false, reason: "not_found" } : { allowed: true }) }, capacity: { allocate: (i) => repo.allocate(i), deallocate: (i) => repo.deallocate(i) }, cache: { get: (s) => cache.get(s).then((v) => v?.snapshot ?? null), set: async (s, v, _ttl) => { await cache.put(s, { catalogueVersion: 1, snapshot: v }); }, invalidate: (s) => cache.delete(s) }, catalogue: entitlementCatalogue() });
+  return createEntitlements({ subscriptions: subscriptionsPort(), usage: { reserve: async (i) => { const r = await repo.reserve(i); return "reason" in r ? { allowed: false, reason: r.reason === "limit_exceeded" ? "capacity_exhausted" : "conflict" } : { allowed: true, remaining: r.remaining }; }, commit: (i) => repo.commit(i).then((r) => "reason" in r ? { allowed: false, reason: "not_found" } : { allowed: true }), release: (i) => repo.release(i).then((r) => "reason" in r ? { allowed: false, reason: "not_found" } : { allowed: true }) }, capacity: { allocate: (i) => repo.allocate(i), deallocate: (i) => repo.deallocate(i) }, cache: { get: (s) => cache.get(s).then((v) => v?.snapshot ?? null), set: async (s, v, _ttl) => { await cache.put(s, { catalogueVersion: 1, snapshot: v }); }, invalidate: (s) => cache.delete(s) }, catalogue: ENTITLEMENT_CATALOGUE });
 }
 
 function authLimiter(binding: RateLimit | undefined): AuthAttemptLimiter {
