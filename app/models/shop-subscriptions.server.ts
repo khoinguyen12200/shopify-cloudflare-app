@@ -162,8 +162,12 @@ export class ShopSubscriptionRepo {
     if (this.cache && (duplicate || applied.length > 0)) {
       try {
         await this.cache.invalidate(shop);
-      } catch {
-        // Cache invalidation is advisory; projection writes remain authoritative.
+      } catch (error) {
+        console.error(JSON.stringify({
+          event: "entitlements.cache_invalidation_failed",
+          shop,
+          error: error instanceof Error ? error.message : "unknown",
+        }));
       }
     }
     return duplicate ? "duplicate" : "applied";
