@@ -35,9 +35,17 @@ describe("entitlement cache", () => {
     ["stale", JSON.stringify({ catalogueVersion: 1, snapshot, cachedAt: 39_999 })],
     ["future", JSON.stringify({ catalogueVersion: 1, snapshot, cachedAt: 100_001 })],
     ["non-finite cached time", JSON.stringify({ catalogueVersion: 1, snapshot, cachedAt: Number.NaN })],
+    ["array envelope", JSON.stringify([{ catalogueVersion: 1, snapshot, cachedAt: 100_000 }])],
+    ["array snapshot", JSON.stringify({ catalogueVersion: 1, snapshot: [snapshot], cachedAt: 100_000 })],
   ])("rejects %s cache entries", async (_name, raw) => {
     const kv = memoryKv(new Map([["entitlements:v1:a", raw]]));
     await expect(createEntitlementCache(kv.binding, { now: () => 100_000, ttlSeconds: 60 }).get("a")).resolves.toBeNull();
+  });
+
+  it("clamps an invalid TTL to a safe bounded value", async () => {
+    const kv = memoryKv();
+    await createEntitlementCache(kv.binding, { now: () => 100_000, ttlSeconds: 0 }).put("a", { catalogueVersion: 1, snapshot });
+    expect(kv.puts[0]?.ttl).toBeGreaterThan(0);
   });
 
   it("treats get failure as a miss and propagates failed writes and invalidation", async () => {

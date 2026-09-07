@@ -1,5 +1,55 @@
-import { resolveEntitlement, type EntitlementCatalogue, type EntitlementKey, type ResolvedEntitlement } from "~/domain/entitlement-policy";
-import type { CapacityPort, EntitlementCachePort, EntitlementOperationResult, SubscriptionPort, UsagePort } from "~/ports/entitlements";
-export interface EntitlementService { check(shop:string,key:EntitlementKey):Promise<ResolvedEntitlement|EntitlementOperationResult>; allocate(input:{readonly shop:string;readonly key:EntitlementKey;readonly allocationId:string}):Promise<EntitlementOperationResult|ResolvedEntitlement>; deallocate(input:{readonly shop:string;readonly key:EntitlementKey;readonly allocationId:string}):Promise<EntitlementOperationResult>; reserve(input:{readonly shop:string;readonly key:EntitlementKey;readonly operationId:string;readonly amount:number}):Promise<EntitlementOperationResult|ResolvedEntitlement>; commit(input:{readonly shop:string;readonly operationId:string;readonly actualAmount?:number}):Promise<EntitlementOperationResult>; release(input:{readonly shop:string;readonly operationId:string}):Promise<EntitlementOperationResult>; invalidate(shop:string):Promise<void>; }
-const invalidRequest:EntitlementOperationResult={allowed:false,reason:"invalid_request"}; const valid=(v:string)=>v.trim().length>0;
-export function createEntitlements(input:{readonly subscriptions:SubscriptionPort;readonly catalogue:EntitlementCatalogue;readonly capacity?:CapacityPort;readonly usage?:UsagePort;readonly cache?:EntitlementCachePort;readonly now?:()=>number}):EntitlementService { const now=input.now??Date.now; async function snap(shop:string){if(input.cache){const c=await input.cache.get(shop);if(c)return c;} const s=await input.subscriptions.current(shop);if(input.cache)await input.cache.set(shop,s,60);return s;} return { async check(shop,key){if(!valid(shop)||!valid(key))return invalidRequest;return resolveEntitlement(input.catalogue,await snap(shop),key,now());}, async allocate(r){if(!input.capacity)throw new Error("capacity port unavailable");if(!valid(r.shop)||!valid(r.key)||!valid(r.allocationId))return invalidRequest;const s=await snap(r.shop),d=resolveEntitlement(input.catalogue,s,r.key,now());if(!d.allowed||d.kind!=="capacity")return d;return input.capacity.allocate({...r,maximum:d.maximum??Number.MAX_SAFE_INTEGER,subscriptionRevision:s.revision});}, async deallocate(r){if(!input.capacity)throw new Error("capacity port unavailable");if(!valid(r.shop)||!valid(r.key)||!valid(r.allocationId))return invalidRequest;return input.capacity.deallocate(r);}, async reserve(r){if(!input.usage)throw new Error("usage port unavailable");if(!valid(r.shop)||!valid(r.key)||!valid(r.operationId)||!Number.isSafeInteger(r.amount)||r.amount<=0)return invalidRequest;const s=await input.subscriptions.current(r.shop);if(input.cache)await input.cache.set(r.shop,s,60);const d=resolveEntitlement(input.catalogue,s,r.key,now());if(!d.allowed||d.kind!=="quota")return d;return input.usage.reserve({...r,maximum:d.maximum??Number.MAX_SAFE_INTEGER,period:d.window.key,periodStart:d.window.kind === "lifetime" ? undefined : d.window.start,periodEnd:d.window.kind === "lifetime" ? undefined : d.window.end,subscriptionRevision:s.revision});}, async commit(r){if(!input.usage)throw new Error("usage port unavailable");if(!valid(r.shop)||!valid(r.operationId)||(r.actualAmount!==undefined&&(!Number.isSafeInteger(r.actualAmount)||r.actualAmount<0)))return invalidRequest;return input.usage.commit(r);}, async release(r){if(!input.usage)throw new Error("usage port unavailable");if(!valid(r.shop)||!valid(r.operationId))return invalidRequest;return input.usage.release(r);}, async invalidate(shop){if(input.cache&&valid(shop))await input.cache.invalidate(shop);} }; }
+import { resolveEntitlement, type EntitlementCatalogue, type EntitlementKey } from "~/domain/entitlement-policy";
+import type { AllocateResult, CapacityPort, CheckResult, CommitResult, DeallocateResult, EntitlementCachePort, EntitlementOperationFailure, ReleaseResult, ReserveResult, SubscriptionPort, UsagePort } from "~/ports/entitlements";
+interface Dependencies { readonly subscriptions: SubscriptionPort; readonly catalogue: EntitlementCatalogue; readonly capacity?: CapacityPort; readonly usage?: UsagePort; readonly cache?: EntitlementCachePort; readonly now?: () => number; }
+interface AllocationInput { readonly shop: string; readonly key: EntitlementKey; readonly allocationId: string; }
+interface ReserveInput { readonly shop: string; readonly key: EntitlementKey; readonly operationId: string; readonly amount: number; }
+export interface EntitlementService {
+  check(shop: string, key: EntitlementKey): Promise<CheckResult>;
+  allocate(input: AllocationInput): Promise<AllocateResult>;
+  deallocate(input: AllocationInput): Promise<DeallocateResult>;
+  reserve(input: ReserveInput): Promise<ReserveResult>;
+  commit(input: { readonly shop: string; readonly operationId: string; readonly actualAmount?: number }): Promise<CommitResult>;
+  release(input: { readonly shop: string; readonly operationId: string }): Promise<ReleaseResult>;
+  invalidate(shop: string): Promise<void>;
+}
+const invalidRequest: EntitlementOperationFailure = { allowed: false, reason: "invalid_request" };
+const valid = (value: string) => value.trim().length > 0;
+const capacityPort = (port: CapacityPort | undefined): CapacityPort => { if (!port) throw new Error("capacity port unavailable"); return port; };
+const usagePort = (port: UsagePort | undefined): UsagePort => { if (!port) throw new Error("usage port unavailable"); return port; };
+async function authoritative(deps: Dependencies, shop: string) { const snapshot = await deps.subscriptions.current(shop); if (deps.cache) await deps.cache.set(shop, snapshot, 60); return snapshot; }
+async function preview(deps: Dependencies, shop: string) { return await deps.cache?.get(shop) ?? authoritative(deps, shop); }
+function makeCheck(deps: Dependencies, now: () => number) {
+  return async (shop: string, key: EntitlementKey): Promise<CheckResult> => {
+    if (!valid(shop) || !valid(key)) return invalidRequest;
+    return resolveEntitlement(deps.catalogue, await preview(deps, shop), key, now());
+  };
+}
+function makeAllocate(deps: Dependencies, now: () => number) {
+  return async (input: AllocationInput): Promise<AllocateResult> => {
+    const port = capacityPort(deps.capacity);
+    if (!valid(input.shop) || !valid(input.key) || !valid(input.allocationId)) return invalidRequest;
+    const snapshot = await authoritative(deps, input.shop);
+    const resolved = resolveEntitlement(deps.catalogue, snapshot, input.key, now());
+    if (!resolved.allowed) return resolved;
+    if (resolved.kind !== "capacity") return invalidRequest;
+    return port.allocate({ ...input, maximum: resolved.maximum ?? Number.MAX_SAFE_INTEGER, subscriptionRevision: snapshot.revision });
+  };
+}
+function makeReserve(deps: Dependencies, now: () => number) {
+  return async (input: ReserveInput): Promise<ReserveResult> => {
+    const port = usagePort(deps.usage);
+    if (!valid(input.shop) || !valid(input.key) || !valid(input.operationId) || !Number.isSafeInteger(input.amount) || input.amount <= 0) return invalidRequest;
+    const snapshot = await authoritative(deps, input.shop);
+    const resolved = resolveEntitlement(deps.catalogue, snapshot, input.key, now());
+    if (!resolved.allowed) return resolved;
+    if (resolved.kind !== "quota") return invalidRequest;
+    return port.reserve({ ...input, maximum: resolved.maximum ?? Number.MAX_SAFE_INTEGER, period: resolved.window.key, periodStart: resolved.window.kind === "lifetime" ? undefined : resolved.window.start, periodEnd: resolved.window.kind === "lifetime" ? undefined : resolved.window.end, subscriptionRevision: snapshot.revision });
+  };
+}
+export function createEntitlements(deps: Dependencies): EntitlementService { const now = deps.now ?? Date.now; return {
+  check: makeCheck(deps, now), allocate: makeAllocate(deps, now), reserve: makeReserve(deps, now),
+  async deallocate(input) { const port = capacityPort(deps.capacity); if (!valid(input.shop) || !valid(input.key) || !valid(input.allocationId)) return invalidRequest; return port.deallocate(input); },
+  async commit(input) { const port = usagePort(deps.usage); if (!valid(input.shop) || !valid(input.operationId) || (input.actualAmount !== undefined && (!Number.isSafeInteger(input.actualAmount) || input.actualAmount < 0))) return invalidRequest; return port.commit(input); },
+  async release(input) { const port = usagePort(deps.usage); if (!valid(input.shop) || !valid(input.operationId)) return invalidRequest; return port.release(input); },
+  async invalidate(shop) { if (deps.cache && valid(shop)) await deps.cache.invalidate(shop); },
+}; }

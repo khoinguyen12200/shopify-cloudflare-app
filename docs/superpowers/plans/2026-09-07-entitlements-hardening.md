@@ -93,7 +93,9 @@ are covered by local D1 tests.
 ### Task 5: Harden cache parsing and invalidation
 
 Status: complete. Cache parsing validates persisted fields, bounded timestamps,
-TTL, malformed values, and shop-scoped invalidation.
+TTL, malformed values, and shop-scoped invalidation. Projection adapters,
+duplicate repairs, uninstall handling, and tenant purge now invalidate the
+entitlement key.
 
 **Files:** `app/adapters/entitlement-cache.server.ts`, cache tests, subscription projection tests
 
@@ -131,7 +133,7 @@ Status: complete. Gates and app-neutral handoff documentation use the final
 ### Task 8: Full verification and delivery audit
 
 Status: complete. Typecheck, lint, focused entitlement tests, full worker/DOM
-test suites, and `git diff --check` pass.
+test suites, and `git diff --check` pass after the audit follow-up.
 
 - [x] Run `npm run typecheck`.
 - [x] Run `npm run lint` and confirm no cast/style contract violations.
@@ -152,3 +154,17 @@ test suites, and `git diff --check` pass.
 - Every entitlement query is shop-scoped and tenant purge removes all entitlement state.
 - A future project can configure the catalogue and call gates without modifying entitlement internals.
 - No app-specific staff/AI/business implementation is included.
+
+## Audit Follow-up (2026-09-07)
+
+- Public operation results are closed and carry operation/allocation identity,
+  concrete period, subscription revision, and aggregate remaining capacity.
+- Quota and capacity admission writes verify the supplied revision against the
+  current D1 subscription projection in the same conditional write path.
+- Replays calculate remaining usage from aggregate committed/held usage and
+  remaining capacity from all active/held allocations; `operation_conflict` is
+  preserved as a distinct denial.
+- Entitlement KV invalidation is wired after projection application or repair,
+  history projection delivery, uninstall, and tenant purge.
+- The entitlement service is split into focused preview, authoritative snapshot,
+  check, reserve, and allocation helpers rather than one compressed function.

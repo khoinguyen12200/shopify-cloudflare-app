@@ -84,7 +84,7 @@ export type AiRepositoryPort = Pick<AiRepo, "chainFor" | "markHealth" | "recordR
 
 export function shops(): ShopsPort { return new ShopRepo(); }
 export function support(): SupportPort { return new SupportRepo(); }
-export function shopSubscriptions(): ShopSubscriptionsPort { return new ShopSubscriptionRepo(); }
+export function shopSubscriptions(): ShopSubscriptionsPort { return new ShopSubscriptionRepo({ invalidate: (shop) => entitlementCache().delete(shop) }); }
 export function shopifyEvents(): ShopifyEventsPort { return new ShopifyEventRepo(); }
 export function shopSyncCheckpoints(): ShopSyncCheckpointsPort { return new ShopSyncCheckpointRepo(); }
 export function webhookScopeObservations(): WebhookScopeObservationsPort { return new WebhookScopeObservationRepo(); }
@@ -102,14 +102,35 @@ export function subscriptionsPort(): SubscriptionPort {
     const projection = await shopSubscriptions().currentForShop(shop);
     return { status: projection?.status ?? "NONE", planHandle: projection?.planHandle ?? null,
       revision: projection?.revision ?? 0, periodStart: projection?.currentPeriodStartsAt ?? undefined,
-      periodEnd: projection?.currentPeriodEndsAt ?? undefined };
+      periodEnd: projection?.currentPeriodEndsAt ?? undefined,
+      cancellationEffectiveAt: projection?.cancellationEffectiveAt ?? undefined };
   } };
 }
 
 export function entitlements(): EntitlementService {
   const repo = new EntitlementRepo();
   const cache = entitlementCache();
-  return createEntitlements({ subscriptions: subscriptionsPort(), usage: { reserve: async (i) => { const r = await repo.reserve(i); return "reason" in r ? { allowed: false, reason: r.reason === "limit_exceeded" ? "capacity_exhausted" : "conflict" } : { allowed: true, remaining: r.remaining }; }, commit: (i) => repo.commit(i).then((r) => "reason" in r ? { allowed: false, reason: "not_found" } : { allowed: true }), release: (i) => repo.release(i).then((r) => "reason" in r ? { allowed: false, reason: "not_found" } : { allowed: true }) }, capacity: { allocate: (i) => repo.allocate(i), deallocate: (i) => repo.deallocate(i) }, cache: { get: (s) => cache.get(s).then((v) => v?.snapshot ?? null), set: async (s, v, _ttl) => { await cache.put(s, { catalogueVersion: 1, snapshot: v }); }, invalidate: (s) => cache.delete(s) }, catalogue: ENTITLEMENT_CATALOGUE });
+  return createEntitlements({
+    subscriptions: subscriptionsPort(),
+    usage: {
+      reserve: (input) => repo.reserve(input),
+      commit: async (input) => {
+        const result = await repo.commit(input);
+        return "reason" in result
+          ? { allowed: false, reason: result.reason }
+          : { allowed: true, operationId: input.operationId, state: "committed" };
+      },
+      release: async (input) => {
+        const result = await repo.release(input);
+        return "reason" in result
+          ? { allowed: false, reason: result.reason }
+          : { allowed: true, operationId: input.operationId, state: result.state === "committed" ? "committed" : "released" };
+      },
+    },
+    capacity: { allocate: (input) => repo.allocate(input), deallocate: (input) => repo.deallocate(input) },
+    cache: { get: (shop) => cache.get(shop).then((value) => value?.snapshot ?? null), set: async (shop, value, _ttl) => { await cache.put(shop, { catalogueVersion: 1, snapshot: value }); }, invalidate: (shop) => cache.delete(shop) },
+    catalogue: ENTITLEMENT_CATALOGUE,
+  });
 }
 
 function authLimiter(binding: RateLimit | undefined): AuthAttemptLimiter {
@@ -206,7 +227,11 @@ export function historyLedger() {
   const repo = shopifyEvents();
   return {
     recordPartnerRelationship: (event: Parameters<ShopifyEventRepo["recordPartnerRelationship"]>[0]) => repo.recordPartnerRelationship(event),
-    recordPartnerSubscription: (event: Parameters<ShopifyEventRepo["recordPartnerSubscription"]>[0]) => repo.recordPartnerSubscription(event),
+    recordPartnerSubscription: async (event: Parameters<ShopifyEventRepo["recordPartnerSubscription"]>[0]) => {
+      const result = await repo.recordPartnerSubscription(event);
+      await entitlementCache().delete(event.shop);
+      return result;
+    },
   };
 }
 
@@ -273,6 +298,7 @@ export function tenantPurgeDependencies() {
         return sessions.length;
       },
     },
+    entitlementCache: { invalidate: (shop: string) => entitlementCache().delete(shop) },
   };
 }
 
@@ -283,6 +309,7 @@ export function webhookConsumer() {
   const handlers = {
     "app/uninstalled": async (delivery: ConsumerDelivery) => {
       await shops().recordUninstall(delivery.shop, Date.now());
+      await entitlementCache().delete(delivery.shop);
       const found = await sessions.findSessionsByShop(delivery.shop);
       await sessions.deleteSessions(found.map(({ id }) => id));
       const result = await reconcileAfterUninstall({

@@ -3,6 +3,8 @@ import type { SubscriptionStatus, SubscriptionObservation } from "~/domain/subsc
 import { shopSubscriptionItems, shopSubscriptions } from "~/db/schema";
 import { getDb } from "~/request-context.server";
 
+export interface SubscriptionCacheInvalidator { invalidate(shop: string): Promise<void>; }
+
 export type SubscriptionObservationInput = SubscriptionObservation & {
   readonly subscriptionId: string;
   readonly planHandle?: string | null;
@@ -33,6 +35,7 @@ export interface CurrentSubscriptionProjection {
   readonly trialEndsAt: number | null;
   readonly currentPeriodEndsAt: number | null;
   readonly currentPeriodStartsAt: number | null;
+  readonly cancellationEffectiveAt: number | null;
   readonly revision: number;
 }
 
@@ -45,6 +48,7 @@ const kindByStatus: Record<SubscriptionStatus, "none" | "pending" | "active" | "
 };
 
 export class ShopSubscriptionRepo {
+  constructor(private readonly cache?: SubscriptionCacheInvalidator) {}
   async currentForShop(shop: string): Promise<CurrentSubscriptionProjection | undefined> {
     const rows = await getDb().select({
       shop: shopSubscriptions.shop,
@@ -56,6 +60,7 @@ export class ShopSubscriptionRepo {
       trialEndsAt: shopSubscriptions.trialEndsAt,
       currentPeriodEndsAt: shopSubscriptions.currentPeriodEndsAt,
       currentPeriodStartsAt: shopSubscriptions.currentPeriodStartsAt,
+      cancellationEffectiveAt: shopSubscriptions.cancellationEffectiveAt,
       revision: shopSubscriptions.appliedOccurredAt,
     }).from(shopSubscriptions).leftJoin(shopSubscriptionItems, and(
       eq(shopSubscriptionItems.shop, shopSubscriptions.shop),
@@ -75,6 +80,7 @@ export class ShopSubscriptionRepo {
       trialEndsAt: shopSubscriptions.trialEndsAt,
       currentPeriodEndsAt: shopSubscriptions.currentPeriodEndsAt,
       currentPeriodStartsAt: shopSubscriptions.currentPeriodStartsAt,
+      cancellationEffectiveAt: shopSubscriptions.cancellationEffectiveAt,
       revision: shopSubscriptions.appliedOccurredAt,
     }).from(shopSubscriptions).leftJoin(shopSubscriptionItems, and(
       eq(shopSubscriptionItems.shop, shopSubscriptions.shop),
@@ -153,6 +159,7 @@ export class ShopSubscriptionRepo {
         db.delete(shopSubscriptions).where(and(eq(shopSubscriptions.shop, shop), ne(shopSubscriptions.subscriptionId, observation.subscriptionId), matchingProjection)),
       ]);
     }
+    if (this.cache && (duplicate || applied.length > 0)) await this.cache.invalidate(shop);
     return duplicate ? "duplicate" : "applied";
   }
 

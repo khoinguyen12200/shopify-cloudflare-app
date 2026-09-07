@@ -37,4 +37,10 @@ describe("purgeTenant", () => {
     expect([...state.kv]).toEqual(["beta"]);
     expect(result).toEqual({ rows: 1, attachments: 1, sessions: 1 });
   });
+
+  it("invalidates entitlement cache after tenant purge", async () => {
+    let invalidated = "";
+    await purgeTenant({ d1: { prepare: async () => ({ shop: "s", attachmentKeys: [] }), deleteRows: async () => 0 }, r2: { delete: async () => undefined }, kv: { deleteSessions: async () => 0 }, entitlementCache: { invalidate: async (shop) => { invalidated = shop; } } }, "s");
+    expect(invalidated).toBe("s");
+  });
 });

@@ -133,6 +133,29 @@ describe("ShopSubscriptionRepo", () => {
     });
   });
 
+  it("returns the cancellation deadline in the current entitlement projection", async () => {
+    const row = await inRequest(async () => {
+      const repo = new ShopSubscriptionRepo();
+      await repo.upsertObservation("canceling.myshopify.com", {
+        type: "ACTIVE_SUBSCRIPTION", status: "CANCELLATION_SCHEDULED", subscriptionId: "sub-1",
+        occurredAt: 1, externalId: "sub-1", cancellationEffectiveAt: 200,
+      });
+      return repo.currentForShop("canceling.myshopify.com");
+    });
+    expect(row).toMatchObject({ cancellationEffectiveAt: 200 });
+  });
+
+  it("invalidates entitlement cache after applied and duplicate projection writes", async () => {
+    const invalidated: string[] = [];
+    await inRequest(async () => {
+      const repo = new ShopSubscriptionRepo({ invalidate: async (shop) => { invalidated.push(shop); } });
+      const input = { type: "ACTIVE_SUBSCRIPTION" as const, status: "ACTIVE" as const, subscriptionId: "sub-cache", occurredAt: 1, externalId: "evt-cache" };
+      await repo.upsertObservation("cache.myshopify.com", input);
+      await repo.upsertObservation("cache.myshopify.com", input);
+    });
+    expect(invalidated).toEqual(["cache.myshopify.com", "cache.myshopify.com"]);
+  });
+
   it("clears expired active-subscription metadata with explicit nulls", async () => {
     const row = await inRequest(async () => {
       const repo = new ShopSubscriptionRepo();

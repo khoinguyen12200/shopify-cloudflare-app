@@ -3,8 +3,8 @@ import { createPlanGate, createQuotaGate, createCapacityGate } from "./gates";
 
 const entitlements = {
   check: async () => ({ allowed: true as const, kind: "capability" as const }),
-  reserve: async () => ({ allowed: true as const }),
-  allocate: async () => ({ allowed: true as const }),
+  reserve: async () => ({ allowed: true as const, operationId: "op", amount: 2, period: "lifetime", subscriptionRevision: 1, remaining: 0 }),
+  allocate: async () => ({ allowed: true as const, allocationId: "a", subscriptionRevision: 1, remaining: 0 }),
 };
 
 describe("entitlement gates", () => {
@@ -12,9 +12,9 @@ describe("entitlement gates", () => {
     expect(await createPlanGate({ entitlements, key: "x" }).check("shop")).toEqual({ allowed: true, kind: "capability" });
   });
   it("delegates quota reservations", async () => {
-    expect(await createQuotaGate({ entitlements, key: "x", amount: 2 }).reserve("shop", "op")).toEqual({ allowed: true });
+    expect(await createQuotaGate({ entitlements, key: "x", amount: 2 }).reserve("shop", "op")).toMatchObject({ allowed: true, operationId: "op" });
   });
   it("delegates capacity allocations", async () => {
-    expect(await createCapacityGate({ entitlements, key: "x", allocationId: "a" }).allocate("shop")).toEqual({ allowed: true });
+    expect(await createCapacityGate({ entitlements, key: "x", allocationId: "a" }).allocate("shop")).toMatchObject({ allowed: true, allocationId: "a" });
   });
 });

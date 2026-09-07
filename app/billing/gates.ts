@@ -1,10 +1,10 @@
 import type { EntitlementKey, ResolvedEntitlement } from "~/domain/entitlement-policy";
-import type { EntitlementOperationResult } from "~/ports/entitlements";
+import type { EntitlementOperationResult, ReserveResult, AllocateResult } from "~/ports/entitlements";
 
 type Entitlements = {
   check(shop: string, key: EntitlementKey): Promise<ResolvedEntitlement | EntitlementOperationResult>;
-  reserve(input: { shop: string; key: EntitlementKey; operationId: string; amount: number }): Promise<ResolvedEntitlement | EntitlementOperationResult>;
-  allocate(input: { shop: string; key: EntitlementKey; allocationId: string }): Promise<ResolvedEntitlement | EntitlementOperationResult>;
+  reserve(input: { shop: string; key: EntitlementKey; operationId: string; amount: number }): Promise<ReserveResult>;
+  allocate(input: { shop: string; key: EntitlementKey; allocationId: string }): Promise<AllocateResult>;
 };
 export function createPlanGate(input: { entitlements: Entitlements; key: EntitlementKey }) { return { check: (shop: string) => input.entitlements.check(shop, input.key) }; }
 export function createQuotaGate(input: { entitlements: Entitlements; key: EntitlementKey; amount: number }) { return { reserve: (shop: string, operationId: string) => input.entitlements.reserve({ shop, key: input.key, operationId, amount: input.amount }) }; }

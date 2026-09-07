@@ -4,6 +4,7 @@ export interface TenantPurgeD1Port {
 }
 export interface TenantPurgeR2Port { delete(keys: readonly string[]): Promise<void>; }
 export interface TenantPurgeKvPort { deleteSessions(shop: string): Promise<number>; }
+export interface TenantPurgeEntitlementCachePort { invalidate(shop: string): Promise<void>; }
 export interface PurgeResult { readonly rows: number; readonly attachments: number; readonly sessions: number; }
 
 export function chunkR2Keys(keys: readonly string[]): readonly (readonly string[])[] {
@@ -16,10 +17,12 @@ export async function purgeTenant(deps: {
   readonly d1: TenantPurgeD1Port;
   readonly r2: TenantPurgeR2Port;
   readonly kv: TenantPurgeKvPort;
+  readonly entitlementCache?: TenantPurgeEntitlementCachePort;
 }, shop: string): Promise<PurgeResult> {
   const prepared = await deps.d1.prepare(shop);
   for (const keys of chunkR2Keys(prepared.attachmentKeys)) await deps.r2.delete(keys);
   const rows = await deps.d1.deleteRows(shop);
   const sessions = await deps.kv.deleteSessions(shop);
+  if (deps.entitlementCache) await deps.entitlementCache.invalidate(shop);
   return { rows, attachments: prepared.attachmentKeys.length, sessions };
 }
