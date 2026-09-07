@@ -30,6 +30,11 @@ import type { PasswordResetTokenPort } from "~/ports/password-reset-tokens";
 import { recordShopifyIdentity } from "~/services/record-shopify-identity";
 import { reconcileAfterUninstall } from "~/services/reconcile-after-uninstall";
 import type { AuthAttemptLimiter } from "~/ports/auth-rate-limit";
+import { EntitlementRepo } from "~/models/entitlements.server";
+import { createEntitlements, type EntitlementService } from "~/services/entitlements.server";
+import type { SubscriptionPort } from "~/ports/entitlements";
+import { PLANS } from "~/billing/plans";
+import { createEntitlementCache, type EntitlementCachePort } from "~/adapters/entitlement-cache.server";
 
 const SHOP_IDENTITY_QUERY = `#graphql
   query AuthenticatedShopIdentity {
@@ -41,7 +46,7 @@ export async function persistShopIdentity(admin: { graphql: (query: string) => P
   const repository = new ShopRepo();
   const existing = await repository.get(shop);
   if (existing?.shopifyShopId) {
-    return { status: "recorded" as const, shopifyShopId: existing.shopifyShopId };
+    return { status: "recorded", shopifyShopId: existing.shopifyShopId } as const;
   }
   const response = await admin.graphql(SHOP_IDENTITY_QUERY);
   if (!response.ok) return { status: "failed", code: "SHOP_IDENTITY_QUERY_FAILED" };
@@ -86,6 +91,34 @@ export function webhookScopeObservations(): WebhookScopeObservationsPort { retur
 export function webhookDeliveryRepository(): WebhookDeliveryRepositoryPort { return new WebhookDeliveryRepo(); }
 export function operationalHealth(): OperationalHealthPort { return new OperationalHealthRepo(); }
 export function aiRepository(): AiRepositoryPort { return new AiRepo(); }
+
+/** Advisory KV cache for entitlement previews; D1 remains authoritative. */
+export function entitlementCache(): EntitlementCachePort {
+  return createEntitlementCache(getEnv().SESSION);
+}
+
+export function subscriptionsPort(): SubscriptionPort {
+  return { async current(shop) {
+    const projection = await shopSubscriptions().currentForShop(shop);
+    return { status: projection?.status ?? "NONE", planHandle: projection?.planHandle ?? null,
+      revision: projection?.revision ?? 0, periodStart: projection?.currentPeriodStartsAt ?? undefined,
+      periodEnd: projection?.currentPeriodEndsAt ?? undefined };
+  } };
+}
+
+function entitlementCatalogue() {
+  const features: Record<string, import("~/domain/entitlement-policy").FeatureDefinition> = {};
+  for (const plan of Object.values(PLANS)) for (const key of Object.keys(plan.entitlements)) {
+    if (!(key in features)) features[key] = key.includes("monthly") ? { kind: "quota", period: "calendar_month" } : key.endsWith(".max") ? { kind: "capacity" } : { kind: "capability" };
+  }
+  return { version: 1, freePlan: "free", features, plans: Object.fromEntries(Object.values(PLANS).map((p) => [p.handle, p.entitlements])) };
+}
+
+export function entitlements(): EntitlementService {
+  const repo = new EntitlementRepo();
+  const cache = entitlementCache();
+  return createEntitlements({ subscriptions: subscriptionsPort(), usage: { reserve: async (i) => { const r = await repo.reserve(i); return "reason" in r ? { allowed: false, reason: r.reason === "limit_exceeded" ? "capacity_exhausted" : "conflict" } : { allowed: true, remaining: r.remaining }; }, commit: (i) => repo.commit(i).then((r) => "reason" in r ? { allowed: false, reason: "not_found" } : { allowed: true }), release: (i) => repo.release(i).then((r) => "reason" in r ? { allowed: false, reason: "not_found" } : { allowed: true }) }, capacity: { allocate: (i) => repo.allocate(i), deallocate: (i) => repo.deallocate(i) }, cache: { get: (s) => cache.get(s).then((v) => v?.snapshot ?? null), set: async (s, v, _ttl) => { await cache.put(s, { catalogueVersion: 1, snapshot: v }); }, invalidate: (s) => cache.delete(s) }, catalogue: entitlementCatalogue() });
+}
 
 function authLimiter(binding: RateLimit | undefined): AuthAttemptLimiter {
   return {

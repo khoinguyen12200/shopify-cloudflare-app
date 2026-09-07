@@ -21,3 +21,5 @@ export * from "./schema/notifications";
 export * from "./schema/support";
 export * from "./schema/ai";
 export * from "./schema/lifecycle";
+
+export * from "./schema/entitlements";

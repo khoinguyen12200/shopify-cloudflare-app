@@ -32,6 +32,8 @@ export interface CurrentSubscriptionProjection {
   readonly planHandle: string | null;
   readonly trialEndsAt: number | null;
   readonly currentPeriodEndsAt: number | null;
+  readonly currentPeriodStartsAt: number | null;
+  readonly revision: number;
 }
 
 const statusByKind: Record<string, SubscriptionStatus> = {
@@ -53,6 +55,8 @@ export class ShopSubscriptionRepo {
       priceCurrency: shopSubscriptionItems.priceCurrency,
       trialEndsAt: shopSubscriptions.trialEndsAt,
       currentPeriodEndsAt: shopSubscriptions.currentPeriodEndsAt,
+      currentPeriodStartsAt: shopSubscriptions.currentPeriodStartsAt,
+      revision: shopSubscriptions.appliedOccurredAt,
     }).from(shopSubscriptions).leftJoin(shopSubscriptionItems, and(
       eq(shopSubscriptionItems.shop, shopSubscriptions.shop),
       eq(shopSubscriptionItems.subscriptionId, shopSubscriptions.subscriptionId),
@@ -70,6 +74,8 @@ export class ShopSubscriptionRepo {
       priceCurrency: shopSubscriptionItems.priceCurrency,
       trialEndsAt: shopSubscriptions.trialEndsAt,
       currentPeriodEndsAt: shopSubscriptions.currentPeriodEndsAt,
+      currentPeriodStartsAt: shopSubscriptions.currentPeriodStartsAt,
+      revision: shopSubscriptions.appliedOccurredAt,
     }).from(shopSubscriptions).leftJoin(shopSubscriptionItems, and(
       eq(shopSubscriptionItems.shop, shopSubscriptions.shop),
       eq(shopSubscriptionItems.subscriptionId, shopSubscriptions.subscriptionId),
