@@ -149,4 +149,13 @@ describe("entitlements service", () => {
     await expect(service.commit({ shop: "shop", operationId: "op", actualAmount: -1 })).resolves.toEqual({ allowed: false, reason: "invalid_request" });
     expect(called).toBe(false);
   });
+
+  it("treats cache invalidation failure as advisory", async () => {
+    const service = createEntitlements({
+      subscriptions: { current: async () => ({ status: "ACTIVE", planHandle: "free", revision: 1 }) },
+      cache: { get: async () => null, set: async () => undefined, invalidate: async () => { throw new Error("cache unavailable"); } },
+      catalogue: { version: 1, freePlan: "free", features: {}, plans: { free: {} } },
+    });
+    await expect(service.invalidate("shop")).resolves.toBeUndefined();
+  });
 });

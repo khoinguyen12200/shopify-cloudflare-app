@@ -72,5 +72,12 @@ export function createEntitlements(deps: Dependencies): EntitlementService { con
   async deallocate(input) { const port = capacityPort(deps.capacity); if (!valid(input.shop) || !valid(input.key) || !valid(input.allocationId)) return invalidRequest; return port.deallocate(input); },
   async commit(input) { const port = usagePort(deps.usage); if (!valid(input.shop) || !valid(input.operationId) || (input.actualAmount !== undefined && (!Number.isSafeInteger(input.actualAmount) || input.actualAmount < 0))) return invalidRequest; return port.commit(input); },
   async release(input) { const port = usagePort(deps.usage); if (!valid(input.shop) || !valid(input.operationId)) return invalidRequest; return port.release(input); },
-  async invalidate(shop) { if (deps.cache && valid(shop)) await deps.cache.invalidate(shop); },
+  async invalidate(shop) {
+    if (!deps.cache || !valid(shop)) return;
+    try {
+      await deps.cache.invalidate(shop);
+    } catch {
+      // Cache invalidation is advisory; authoritative state is unaffected.
+    }
+  },
 }; }
