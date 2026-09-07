@@ -42,6 +42,10 @@ describe("entitlement policy contract", () => {
     const catalogue: policy.EntitlementCatalogue = { version: 1, freePlan: "free", features: { x: { kind: "capability" } }, plans: { free: { x: { kind: "enabled" } } } };
     expect(policy.resolveEntitlement(catalogue, { status: "CANCELED", planHandle: "free", revision: 1 }, "x", 0)).toEqual({ allowed: false, reason: "inactive_subscription" });
   });
+  it("fails closed for unsupported catalogue versions", () => {
+    const catalogue: policy.EntitlementCatalogue = { version: 99, freePlan: "free", features: { x: { kind: "capability" } }, plans: { free: { x: { kind: "enabled" } } } };
+    expect(policy.resolveEntitlement(catalogue, { status: "ACTIVE", planHandle: "free", revision: 1 }, "x", 0)).toEqual({ allowed: false, reason: "invalid_catalogue" });
+  });
 
   it("preserves a lifetime quota period", () => {
     const catalogue: policy.EntitlementCatalogue = { version: 1, freePlan: "free", features: { exports: { kind: "quota", period: "lifetime" } }, plans: { free: { exports: { kind: "limit", maximum: 1 } } } };

@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { entitlementOperations } from "~/db/schema";
 import { entitlementAllocations } from "~/db/schema";
 import type { AllocateResult, DeallocateResult, ReserveResult } from "~/ports/entitlements";
+import type { HeldItem, HeldDecision, ReconciliationResult } from "~/ports/entitlement-reconciliation";
 
 async function d1Count(shop: string, key: string): Promise<number> {
   const row = await getEnv().DB.prepare("SELECT count(*) AS count FROM entitlement_allocations WHERE shop=? AND key=? AND state IN ('held','allocated')").bind(shop, key).first<{ count: number }>();
@@ -23,6 +24,26 @@ function isOperationState(value: string): value is OperationState {
 
 /** D1 adapter for quota reservations and reusable concurrent allocations. */
 export class EntitlementRepo {
+  async applyReconciliation(shop: string, item: HeldItem, decision: Exclude<HeldDecision, "ignore">): Promise<ReconciliationResult> {
+    if (shop !== item.shop) return { reason: "invalid_request" };
+    if (item.kind === "capacity") {
+      if (decision !== "allocate" && decision !== "deallocate") return { reason: "invalid_decision" };
+      const state = decision === "allocate" ? "allocated" : "released";
+      await getEnv().DB.prepare("UPDATE entitlement_allocations SET state=?, updated_at=? WHERE shop=? AND key=? AND allocation_id=? AND state='held'").bind(state, Date.now(), shop, item.key, item.id).run();
+      const row = await getEnv().DB.prepare("SELECT state FROM entitlement_allocations WHERE shop=? AND key=? AND allocation_id=?").bind(shop, item.key, item.id).first<{ state: string }>();
+      if (!row) return { reason: "not_found" };
+      return row.state === state ? { state } : { reason: "invalid_state" };
+    }
+    if (decision !== "commit" && decision !== "release") return { reason: "invalid_decision" };
+    const row = await getEnv().DB.prepare("SELECT state FROM entitlement_operations WHERE shop=? AND key=? AND operation_id=?").bind(shop, item.key, item.id).first<{ state: string }>();
+    if (!row) return { reason: "not_found" };
+    const target = decision === "commit" ? "committed" : "released";
+    if (row.state === target) return { state: target };
+    if (row.state !== "held") return { reason: "invalid_state" };
+    const result = await this.reconcileHeld(shop, item.id, decision);
+    if ("reason" in result) return result;
+    return result.state === target ? { state: target } : { reason: "invalid_state" };
+  }
   async listHeldAllocations(shop: string): Promise<readonly { key: string; allocationId: string }[]> {
     return getDb()
       .select({ key: entitlementAllocations.key, allocationId: entitlementAllocations.allocationId })
@@ -70,11 +91,12 @@ export class EntitlementRepo {
 
   async deallocate(input: { shop: string; key: string; allocationId: string; }): Promise<DeallocateResult> {
     const db = getDb();
+    const released = await db.update(entitlementAllocations).set({ state: "released", updatedAt: Date.now() }).where(sql`${entitlementAllocations.shop} = ${input.shop} AND ${entitlementAllocations.key} = ${input.key} AND ${entitlementAllocations.allocationId} = ${input.allocationId} AND ${entitlementAllocations.state} IN ('held','allocated')`).returning({ allocationId: entitlementAllocations.allocationId });
+    if (released.length > 0) return { allowed: true, allocationId: input.allocationId, state: "released" };
     const row = (await db.select().from(entitlementAllocations).where(sql`${entitlementAllocations.shop} = ${input.shop} AND ${entitlementAllocations.key} = ${input.key} AND ${entitlementAllocations.allocationId} = ${input.allocationId}`).limit(1))[0];
     if (!row) return { allowed: false, reason: "not_found" };
     if (row.state === "released") return { allowed: true, allocationId: input.allocationId, state: "released" };
-    await db.update(entitlementAllocations).set({ state: "released", updatedAt: Date.now() }).where(sql`${entitlementAllocations.shop} = ${input.shop} AND ${entitlementAllocations.key} = ${input.key} AND ${entitlementAllocations.allocationId} = ${input.allocationId}`);
-    return { allowed: true, allocationId: input.allocationId, state: "released" };
+    return { allowed: false, reason: "invalid_state" };
   }
   async reserve(input: { shop: string; key: string; operationId: string; period: string; amount: number; maximum: number; subscriptionRevision: number; now?: number }): Promise<ReserveResult> {
     const now = input.now ?? Date.now();
@@ -115,7 +137,7 @@ export class EntitlementRepo {
     const now = input.now ?? Date.now();
     const d1 = getEnv().DB;
     const [operationUpdate, usageUpdate] = await d1.batch([
-      d1.prepare("UPDATE entitlement_operations SET state = 'committed', actual_amount = ?, updated_at = ? WHERE shop = ? AND operation_id = ? AND state = 'held'").bind(actual, now, input.shop, input.operationId),
+      d1.prepare("UPDATE entitlement_operations SET state = 'committed', actual_amount = ?, updated_at = ? WHERE shop = ? AND operation_id = ? AND state = 'held' AND EXISTS (SELECT 1 FROM entitlement_usage WHERE shop = ? AND key = ? AND period = ? AND held >= ?)").bind(actual, now, input.shop, input.operationId, input.shop, row.key, row.period, row.reservedAmount),
       d1.prepare("UPDATE entitlement_usage SET held = held - ?, committed = committed + ?, updated_at = ? WHERE shop = ? AND key = ? AND period = ? AND held >= ? AND changes() = 1").bind(row.reservedAmount, actual, now, input.shop, row.key, row.period, row.reservedAmount),
     ]);
     return operationUpdate.meta.changes === 1 && usageUpdate.meta.changes === 1 ? { state: "committed" } : { reason: "invalid_state" };
@@ -128,7 +150,7 @@ export class EntitlementRepo {
     const now = input.now ?? Date.now();
     const d1 = getEnv().DB;
     const [operationUpdate, usageUpdate] = await d1.batch([
-      d1.prepare("UPDATE entitlement_operations SET state = 'released', updated_at = ? WHERE shop = ? AND operation_id = ? AND state = 'held'").bind(now, input.shop, input.operationId),
+      d1.prepare("UPDATE entitlement_operations SET state = 'released', updated_at = ? WHERE shop = ? AND operation_id = ? AND state = 'held' AND EXISTS (SELECT 1 FROM entitlement_usage WHERE shop = ? AND key = ? AND period = ? AND held >= ?)").bind(now, input.shop, input.operationId, input.shop, row.key, row.period, row.reservedAmount),
       d1.prepare("UPDATE entitlement_usage SET held = held - ?, updated_at = ? WHERE shop = ? AND key = ? AND period = ? AND held >= ? AND changes() = 1").bind(row.reservedAmount, now, input.shop, row.key, row.period, row.reservedAmount),
     ]);
     return operationUpdate.meta.changes === 1 && usageUpdate.meta.changes === 1 ? { state: "released" } : { reason: "invalid_state" };

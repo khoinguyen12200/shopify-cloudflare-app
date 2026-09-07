@@ -35,6 +35,22 @@ import { createEntitlements, type EntitlementService } from "~/services/entitlem
 import type { SubscriptionPort } from "~/ports/entitlements";
 import { ENTITLEMENT_CATALOGUE } from "~/billing/entitlement-catalogue";
 import { createEntitlementCache, type EntitlementCachePort } from "~/adapters/entitlement-cache.server";
+import type { HeldReconciliationPort } from "~/ports/entitlement-reconciliation";
+
+export function entitlementReconciliationPort(): HeldReconciliationPort {
+  const repo = new EntitlementRepo();
+  return {
+    async listHeld(shop) {
+      const quota = await repo.listHeld(shop);
+      const capacity = await repo.listHeldAllocations(shop);
+      return [
+        ...quota.map((row): import("~/ports/entitlement-reconciliation").HeldItem => ({ kind: "quota", shop, key: row.key, id: row.operationId, period: row.period, amount: row.amount })),
+        ...capacity.map((row): import("~/ports/entitlement-reconciliation").HeldItem => ({ kind: "capacity", shop, key: row.key, id: row.allocationId })),
+      ];
+    },
+    apply: (shop, item, decision) => repo.applyReconciliation(shop, item, decision),
+  };
+}
 
 const SHOP_IDENTITY_QUERY = `#graphql
   query AuthenticatedShopIdentity {
@@ -94,7 +110,7 @@ export function aiRepository(): AiRepositoryPort { return new AiRepo(); }
 
 /** Advisory KV cache for entitlement previews; D1 remains authoritative. */
 export function entitlementCache(): EntitlementCachePort {
-  return createEntitlementCache(getEnv().SESSION);
+  return createEntitlementCache(getEnv().SESSION, { catalogueVersion: ENTITLEMENT_CATALOGUE.version });
 }
 
 export function subscriptionsPort(): SubscriptionPort {
@@ -128,7 +144,7 @@ export function entitlements(): EntitlementService {
       },
     },
     capacity: { allocate: (input) => repo.allocate(input), deallocate: (input) => repo.deallocate(input) },
-    cache: { get: (shop) => cache.get(shop).then((value) => value?.snapshot ?? null), set: async (shop, value, _ttl) => { await cache.put(shop, { catalogueVersion: 1, snapshot: value }); }, invalidate: (shop) => cache.delete(shop) },
+    cache: { get: (shop) => cache.get(shop).then((value) => value?.snapshot ?? null), set: async (shop, value, _ttl) => { await cache.put(shop, { catalogueVersion: ENTITLEMENT_CATALOGUE.version, snapshot: value }); }, invalidate: (shop) => cache.delete(shop) },
     catalogue: ENTITLEMENT_CATALOGUE,
   });
 }

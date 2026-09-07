@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { env } from "cloudflare:test";
 import { createEntitlementCache } from "./entitlement-cache.server";
 
 function memoryKv(values = new Map<string, string>(), failures: Partial<Record<"get" | "put" | "delete", boolean>> = {}) {
@@ -16,6 +17,19 @@ function memoryKv(values = new Map<string, string>(), failures: Partial<Record<"
 const snapshot = { status: "ACTIVE" as const, planHandle: "free", revision: 4, periodStart: 10, periodEnd: 20 };
 
 describe("entitlement cache", () => {
+  it("rejects zero-length billing windows from local KV", async () => {
+    await env.SESSION.put("entitlements:v1:empty-window", JSON.stringify({
+      catalogueVersion: 1, snapshot: { ...snapshot, periodStart: 20, periodEnd: 20 }, cachedAt: 100_000,
+    }));
+    await expect(createEntitlementCache(env.SESSION, { now: () => 100_000 }).get("empty-window")).resolves.toBeNull();
+  });
+
+  it("validates local KV entries against the configured catalogue version", async () => {
+    const cache = createEntitlementCache(env.SESSION, { now: () => 100_000, catalogueVersion: 2 });
+    await cache.put("configured-version", { catalogueVersion: 2, snapshot });
+    await expect(cache.get("configured-version")).resolves.toEqual({ catalogueVersion: 2, snapshot });
+    await expect(createEntitlementCache(env.SESSION, { now: () => 100_000 }).get("configured-version")).resolves.toBeNull();
+  });
   it("round trips a valid snapshot with bounded TTL and isolates shops", async () => {
     const kv = memoryKv(); const cache = createEntitlementCache(kv.binding, { now: () => 100_000, ttlSeconds: 60 });
     await cache.put("a", { catalogueVersion: 1, snapshot });

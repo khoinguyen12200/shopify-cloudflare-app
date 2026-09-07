@@ -10,7 +10,7 @@ export type FeatureDefinition = { readonly kind: "capability" } | { readonly kin
 export type EntitlementGrant = { readonly kind: "disabled" } | { readonly kind: "enabled" } | { readonly kind: "unlimited" } | { readonly kind: "limit"; readonly maximum: number };
 export interface EntitlementCatalogue { readonly version: number; readonly freePlan: string; readonly features: Readonly<Record<string, FeatureDefinition>>; readonly plans: Readonly<Record<string, Readonly<Record<string, EntitlementGrant>>>>; }
 export interface SubscriptionSnapshot { readonly status: SubscriptionStatus; readonly planHandle: string | null; readonly revision: number; readonly cancellationEffectiveAt?: number; readonly periodStart?: number; readonly periodEnd?: number; }
-export type EntitlementDenialReason = "inactive_subscription" | "unknown_feature" | "unknown_plan" | "invalid_grant" | "invalid_usage_window" | "disabled";
+export type EntitlementDenialReason = "inactive_subscription" | "unknown_feature" | "unknown_plan" | "invalid_grant" | "invalid_usage_window" | "disabled" | "invalid_catalogue";
 export type ResolvedEntitlement =
   | { readonly allowed: true; readonly kind: "capability" }
   | { readonly allowed: true; readonly kind: "capacity"; readonly maximum?: number }
@@ -36,6 +36,7 @@ function active(subscription: SubscriptionSnapshot, now: number): boolean { retu
 function validMaximum(value: number): boolean { return Number.isSafeInteger(value) && value >= 0; }
 
 export function resolveEntitlement(catalogue: EntitlementCatalogue, subscription: SubscriptionSnapshot, key: EntitlementKey, now: number): ResolvedEntitlement {
+  if (catalogue.version !== 1) return { allowed: false, reason: "invalid_catalogue" };
   const definition = own(catalogue.features, key);
   if (!definition) return { allowed: false, reason: "unknown_feature" };
   if (!active(subscription, now)) return { allowed: false, reason: "inactive_subscription" };
