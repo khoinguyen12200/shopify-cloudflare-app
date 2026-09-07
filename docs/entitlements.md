@@ -25,7 +25,7 @@ const allocated = await entitlements().allocate({
   key: "staff.max",
   allocationId: staffUserId,
 });
-if (!allocated.ok) return allocated;
+if (!allocated.allowed) return allocated;
 
 // If creation fails, or when the staff user is deactivated/deleted:
 await entitlements().deallocate({ shop, key: "staff.max", allocationId: staffUserId });
@@ -42,7 +42,7 @@ const reservation = await entitlements().reserve({
   operationId: requestId,
   amount: 1,
 });
-if (!reservation.ok) return reservation;
+if (!reservation.allowed) return reservation;
 
 try {
   await performWork();

@@ -1,7 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import type { AllocateResult, CheckResult, CommitResult, DeallocateResult, ReleaseResult, ReserveResult } from "~/ports/entitlements";
 import { createEntitlements } from "./entitlements.server";
 
 describe("entitlements service", () => {
+  it("exposes closed result contracts for every public operation", () => {
+    expectTypeOf<CheckResult>().not.toBeAny();
+    expectTypeOf<ReserveResult>().not.toBeAny();
+    expectTypeOf<CommitResult>().not.toBeAny();
+    expectTypeOf<ReleaseResult>().not.toBeAny();
+    expectTypeOf<AllocateResult>().not.toBeAny();
+    expectTypeOf<DeallocateResult>().not.toBeAny();
+  });
   it("checks a capability using the subscription snapshot", async () => {
     const service = createEntitlements({
       subscriptions: { current: async () => ({ status: "ACTIVE", planHandle: "free", revision: 1 }) },

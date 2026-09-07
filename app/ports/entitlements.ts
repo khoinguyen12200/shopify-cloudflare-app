@@ -4,6 +4,13 @@ export type EntitlementOperationResult =
   | { readonly allowed: true; readonly remaining?: number; readonly allocationId?: string }
   | { readonly allowed: false; readonly reason: "conflict" | "capacity_exhausted" | "not_found" | "invalid_request" | "invalid_amount" | "invalid_state" };
 
+export type CheckResult = import("~/domain/entitlement-policy").ResolvedEntitlement | EntitlementOperationResult;
+export type ReserveResult = CheckResult;
+export type CommitResult = EntitlementOperationResult;
+export type ReleaseResult = EntitlementOperationResult;
+export type AllocateResult = CheckResult;
+export type DeallocateResult = EntitlementOperationResult;
+
 export interface SubscriptionPort {
   current(shop: string): Promise<SubscriptionSnapshot>;
 }
@@ -17,6 +24,14 @@ export interface UsagePort {
   reserve(input: { readonly shop: string; readonly key: EntitlementKey; readonly operationId: string; readonly amount: number; readonly maximum: number; readonly period: string; readonly periodStart?: number; readonly periodEnd?: number; readonly subscriptionRevision: number }): Promise<EntitlementOperationResult>;
   commit(input: { readonly shop: string; readonly operationId: string; readonly actualAmount?: number }): Promise<EntitlementOperationResult>;
   release(input: { readonly shop: string; readonly operationId: string }): Promise<EntitlementOperationResult>;
+}
+
+export interface HeldUsagePort {
+  listHeld(shop: string): Promise<readonly { readonly operationId: string; readonly key: string; readonly period: string; readonly amount: number }[]>;
+}
+
+export interface HeldCapacityPort {
+  listHeldAllocations(shop: string): Promise<readonly { readonly key: string; readonly allocationId: string }[]>;
 }
 
 export interface EntitlementCachePort {

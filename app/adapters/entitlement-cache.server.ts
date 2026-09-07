@@ -14,7 +14,7 @@ function valid(value: unknown, now: number, ttl: number): value is EntitlementCa
   if (!value || typeof value !== "object") return false;
   const record: Record<string, unknown> = Object.fromEntries(Object.entries(value));
   const snapshot = record.snapshot;
-  if (record.catalogueVersion !== 1 || !Number.isSafeInteger(record.catalogueVersion) || typeof record.cachedAt !== "number" || record.cachedAt > now || now - record.cachedAt > ttl * 1000 || !snapshot || typeof snapshot !== "object") return false;
+  if (record.catalogueVersion !== 1 || !Number.isSafeInteger(record.catalogueVersion) || !nonNegativeSafe(record.cachedAt) || record.cachedAt > now || now - record.cachedAt > ttl * 1000 || !snapshot || typeof snapshot !== "object") return false;
   const s: Record<string, unknown> = Object.fromEntries(Object.entries(snapshot));
   const timestamps = [s.cancellationEffectiveAt, s.periodStart, s.periodEnd].filter((v) => v !== undefined);
   return typeof s.status === "string" && STATUSES.has(s.status) && (typeof s.planHandle === "string" || s.planHandle === null) && nonNegativeSafe(s.revision) && timestamps.every(nonNegativeSafe) && (s.periodStart === undefined || s.periodEnd === undefined || (nonNegativeSafe(s.periodStart) && nonNegativeSafe(s.periodEnd) && s.periodStart <= s.periodEnd));

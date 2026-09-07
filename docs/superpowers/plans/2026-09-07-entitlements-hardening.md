@@ -1,6 +1,6 @@
 # Entitlement Foundation Hardening Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Make the entitlement subsystem a correctness-safe, app-neutral template foundation that a future project can configure and use immediately for capabilities, reusable capacity, and consumable quotas.
 
@@ -39,82 +39,106 @@ The review is correct and each finding is addressed below: the repository uses r
 
 ### Task 1: Lock the public contract and period model
 
+Status: complete. Concrete lifetime, UTC-month, and billing-period windows are
+implemented and covered by policy/service tests.
+
 **Files:** `app/domain/entitlement-policy.test.ts`, `app/domain/entitlement-policy.ts`, `app/ports/entitlements.ts`, `app/services/entitlements.server.test.ts`
 
-- [ ] Write failing tests for concrete period keys: `lifetime`, UTC `YYYY-MM`, and billing period `start:end`; reject missing/expired billing bounds.
-- [ ] Run focused policy tests and observe failure caused by abstract period output.
-- [ ] Define `UsageWindow` and typed `CheckResult`, `ReserveResult`, `CommitResult`, `ReleaseResult`, `AllocateResult`, and `DeallocateResult` unions with closed denial reasons.
-- [ ] Implement pure `resolveUsageWindow(period, now, subscription)` and update `ResolvedEntitlement` to carry the derived window for quotas.
-- [ ] Run policy/service tests and confirm green.
-- [ ] Refactor long lines into focused functions without changing behavior; commit.
+- [x] Write failing tests for concrete period keys: `lifetime`, UTC `YYYY-MM`, and billing period `start:end`; reject missing/expired billing bounds.
+- [x] Run focused policy tests and observe failure caused by abstract period output.
+- [x] Define `UsageWindow` and typed `CheckResult`, `ReserveResult`, `CommitResult`, `ReleaseResult`, `AllocateResult`, and `DeallocateResult` unions with closed denial reasons.
+- [x] Implement pure `resolveUsageWindow(period, now, subscription)` and update `ResolvedEntitlement` to carry the derived window for quotas.
+- [x] Run policy/service tests and confirm green.
+- [x] Refactor long lines into focused functions without changing behavior; commit.
 
 ### Task 2: Replace inferred catalogue metadata with explicit typed configuration
 
+Status: complete. `ENTITLEMENT_CATALOGUE` contains explicit definitions and
+grants for capability, capacity, and quota examples.
+
 **Files:** `app/billing/plans.ts`, `app/wiring.server.ts`, `app/billing/gates.ts`, related tests
 
-- [ ] Write a failing type/runtime test proving a feature's kind and quota period come from explicit catalogue definitions, not key naming conventions.
-- [ ] Verify RED.
-- [ ] Add a small typed example catalogue containing `reports.export` capability, `staff.max` capacity, and `documents.monthly` quota; keep display names/prices separate.
-- [ ] Wire factories from that catalogue and remove `.monthly`/`.max` string inference.
-- [ ] Verify focused tests and typecheck green; commit.
+- [x] Write a failing type/runtime test proving a feature's kind and quota period come from explicit catalogue definitions, not key naming conventions.
+- [x] Verify RED.
+- [x] Add a small typed example catalogue containing `reports.export` capability, `staff.max` capacity, and `documents.monthly` quota; keep display names/prices separate.
+- [x] Wire factories from that catalogue and remove `.monthly`/`.max` string inference.
+- [x] Verify focused tests and typecheck green; commit.
 
 ### Task 3: Make quota reservation atomic and idempotent
 
+Status: complete. Conditional D1 aggregate updates and idempotent operation
+replays prevent concurrent over-allocation.
+
 **Files:** `app/models/entitlements.server.ts`, `app/db/schema/entitlements.ts`, `app/services/entitlements.server.test.ts`, D1 integration tests
 
-- [ ] Write failing local-D1 tests launching concurrent reservations whose total equals/exceeds the maximum, plus replay/conflict and shop-isolation cases.
-- [ ] Verify RED and capture the race/incorrect result.
-- [ ] Implement a single atomic D1 transaction/batch strategy: insert the operation idempotently, conditionally increment aggregate usage only when `committed + held + amount <= maximum`, and roll back/return a typed denial if any condition fails.
-- [ ] Add revision and concrete period predicates to the same write path; use conditional state transitions for commit/release.
-- [ ] Verify concurrent, replay, conflict, exact-limit, zero, safe-integer, and period-isolation tests green; commit.
+- [x] Write failing local-D1 tests launching concurrent reservations whose total equals/exceeds the maximum, plus replay/conflict and shop-isolation cases.
+- [x] Verify RED and capture the race/incorrect result.
+- [x] Implement a single atomic D1 transaction/batch strategy: insert the operation idempotently, conditionally increment aggregate usage only when `committed + held + amount <= maximum`, and roll back/return a typed denial if any condition fails.
+- [x] Add revision and concrete period predicates to the same write path; use conditional state transitions for commit/release.
+- [x] Verify concurrent, replay, conflict, exact-limit, zero, safe-integer, and period-isolation tests green; commit.
 
 ### Task 4: Implement reusable capacity lifecycle atomically
 
+Status: complete. Capacity allocation/release and concurrent one-slot behavior
+are covered by local D1 tests.
+
 **Files:** `app/models/entitlements.server.ts`, `app/ports/entitlements.ts`, capacity tests
 
-- [ ] Write failing tests for `held -> allocated -> released`, duplicate allocate/deallocate, release-and-reuse, concurrent maximum-one allocation, and revision conflict.
-- [ ] Verify RED.
-- [ ] Implement atomic capacity hold/allocate using shop/key/allocation identity and active-state count; ensure released rows do not count and retries are idempotent.
-- [ ] Implement conditional transitions so a row cannot be allocated twice or released twice; return typed remaining capacity.
-- [ ] Verify all capacity tests and full typecheck green; commit.
+- [x] Write failing tests for `held -> allocated -> released`, duplicate allocate/deallocate, release-and-reuse, concurrent maximum-one allocation, and revision conflict.
+- [x] Verify RED.
+- [x] Implement atomic capacity hold/allocate using shop/key/allocation identity and active-state count; ensure released rows do not count and retries are idempotent.
+- [x] Implement conditional transitions so a row cannot be allocated twice or released twice; return typed remaining capacity.
+- [x] Verify all capacity tests and full typecheck green; commit.
 
 ### Task 5: Harden cache parsing and invalidation
 
+Status: complete. Cache parsing validates persisted fields, bounded timestamps,
+TTL, malformed values, and shop-scoped invalidation.
+
 **Files:** `app/adapters/entitlement-cache.server.ts`, cache tests, subscription projection tests
 
-- [ ] Write failing tests for malformed JSON, wrong catalogue version, invalid status/plan/revision, invalid optional timestamps, stale/future timestamps, shop isolation, KV failures, and cache invalidation after projection repair/uninstall.
-- [ ] Verify RED.
-- [ ] Replace unchecked casts with `unknown` narrowing/type guards that validate every persisted field before returning a snapshot; enforce bounded TTL and reject future timestamps.
-- [ ] Verify cache tests and projection invalidation tests green; commit.
+- [x] Write failing tests for malformed JSON, wrong catalogue version, invalid status/plan/revision, invalid optional timestamps, stale/future timestamps, shop isolation, KV failures, and cache invalidation after projection repair/uninstall.
+- [x] Verify RED.
+- [x] Replace unchecked casts with `unknown` narrowing/type guards that validate every persisted field before returning a snapshot; enforce bounded TTL and reject future timestamps.
+- [x] Verify cache tests and projection invalidation tests green; commit.
 
 ### Task 6: Add generic held-state reconciliation
 
+Status: complete. Held quota and capacity records can be listed by shop and
+processed only through explicit idempotent decisions.
+
 **Files:** `app/ports/entitlements.ts`, `app/models/entitlements.server.ts`, `app/services/entitlement-reconciliation.server.ts`, tests
 
-- [ ] Write failing tests for listing held quota operations/capacity allocations by shop and applying explicit commit/release or allocate/deallocate decisions idempotently.
-- [ ] Verify RED.
-- [ ] Add narrow list ports and a pure reconciliation decision function; add a service entry point that never guesses ownership and never silently expires rows.
-- [ ] Verify reconciliation tests and shop isolation green; commit.
+- [x] Write failing tests for listing held quota operations/capacity allocations by shop and applying explicit commit/release or allocate/deallocate decisions idempotently.
+- [x] Verify RED.
+- [x] Add narrow list ports and a pure reconciliation decision function; add a service entry point that never guesses ownership and never silently expires rows.
+- [x] Verify reconciliation tests and shop isolation green; commit.
 
 ### Task 7: Final integration contract and documentation
 
+Status: complete. Gates and app-neutral handoff documentation use the final
+`allowed` result contract and concrete period semantics.
+
 **Files:** `app/billing/gates.ts`, gate tests, `docs/entitlements-template.md`, `docs/entitlements.md`
 
-- [ ] Write failing contract tests showing future feature code can use capability, quota, and capacity gates without importing plans, repositories, Shopify, or app tables.
-- [ ] Verify RED.
-- [ ] Finalize gate signatures with typed results and explicit examples for one active resource forever, lifetime quota, monthly quota, and billing-period quota.
-- [ ] Document what a new project must provide: feature key catalogue, plan grants, stable allocation IDs, idempotency IDs, usage measurement, reconciliation trigger, subscription projection hookup, and migration deployment.
-- [ ] Document what must remain outside the template: business resources, provider adapters, merchant UI, and app-specific authorization.
-- [ ] Verify docs examples compile conceptually against the final signatures; commit.
+- [x] Write failing contract tests showing future feature code can use capability, quota, and capacity gates without importing plans, repositories, Shopify, or app tables.
+- [x] Verify RED.
+- [x] Finalize gate signatures with typed results and explicit examples for one active resource forever, lifetime quota, monthly quota, and billing-period quota.
+- [x] Document what a new project must provide: feature key catalogue, plan grants, stable allocation IDs, idempotency IDs, usage measurement, reconciliation trigger, subscription projection hookup, and migration deployment.
+- [x] Document what must remain outside the template: business resources, provider adapters, merchant UI, and app-specific authorization.
+- [x] Verify docs examples compile conceptually against the final signatures; commit.
 
 ### Task 8: Full verification and delivery audit
 
-- [ ] Run `npm run typecheck`.
-- [ ] Run `npm run lint` and confirm no cast/style contract violations.
-- [ ] Run focused domain/service/D1/KV tests.
-- [ ] Run `npm test` and `npm run verify`.
-- [ ] Run `git diff --check`, inspect migration metadata, and confirm every plan invariant has a test.
-- [ ] Update this plan with completion status only after observed green output; commit the implementation as separate logical commits.
+Status: complete. Typecheck, lint, focused entitlement tests, full worker/DOM
+test suites, and `git diff --check` pass.
+
+- [x] Run `npm run typecheck`.
+- [x] Run `npm run lint` and confirm no cast/style contract violations.
+- [x] Run focused domain/service/D1/KV tests.
+- [x] Run `npm test` and `npm run verify`.
+- [x] Run `git diff --check`, inspect migration metadata, and confirm every plan invariant has a test.
+- [x] Update this plan with completion status only after observed green output; commit the implementation as separate logical commits.
 
 ## Acceptance Criteria
 

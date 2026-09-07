@@ -13,6 +13,13 @@ function isOperationState(value: string): value is OperationState {
 
 /** D1 adapter for quota reservations and reusable concurrent allocations. */
 export class EntitlementRepo {
+  async listHeldAllocations(shop: string): Promise<readonly { key: string; allocationId: string }[]> {
+    return getDb()
+      .select({ key: entitlementAllocations.key, allocationId: entitlementAllocations.allocationId })
+      .from(entitlementAllocations)
+      .where(sql`${entitlementAllocations.shop} = ${shop} AND ${entitlementAllocations.state} = 'held'`);
+  }
+
   async listHeld(shop: string): Promise<readonly { operationId: string; key: string; period: string; amount: number }[]> {
     const rows = await getDb().select({ operationId: entitlementOperations.operationId, key: entitlementOperations.key, period: entitlementOperations.period, amount: entitlementOperations.reservedAmount }).from(entitlementOperations).where(sql`${entitlementOperations.shop} = ${shop} AND ${entitlementOperations.state} = 'held'`);
     return rows;
@@ -63,13 +70,21 @@ export class EntitlementRepo {
         ? { state: row.state, reservedAmount: row.reservedAmount, remaining: Math.max(0, input.maximum - row.reservedAmount) }
         : { reason: "operation_conflict" };
     }
-    const usage = await db.select().from(entitlementUsage).where(sql`${entitlementUsage.shop} = ${input.shop} AND ${entitlementUsage.key} = ${input.key} AND ${entitlementUsage.period} = ${input.period}`).limit(1);
-    const committed = usage[0]?.committed ?? 0;
-    const held = usage[0]?.held ?? 0;
-    if (committed + held + input.amount > input.maximum) return { reason: "limit_exceeded" };
-    await db.insert(entitlementOperations).values({ shop: input.shop, operationId: input.operationId, key: input.key, period: input.period, requestedAmount: input.amount, reservedAmount: input.amount, actualAmount: null, subscriptionRevision: input.subscriptionRevision, state: "held", createdAt: now, updatedAt: now });
-    await db.insert(entitlementUsage).values({ shop: input.shop, key: input.key, period: input.period, committed, held: held + input.amount, updatedAt: now }).onConflictDoUpdate({ target: [entitlementUsage.shop, entitlementUsage.key, entitlementUsage.period], set: { held: held + input.amount, updatedAt: now } });
-    return { state: "held", reservedAmount: input.amount, remaining: input.maximum - committed - held - input.amount };
+    const d1 = getEnv().DB;
+    const [, inserted, updated] = await d1.batch([
+      d1.prepare("INSERT OR IGNORE INTO entitlement_usage (shop, key, period, committed, held, updated_at) VALUES (?, ?, ?, 0, 0, ?)").bind(input.shop, input.key, input.period, now),
+      d1.prepare("INSERT OR IGNORE INTO entitlement_operations (shop, operation_id, key, period, requested_amount, reserved_amount, actual_amount, subscription_revision, state, created_at, updated_at) SELECT ?, ?, ?, ?, ?, ?, NULL, ?, 'held', ?, ? WHERE EXISTS (SELECT 1 FROM entitlement_usage WHERE shop = ? AND key = ? AND period = ? AND committed + held + ? <= ?)").bind(input.shop, input.operationId, input.key, input.period, input.amount, input.amount, input.subscriptionRevision, now, now, input.shop, input.key, input.period, input.amount, input.maximum),
+      d1.prepare("UPDATE entitlement_usage SET held = held + ?, updated_at = ? WHERE shop = ? AND key = ? AND period = ? AND changes() = 1").bind(input.amount, now, input.shop, input.key, input.period),
+    ]);
+    if (inserted.meta.changes !== 1 || updated.meta.changes !== 1) {
+      const raced = (await db.select().from(entitlementOperations).where(sql`${entitlementOperations.shop} = ${input.shop} AND ${entitlementOperations.operationId} = ${input.operationId}`).limit(1))[0];
+      if (!raced) return { reason: "limit_exceeded" };
+      return raced.key === input.key && raced.period === input.period && raced.requestedAmount === input.amount && raced.subscriptionRevision === input.subscriptionRevision && isOperationState(raced.state)
+        ? { state: raced.state, reservedAmount: raced.reservedAmount, remaining: Math.max(0, input.maximum - raced.reservedAmount) }
+        : { reason: "operation_conflict" };
+    }
+    const aggregate = await d1.prepare("SELECT committed, held FROM entitlement_usage WHERE shop = ? AND key = ? AND period = ?").bind(input.shop, input.key, input.period).first<{ committed: number; held: number }>();
+    return { state: "held", reservedAmount: input.amount, remaining: input.maximum - Number(aggregate?.committed ?? 0) - Number(aggregate?.held ?? 0) };
   }
 
   async commit(input: { shop: string; operationId: string; actualAmount?: number; now?: number }): Promise<{ state: OperationState } | { reason: "not_found" | "invalid_state" | "invalid_amount" }> {

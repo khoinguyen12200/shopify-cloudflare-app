@@ -34,6 +34,7 @@ describe("entitlement cache", () => {
     ["reversed period", JSON.stringify({ catalogueVersion: 1, snapshot: { ...snapshot, periodStart: 30, periodEnd: 20 }, cachedAt: 100_000 })],
     ["stale", JSON.stringify({ catalogueVersion: 1, snapshot, cachedAt: 39_999 })],
     ["future", JSON.stringify({ catalogueVersion: 1, snapshot, cachedAt: 100_001 })],
+    ["non-finite cached time", JSON.stringify({ catalogueVersion: 1, snapshot, cachedAt: Number.NaN })],
   ])("rejects %s cache entries", async (_name, raw) => {
     const kv = memoryKv(new Map([["entitlements:v1:a", raw]]));
     await expect(createEntitlementCache(kv.binding, { now: () => 100_000, ttlSeconds: 60 }).get("a")).resolves.toBeNull();
