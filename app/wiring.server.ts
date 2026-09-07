@@ -32,9 +32,9 @@ import { reconcileAfterUninstall } from "~/services/reconcile-after-uninstall";
 import type { AuthAttemptLimiter } from "~/ports/auth-rate-limit";
 import { EntitlementRepo } from "~/models/entitlements.server";
 import { createEntitlements, type EntitlementService } from "~/services/entitlements.server";
-import type { SubscriptionPort } from "~/ports/entitlements";
+import type { EntitlementCachePort, SubscriptionPort } from "~/ports/entitlements";
 import { ENTITLEMENT_CATALOGUE } from "~/billing/entitlement-catalogue";
-import { createEntitlementCache, type EntitlementCachePort } from "~/adapters/entitlement-cache.server";
+import { createEntitlementCache, type EntitlementCacheAdapterPort } from "~/adapters/entitlement-cache.server";
 import type { HeldReconciliationPort } from "~/ports/entitlement-reconciliation";
 
 export function entitlementReconciliationPort(): HeldReconciliationPort {
@@ -100,7 +100,7 @@ export type AiRepositoryPort = Pick<AiRepo, "chainFor" | "markHealth" | "recordR
 
 export function shops(): ShopsPort { return new ShopRepo(); }
 export function support(): SupportPort { return new SupportRepo(); }
-export function shopSubscriptions(): ShopSubscriptionsPort { return new ShopSubscriptionRepo({ invalidate: (shop) => entitlementCache().delete(shop) }); }
+export function shopSubscriptions(): ShopSubscriptionsPort { return new ShopSubscriptionRepo({ invalidate: invalidateEntitlements }); }
 export function shopifyEvents(): ShopifyEventsPort { return new ShopifyEventRepo(); }
 export function shopSyncCheckpoints(): ShopSyncCheckpointsPort { return new ShopSyncCheckpointRepo(); }
 export function webhookScopeObservations(): WebhookScopeObservationsPort { return new WebhookScopeObservationRepo(); }
@@ -109,8 +109,29 @@ export function operationalHealth(): OperationalHealthPort { return new Operatio
 export function aiRepository(): AiRepositoryPort { return new AiRepo(); }
 
 /** Advisory KV cache for entitlement previews; D1 remains authoritative. */
-export function entitlementCache(): EntitlementCachePort {
+export function entitlementCache(): EntitlementCacheAdapterPort {
   return createEntitlementCache(getEnv().SESSION, { catalogueVersion: ENTITLEMENT_CATALOGUE.version });
+}
+
+export function entitlementCachePort(): EntitlementCachePort {
+  const cache = entitlementCache();
+  return {
+    get: async (shop) => (await cache.get(shop))?.snapshot ?? null,
+    set: async (shop, snapshot, _ttlSeconds) => cache.put(shop, { catalogueVersion: ENTITLEMENT_CATALOGUE.version, snapshot }),
+    invalidate: (shop) => cache.delete(shop),
+  };
+}
+
+async function invalidateEntitlements(shop: string): Promise<void> {
+  try {
+    await entitlementCache().delete(shop);
+  } catch (error) {
+    console.error(JSON.stringify({
+      event: "entitlements.cache_invalidation_failed",
+      shop,
+      error: error instanceof Error ? error.message : "unknown",
+    }));
+  }
 }
 
 export function subscriptionsPort(): SubscriptionPort {
@@ -125,7 +146,6 @@ export function subscriptionsPort(): SubscriptionPort {
 
 export function entitlements(): EntitlementService {
   const repo = new EntitlementRepo();
-  const cache = entitlementCache();
   return createEntitlements({
     subscriptions: subscriptionsPort(),
     usage: {
@@ -144,7 +164,7 @@ export function entitlements(): EntitlementService {
       },
     },
     capacity: { allocate: (input) => repo.allocate(input), deallocate: (input) => repo.deallocate(input) },
-    cache: { get: (shop) => cache.get(shop).then((value) => value?.snapshot ?? null), set: async (shop, value, _ttl) => { await cache.put(shop, { catalogueVersion: ENTITLEMENT_CATALOGUE.version, snapshot: value }); }, invalidate: (shop) => cache.delete(shop) },
+    cache: entitlementCachePort(),
     catalogue: ENTITLEMENT_CATALOGUE,
   });
 }
@@ -245,7 +265,7 @@ export function historyLedger() {
     recordPartnerRelationship: (event: Parameters<ShopifyEventRepo["recordPartnerRelationship"]>[0]) => repo.recordPartnerRelationship(event),
     recordPartnerSubscription: async (event: Parameters<ShopifyEventRepo["recordPartnerSubscription"]>[0]) => {
       const result = await repo.recordPartnerSubscription(event);
-      await entitlementCache().delete(event.shop);
+      await invalidateEntitlements(event.shop);
       return result;
     },
   };
@@ -314,7 +334,7 @@ export function tenantPurgeDependencies() {
         return sessions.length;
       },
     },
-    entitlementCache: { invalidate: (shop: string) => entitlementCache().delete(shop) },
+    entitlementCache: { invalidate: invalidateEntitlements },
   };
 }
 
@@ -325,7 +345,7 @@ export function webhookConsumer() {
   const handlers = {
     "app/uninstalled": async (delivery: ConsumerDelivery) => {
       await shops().recordUninstall(delivery.shop, Date.now());
-      await entitlementCache().delete(delivery.shop);
+      await invalidateEntitlements(delivery.shop);
       const found = await sessions.findSessionsByShop(delivery.shop);
       await sessions.deleteSessions(found.map(({ id }) => id));
       const result = await reconcileAfterUninstall({

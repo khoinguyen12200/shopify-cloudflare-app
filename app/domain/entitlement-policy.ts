@@ -42,7 +42,8 @@ export function resolveEntitlement(catalogue: EntitlementCatalogue, subscription
   const definition = own(catalogue.features, key);
   if (!definition) return { allowed: false, reason: "unknown_feature" };
   if (!active(subscription, now)) return { allowed: false, reason: "inactive_subscription" };
-  const grants = own(catalogue.plans, subscription.planHandle ?? catalogue.freePlan);
+  const planHandle = subscription.status === "NONE" ? catalogue.freePlan : subscription.planHandle ?? catalogue.freePlan;
+  const grants = own(catalogue.plans, planHandle);
   if (!grants) return { allowed: false, reason: "unknown_plan" };
   const grant = own(grants, key);
   if (!grant) return { allowed: false, reason: "unknown_plan" };

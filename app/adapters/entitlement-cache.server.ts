@@ -1,7 +1,7 @@
 import type { SubscriptionSnapshot } from "~/domain/entitlement-policy";
 
 export interface EntitlementCacheValue { readonly catalogueVersion: number; readonly snapshot: SubscriptionSnapshot; }
-export interface EntitlementCachePort { get(shop: string): Promise<EntitlementCacheValue | null>; put(shop: string, value: EntitlementCacheValue): Promise<void>; delete(shop: string): Promise<void>; }
+export interface EntitlementCacheAdapterPort { get(shop: string): Promise<EntitlementCacheValue | null>; put(shop: string, value: EntitlementCacheValue): Promise<void>; delete(shop: string): Promise<void>; }
 interface EntitlementKv {
   get(key: string): Promise<string | null>;
   put(key: string, value: string, options?: KVNamespacePutOptions): Promise<void>;
@@ -21,7 +21,7 @@ function valid(value: unknown, now: number, ttl: number, catalogueVersion: numbe
   const timestamps = [s.cancellationEffectiveAt, s.periodStart, s.periodEnd].filter((v) => v !== undefined);
   return typeof s.status === "string" && STATUSES.has(s.status) && (typeof s.planHandle === "string" || s.planHandle === null) && nonNegativeSafe(s.revision) && timestamps.every(nonNegativeSafe) && (s.periodStart === undefined || s.periodEnd === undefined || (nonNegativeSafe(s.periodStart) && nonNegativeSafe(s.periodEnd) && s.periodStart < s.periodEnd));
 }
-export function createEntitlementCache(kv: EntitlementKv, options: { now?: () => number; ttlSeconds?: number; catalogueVersion?: number } = {}): EntitlementCachePort {
+export function createEntitlementCache(kv: EntitlementKv, options: { now?: () => number; ttlSeconds?: number; catalogueVersion?: number } = {}): EntitlementCacheAdapterPort {
   const now = options.now ?? Date.now;
   const requestedTtl = options.ttlSeconds ?? DEFAULT_TTL_SECONDS;
   const ttl = Number.isSafeInteger(requestedTtl) ? Math.min(MAX_TTL_SECONDS, Math.max(1, requestedTtl)) : DEFAULT_TTL_SECONDS;

@@ -64,4 +64,9 @@ describe("entitlement policy contract", () => {
       kind: "capability",
     });
   });
+
+  it("uses the free plan for a NONE subscription regardless of stale plan handle", () => {
+    const catalogue: policy.EntitlementCatalogue = { version: 1, freePlan: "free", features: { x: { kind: "capability" } }, plans: { free: { x: { kind: "enabled" } }, paid: { x: { kind: "disabled" } } } };
+    expect(policy.resolveEntitlement(catalogue, { status: "NONE", planHandle: "paid", revision: 0 }, "x", 0)).toEqual({ allowed: true, kind: "capability" });
+  });
 });
