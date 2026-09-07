@@ -16,8 +16,29 @@ const invalidRequest: EntitlementOperationFailure = { allowed: false, reason: "i
 const valid = (value: string) => value.trim().length > 0;
 const capacityPort = (port: CapacityPort | undefined): CapacityPort => { if (!port) throw new Error("capacity port unavailable"); return port; };
 const usagePort = (port: UsagePort | undefined): UsagePort => { if (!port) throw new Error("usage port unavailable"); return port; };
-async function authoritative(deps: Dependencies, shop: string) { const snapshot = await deps.subscriptions.current(shop); if (deps.cache) await deps.cache.set(shop, snapshot, 60); return snapshot; }
-async function preview(deps: Dependencies, shop: string) { return await deps.cache?.get(shop) ?? authoritative(deps, shop); }
+async function authoritative(deps: Dependencies, shop: string) {
+  const snapshot = await deps.subscriptions.current(shop);
+  if (deps.cache) {
+    try {
+      await deps.cache.set(shop, snapshot, 60);
+    } catch {
+      // Cache is advisory; authoritative subscription data still wins.
+    }
+  }
+  return snapshot;
+}
+
+async function preview(deps: Dependencies, shop: string) {
+  if (deps.cache) {
+    try {
+      const snapshot = await deps.cache.get(shop);
+      if (snapshot) return snapshot;
+    } catch {
+      // Cache is advisory; fall through to the subscription projection.
+    }
+  }
+  return authoritative(deps, shop);
+}
 function makeCheck(deps: Dependencies, now: () => number) {
   return async (shop: string, key: EntitlementKey): Promise<CheckResult> => {
     if (!valid(shop) || !valid(key)) return invalidRequest;

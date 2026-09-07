@@ -32,7 +32,9 @@ export function resolveUsageWindow(period: UsagePeriod, now: number, subscriptio
 }
 
 function own<T>(record: Readonly<Record<string, T>>, key: string): T | undefined { return Object.prototype.hasOwnProperty.call(record, key) ? record[key] : undefined; }
-function active(subscription: SubscriptionSnapshot, now: number): boolean { return subscription.status === "ACTIVE" || (subscription.status === "CANCELLATION_SCHEDULED" && subscription.cancellationEffectiveAt !== undefined && now < subscription.cancellationEffectiveAt); }
+function active(subscription: SubscriptionSnapshot, now: number): boolean {
+  return subscription.status === "ACTIVE" || subscription.status === "NONE" || (subscription.status === "CANCELLATION_SCHEDULED" && subscription.cancellationEffectiveAt !== undefined && now < subscription.cancellationEffectiveAt);
+}
 function validMaximum(value: number): boolean { return Number.isSafeInteger(value) && value >= 0; }
 
 export function resolveEntitlement(catalogue: EntitlementCatalogue, subscription: SubscriptionSnapshot, key: EntitlementKey, now: number): ResolvedEntitlement {

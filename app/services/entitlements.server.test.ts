@@ -20,6 +20,50 @@ describe("entitlements service", () => {
     expect(await service.check("shop", "x")).toEqual({ allowed: true, kind: "capability" });
   });
 
+  it("falls back to the authoritative subscription when cache reads fail", async () => {
+    let currentCalls = 0;
+    const service = createEntitlements({
+      subscriptions: {
+        current: async () => {
+          currentCalls += 1;
+          return { status: "ACTIVE", planHandle: "free", revision: 1 };
+        },
+      },
+      cache: {
+        get: async () => { throw new Error("cache unavailable"); },
+        set: async () => undefined,
+        invalidate: async () => undefined,
+      },
+      catalogue: { version: 1, freePlan: "free", features: { x: { kind: "capability" } }, plans: { free: { x: { kind: "enabled" } } } },
+      now: () => 0,
+    });
+
+    await expect(service.check("shop", "x")).resolves.toEqual({ allowed: true, kind: "capability" });
+    expect(currentCalls).toBe(1);
+  });
+
+  it("returns authoritative decisions when cache writes fail", async () => {
+    let currentCalls = 0;
+    const service = createEntitlements({
+      subscriptions: {
+        current: async () => {
+          currentCalls += 1;
+          return { status: "ACTIVE", planHandle: "free", revision: 1 };
+        },
+      },
+      cache: {
+        get: async () => null,
+        set: async () => { throw new Error("cache unavailable"); },
+        invalidate: async () => undefined,
+      },
+      catalogue: { version: 1, freePlan: "free", features: { x: { kind: "capability" } }, plans: { free: { x: { kind: "enabled" } } } },
+      now: () => 0,
+    });
+
+    await expect(service.check("shop", "x")).resolves.toEqual({ allowed: true, kind: "capability" });
+    expect(currentCalls).toBe(1);
+  });
+
   it("allocates reusable capacity through the capacity port", async () => {
     const service = createEntitlements({
       subscriptions: { current: async () => ({ status: "ACTIVE", planHandle: "free", revision: 7 }) },

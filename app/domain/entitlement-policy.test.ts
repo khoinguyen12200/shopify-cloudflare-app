@@ -51,4 +51,17 @@ describe("entitlement policy contract", () => {
     const catalogue: policy.EntitlementCatalogue = { version: 1, freePlan: "free", features: { exports: { kind: "quota", period: "lifetime" } }, plans: { free: { exports: { kind: "limit", maximum: 1 } } } };
     expect(policy.resolveEntitlement(catalogue, { status: "ACTIVE", planHandle: null, revision: 1 }, "exports", 0)).toEqual({ allowed: true, kind: "quota", maximum: 1, period: "lifetime", window: { kind: "lifetime", key: "lifetime" } });
   });
+
+  it("uses the free plan for a NONE subscription", () => {
+    const catalogue: policy.EntitlementCatalogue = {
+      version: 1,
+      freePlan: "free",
+      features: { "reports.view": { kind: "capability" } },
+      plans: { free: { "reports.view": { kind: "enabled" } } },
+    };
+    expect(policy.resolveEntitlement(catalogue, { status: "NONE", planHandle: null, revision: 0 }, "reports.view", 0)).toEqual({
+      allowed: true,
+      kind: "capability",
+    });
+  });
 });
