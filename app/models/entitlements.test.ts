@@ -114,6 +114,15 @@ describe("EntitlementRepo", () => {
     });
   });
 
+  it("requires an initialized projection and matches its numeric revision", async () => {
+    await runWithRequestContext(env, async () => {
+      const repo = new EntitlementRepo();
+      expect(await repo.reserve({ shop: "missing-projection", key: "exports", operationId: "op", period: "lifetime", amount: 1, maximum: 2, subscriptionRevision: 1 })).toEqual({ allowed: false, reason: "quota_exhausted" });
+      await env.DB.prepare("INSERT INTO shop_subscriptions (shop,subscription_id,status,applied_occurred_at,applied_external_id,revision) VALUES (?,?,?,?,?,?)").bind("revision-match", "sub", "ACTIVE", 9, "evt", 3).run();
+      expect(await repo.reserve({ shop: "revision-match", key: "exports", operationId: "op", period: "lifetime", amount: 1, maximum: 2, subscriptionRevision: 3 })).toMatchObject({ allowed: true });
+    });
+  });
+
   it("keeps quota usage isolated by shop and makes replay idempotent", async () => {
     await runWithRequestContext(env, async () => {
       const repo = new EntitlementRepo();
