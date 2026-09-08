@@ -4,6 +4,7 @@ export type OperationDenialReason = EntitlementDenialReason | "operation_conflic
 export type EntitlementOperationFailure = { readonly allowed: false; readonly reason: OperationDenialReason };
 export type EntitlementOperationResult = EntitlementOperationFailure;
 export type CheckResult = ResolvedEntitlement | EntitlementOperationFailure;
+export type PreviewResult = (ResolvedEntitlement | EntitlementOperationFailure) & { readonly authoritative: false };
 export type ReserveResult = { readonly allowed: true; readonly operationId: string; readonly amount: number; readonly period: string; readonly subscriptionRevision: number; readonly remaining: number } | EntitlementOperationFailure;
 export type CommitResult = { readonly allowed: true; readonly operationId: string; readonly state: "committed" } | EntitlementOperationFailure;
 export type ReleaseResult = { readonly allowed: true; readonly operationId: string; readonly state: "released" | "committed" } | EntitlementOperationFailure;
