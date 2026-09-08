@@ -105,7 +105,7 @@ export class EntitlementRepo {
     if (existing[0]) {
       const row = existing[0];
       return row.key === input.key && row.period === input.period && row.requestedAmount === input.amount && row.subscriptionRevision === input.subscriptionRevision && isOperationState(row.state)
-        ? { allowed: true, operationId: input.operationId, amount: row.reservedAmount, period: row.period, subscriptionRevision: row.subscriptionRevision, remaining: await usageRemaining(input.shop, input.key, input.period, input.maximum) }
+        ? { allowed: true, operationId: input.operationId, amount: row.reservedAmount, period: row.period, subscriptionRevision: row.subscriptionRevision, state: row.state, replayed: true, remaining: await usageRemaining(input.shop, input.key, row.period, input.maximum) }
         : { allowed: false, reason: "operation_conflict" };
     }
     const d1 = getEnv().DB;
@@ -121,17 +121,18 @@ export class EntitlementRepo {
         return { allowed: false, reason: typeof projection?.revision === "number" && projection.revision !== input.subscriptionRevision ? "operation_conflict" : "quota_exhausted" };
       }
       return raced.key === input.key && raced.period === input.period && raced.requestedAmount === input.amount && raced.subscriptionRevision === input.subscriptionRevision && isOperationState(raced.state)
-        ? { allowed: true, operationId: input.operationId, amount: raced.reservedAmount, period: raced.period, subscriptionRevision: raced.subscriptionRevision, remaining: await usageRemaining(input.shop, input.key, input.period, input.maximum) }
+        ? { allowed: true, operationId: input.operationId, amount: raced.reservedAmount, period: raced.period, subscriptionRevision: raced.subscriptionRevision, state: raced.state, replayed: true, remaining: await usageRemaining(input.shop, input.key, raced.period, input.maximum) }
         : { allowed: false, reason: "operation_conflict" };
     }
     const aggregate = await d1.prepare("SELECT committed, held FROM entitlement_usage WHERE shop = ? AND key = ? AND period = ?").bind(input.shop, input.key, input.period).first<{ committed: number; held: number }>();
-    return { allowed: true, operationId: input.operationId, amount: input.amount, period: input.period, subscriptionRevision: input.subscriptionRevision, remaining: input.maximum - Number(aggregate?.committed ?? 0) - Number(aggregate?.held ?? 0) };
+    return { allowed: true, operationId: input.operationId, amount: input.amount, period: input.period, subscriptionRevision: input.subscriptionRevision, state: "held", replayed: false, remaining: Math.max(0, input.maximum - Number(aggregate?.committed ?? 0) - Number(aggregate?.held ?? 0)) };
   }
 
   async commit(input: { shop: string; operationId: string; actualAmount?: number; now?: number }): Promise<{ state: OperationState } | { reason: "not_found" | "invalid_state" | "invalid_amount" }> {
     const row = (await getDb().select().from(entitlementOperations).where(sql`${entitlementOperations.shop} = ${input.shop} AND ${entitlementOperations.operationId} = ${input.operationId}`).limit(1))[0];
     if (!row) return { reason: "not_found" };
-    if (row.state !== "held") return { reason: "invalid_state" };
+    if (row.state === "committed") return { state: "committed" };
+    if (row.state === "released") return { reason: "invalid_state" };
     const actual = input.actualAmount ?? row.reservedAmount;
     if (actual < 0 || actual > row.reservedAmount) return { reason: "invalid_amount" };
     const now = input.now ?? Date.now();

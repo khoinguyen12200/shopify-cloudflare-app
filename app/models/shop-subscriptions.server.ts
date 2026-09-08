@@ -1,4 +1,4 @@
-import { and, eq, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, ne, or, sql } from "drizzle-orm";
 import type { SubscriptionStatus, SubscriptionObservation } from "~/domain/subscription-lifecycle";
 import { shopSubscriptionItems, shopSubscriptions } from "~/db/schema";
 import { getDb } from "~/request-context.server";
@@ -66,7 +66,7 @@ export class ShopSubscriptionRepo {
     }).from(shopSubscriptions).leftJoin(shopSubscriptionItems, and(
       eq(shopSubscriptionItems.shop, shopSubscriptions.shop),
       eq(shopSubscriptionItems.subscriptionId, shopSubscriptions.subscriptionId),
-    )).where(eq(shopSubscriptions.shop, shop)).orderBy(shopSubscriptionItems.position);
+    )).where(eq(shopSubscriptions.shop, shop)).orderBy(desc(shopSubscriptions.appliedOccurredAt), desc(shopSubscriptions.appliedExternalId), shopSubscriptionItems.position);
     return rows[0];
   }
 
