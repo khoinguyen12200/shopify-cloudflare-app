@@ -120,6 +120,7 @@ export class ShopSubscriptionRepo {
       pendingBillingInterval: observation.pendingBillingInterval === undefined ? current?.pendingBillingInterval ?? null : observation.pendingBillingInterval,
       pendingLegacySubscriptionId: observation.pendingLegacySubscriptionId === undefined ? current?.pendingLegacySubscriptionId ?? null : observation.pendingLegacySubscriptionId,
       appliedOccurredAt: observation.occurredAt, appliedExternalId: observation.externalId,
+      revision: (current?.revision ?? 0) + 1,
     }).onConflictDoUpdate({ target: [shopSubscriptions.shop, shopSubscriptions.subscriptionId], set: {
       status: statusByKind[state.kind],
       planHandle: observation.planHandle === undefined ? current?.planHandle ?? null : observation.planHandle,
@@ -133,6 +134,7 @@ export class ShopSubscriptionRepo {
       pendingBillingInterval: observation.pendingBillingInterval === undefined ? current?.pendingBillingInterval ?? null : observation.pendingBillingInterval,
       pendingLegacySubscriptionId: observation.pendingLegacySubscriptionId === undefined ? current?.pendingLegacySubscriptionId ?? null : observation.pendingLegacySubscriptionId,
       appliedOccurredAt: observation.occurredAt, appliedExternalId: observation.externalId,
+      revision: sql`${shopSubscriptions.revision} + 1`,
     }, where: or(sql`${shopSubscriptions.appliedOccurredAt} < ${observation.occurredAt}`, and(eq(shopSubscriptions.appliedOccurredAt, observation.occurredAt), sql`${shopSubscriptions.appliedExternalId} < ${observation.externalId}`)) }).returning({ subscriptionId: shopSubscriptions.subscriptionId });
     const matchingProjection = sql`exists (select 1 from ${shopSubscriptions} where ${shopSubscriptions.shop} = ${shop} and ${shopSubscriptions.subscriptionId} = ${observation.subscriptionId} and ${shopSubscriptions.appliedOccurredAt} = ${observation.occurredAt} and ${shopSubscriptions.appliedExternalId} = ${observation.externalId})`;
     const itemReplacement = observation.items ? [
