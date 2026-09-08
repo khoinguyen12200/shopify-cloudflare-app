@@ -171,6 +171,7 @@ export const shopSubscriptions = sqliteTable(
     pendingLegacySubscriptionId: text("pending_legacy_subscription_id"),
     appliedOccurredAt: integer("applied_occurred_at").notNull(),
     appliedExternalId: text("applied_external_id").notNull(),
+    revision: integer("revision").notNull().default(1),
   },
   (table) => [
     primaryKey({ columns: [table.shop, table.subscriptionId] }),

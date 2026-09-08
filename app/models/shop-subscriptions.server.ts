@@ -62,7 +62,7 @@ export class ShopSubscriptionRepo {
       currentPeriodEndsAt: shopSubscriptions.currentPeriodEndsAt,
       currentPeriodStartsAt: shopSubscriptions.currentPeriodStartsAt,
       cancellationEffectiveAt: shopSubscriptions.cancellationEffectiveAt,
-      revision: shopSubscriptions.appliedOccurredAt,
+      revision: shopSubscriptions.revision,
     }).from(shopSubscriptions).leftJoin(shopSubscriptionItems, and(
       eq(shopSubscriptionItems.shop, shopSubscriptions.shop),
       eq(shopSubscriptionItems.subscriptionId, shopSubscriptions.subscriptionId),
@@ -82,7 +82,7 @@ export class ShopSubscriptionRepo {
       currentPeriodEndsAt: shopSubscriptions.currentPeriodEndsAt,
       currentPeriodStartsAt: shopSubscriptions.currentPeriodStartsAt,
       cancellationEffectiveAt: shopSubscriptions.cancellationEffectiveAt,
-      revision: shopSubscriptions.appliedOccurredAt,
+      revision: shopSubscriptions.revision,
     }).from(shopSubscriptions).leftJoin(shopSubscriptionItems, and(
       eq(shopSubscriptionItems.shop, shopSubscriptions.shop),
       eq(shopSubscriptionItems.subscriptionId, shopSubscriptions.subscriptionId),
