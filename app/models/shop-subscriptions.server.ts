@@ -107,6 +107,13 @@ export class ShopSubscriptionRepo {
     if (stale) return "stale";
     const { applySubscriptionObservation } = await import("~/domain/subscription-lifecycle");
     const state = applySubscriptionObservation(current ? { kind: kindByStatus[current.status], occurredAt: current.appliedOccurredAt, externalId: current.appliedExternalId } : null, observation);
+    const changed = !current || statusByKind[state.kind] !== current.status ||
+      (observation.planHandle !== undefined && observation.planHandle !== current.planHandle) ||
+      (observation.billingInterval !== undefined && observation.billingInterval !== current.billingInterval) ||
+      (observation.currentPeriodEndsAt !== undefined && observation.currentPeriodEndsAt !== current.currentPeriodEndsAt) ||
+      (observation.cancellationEffectiveAt !== undefined && observation.cancellationEffectiveAt !== current.cancellationEffectiveAt) ||
+      (observation.cancelEffectiveOn !== undefined && observation.cancelEffectiveOn !== current.cancelEffectiveOn);
+    const nextRevision = changed ? (current?.revision ?? 0) + 1 : (current?.revision ?? 1);
     const parentProjection = db.insert(shopSubscriptions).values({
       shop, subscriptionId: observation.subscriptionId, status: statusByKind[state.kind],
       planHandle: observation.planHandle === undefined ? current?.planHandle ?? null : observation.planHandle,
@@ -120,7 +127,7 @@ export class ShopSubscriptionRepo {
       pendingBillingInterval: observation.pendingBillingInterval === undefined ? current?.pendingBillingInterval ?? null : observation.pendingBillingInterval,
       pendingLegacySubscriptionId: observation.pendingLegacySubscriptionId === undefined ? current?.pendingLegacySubscriptionId ?? null : observation.pendingLegacySubscriptionId,
       appliedOccurredAt: observation.occurredAt, appliedExternalId: observation.externalId,
-      revision: (current?.revision ?? 0) + 1,
+      revision: nextRevision,
     }).onConflictDoUpdate({ target: [shopSubscriptions.shop, shopSubscriptions.subscriptionId], set: {
       status: statusByKind[state.kind],
       planHandle: observation.planHandle === undefined ? current?.planHandle ?? null : observation.planHandle,
@@ -134,7 +141,7 @@ export class ShopSubscriptionRepo {
       pendingBillingInterval: observation.pendingBillingInterval === undefined ? current?.pendingBillingInterval ?? null : observation.pendingBillingInterval,
       pendingLegacySubscriptionId: observation.pendingLegacySubscriptionId === undefined ? current?.pendingLegacySubscriptionId ?? null : observation.pendingLegacySubscriptionId,
       appliedOccurredAt: observation.occurredAt, appliedExternalId: observation.externalId,
-      revision: sql`${shopSubscriptions.revision} + 1`,
+      revision: changed ? sql`${shopSubscriptions.revision} + 1` : shopSubscriptions.revision,
     }, where: or(sql`${shopSubscriptions.appliedOccurredAt} < ${observation.occurredAt}`, and(eq(shopSubscriptions.appliedOccurredAt, observation.occurredAt), sql`${shopSubscriptions.appliedExternalId} < ${observation.externalId}`)) }).returning({ subscriptionId: shopSubscriptions.subscriptionId });
     const matchingProjection = sql`exists (select 1 from ${shopSubscriptions} where ${shopSubscriptions.shop} = ${shop} and ${shopSubscriptions.subscriptionId} = ${observation.subscriptionId} and ${shopSubscriptions.appliedOccurredAt} = ${observation.occurredAt} and ${shopSubscriptions.appliedExternalId} = ${observation.externalId})`;
     const itemReplacement = observation.items ? [
