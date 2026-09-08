@@ -159,3 +159,8 @@ describe("entitlements service", () => {
     await expect(service.invalidate("shop")).resolves.toBeUndefined();
   });
 });
+
+it('denies stale snapshots as subscription unavailable', async () => {
+ const service=createEntitlements({subscriptions:{current:async()=>({status:'ACTIVE',planHandle:'free',revision:1,verifiedAt:0})},catalogue:{version:1,freePlan:'free',features:{x:{kind:'capability'}},plans:{free:{x:{kind:'enabled'}}}},now:()=>300001,maxSnapshotAgeMs:300000});
+ await expect(service.check('shop','x')).resolves.toEqual({allowed:false,reason:'subscription_unavailable'});
+});
