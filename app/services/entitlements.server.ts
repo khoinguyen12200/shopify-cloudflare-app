@@ -1,6 +1,6 @@
 import { resolveEntitlement, type EntitlementCatalogue, type EntitlementKey } from "~/domain/entitlement-policy";
 import type { AllocateResult, CapacityPort, CheckResult, CommitResult, DeallocateResult, EntitlementCachePort, EntitlementOperationFailure, PreviewResult, ReleaseResult, ReserveResult, SubscriptionPort, UsagePort } from "~/ports/entitlements";
-interface Dependencies { readonly subscriptions: SubscriptionPort; readonly catalogue: EntitlementCatalogue; readonly capacity?: CapacityPort; readonly usage?: UsagePort; readonly cache?: EntitlementCachePort; readonly now?: () => number; }
+interface Dependencies { readonly subscriptions: SubscriptionPort; readonly catalogue: EntitlementCatalogue; readonly capacity?: CapacityPort; readonly usage?: UsagePort; readonly cache?: EntitlementCachePort; readonly now?: () => number; readonly maxSnapshotAgeMs?: number; }
 interface AllocationInput { readonly shop: string; readonly key: EntitlementKey; readonly allocationId: string; }
 interface ReserveInput { readonly shop: string; readonly key: EntitlementKey; readonly operationId: string; readonly amount: number; }
 export interface EntitlementService {
@@ -43,7 +43,10 @@ async function preview(deps: Dependencies, shop: string) {
 function makeCheck(deps: Dependencies, now: () => number) {
   return async (shop: string, key: EntitlementKey): Promise<CheckResult> => {
     if (!valid(shop) || !valid(key)) return invalidRequest;
-    return resolveEntitlement(deps.catalogue, await authoritative(deps, shop), key, now());
+    const snapshot = await authoritative(deps, shop);
+    const age = snapshot.verifiedAt === undefined ? 0 : now() - snapshot.verifiedAt;
+    if (snapshot.verifiedAt !== undefined && (snapshot.verifiedAt > now() || age > (deps.maxSnapshotAgeMs ?? 300_000))) return { allowed: false, reason: "inactive_subscription" };
+    return resolveEntitlement(deps.catalogue, snapshot, key, now());
   };
 }
 function makePreview(deps: Dependencies, now: () => number) {

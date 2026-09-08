@@ -9,7 +9,7 @@ export type UsageWindow =
 export type FeatureDefinition = { readonly kind: "capability" } | { readonly kind: "capacity" } | { readonly kind: "quota"; readonly period: UsagePeriod };
 export type EntitlementGrant = { readonly kind: "disabled" } | { readonly kind: "enabled" } | { readonly kind: "unlimited" } | { readonly kind: "limit"; readonly maximum: number };
 export interface EntitlementCatalogue { readonly version: number; readonly freePlan: string; readonly features: Readonly<Record<string, FeatureDefinition>>; readonly plans: Readonly<Record<string, Readonly<Record<string, EntitlementGrant>>>>; }
-export interface SubscriptionSnapshot { readonly status: SubscriptionStatus; readonly planHandle: string | null; readonly revision: number; readonly cancellationEffectiveAt?: number; readonly periodStart?: number; readonly periodEnd?: number; }
+export interface SubscriptionSnapshot { readonly status: SubscriptionStatus; readonly planHandle: string | null; readonly revision: number; readonly verifiedAt?: number; readonly cancellationEffectiveAt?: number; readonly periodStart?: number; readonly periodEnd?: number; }
 export type EntitlementDenialReason = "inactive_subscription" | "unknown_feature" | "unknown_plan" | "invalid_grant" | "invalid_usage_window" | "disabled" | "invalid_catalogue";
 export type ResolvedEntitlement =
   | { readonly allowed: true; readonly kind: "capability" }
