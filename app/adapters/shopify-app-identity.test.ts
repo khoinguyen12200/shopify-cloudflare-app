@@ -9,6 +9,20 @@ describe("ShopifyAppIdentityAdapter", () => {
     await expect(adapter.current()).resolves.toEqual({ id: "gid://shopify/App/1", apiKey: "client-key", handle: "my-app" });
   });
 
+  it("preserves the dynamic handle for different authenticated apps", async () => {
+    for (const identity of [
+      { id: "gid://shopify/App/1", apiKey: "client-one", handle: "app-one" },
+      { id: "gid://shopify/App/2", apiKey: "client-two", handle: "app-two" },
+    ]) {
+      const adapter = new ShopifyAppIdentityAdapter({
+        graphql: async () => payload(identity),
+        expectedApiKey: identity.apiKey,
+        expectedAppId: identity.id,
+      });
+      await expect(adapter.current()).resolves.toEqual(identity);
+    }
+  });
+
   it("fails closed for mismatched API key or app GID", async () => {
     for (const config of [{ expectedApiKey: "other", expectedAppId: "gid://shopify/App/1" }, { expectedApiKey: "client-key", expectedAppId: "gid://shopify/App/2" }]) {
       const adapter = new ShopifyAppIdentityAdapter({ graphql: async () => payload({ id: "gid://shopify/App/1", apiKey: "client-key", handle: "my-app" }), ...config });
