@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import { createShopify } from "~/shopify.server";
 import { getEnv } from "~/request-context.server";
 import { currentAppInstallationSchema } from "~/schemas/current-app-installation";
+import { ShopifyAppIdentityAdapter } from "~/adapters/shopify-app-identity.server";
 import { useLocale } from "~/i18n/useLocale";
 import { formatDateTime } from "~/i18n/format";
 import { formatMoney } from "~/money";
@@ -52,17 +53,6 @@ export function shouldShowProcessing(requestUrl: string): boolean {
   return isPricingReturn(requestUrl);
 }
 
-/** The app's own Managed Pricing handle — needed to build the hosted pricing URL. */
-const APP_HANDLE_QUERY = `#graphql
-  query AppHandle {
-    currentAppInstallation {
-      app {
-        handle
-      }
-    }
-  }
-`;
-
 type BillingReconciliationResponse = { readonly ok: true } | { readonly ok: false };
 
 export function parseCurrentAppInstallationHandle(payload: unknown): string {
@@ -99,13 +89,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const planName = planForShopifyHandle(projection?.planHandle)?.name ?? PLANS.free.name;
   const status = resolveProjectionBillingStatus(projection, planName, Date.now());
 
-  const response = await admin.graphql(APP_HANDLE_QUERY);
-  const appHandle = parseCurrentAppInstallationHandle(await response.json());
+  const env = getEnv();
+  const appIdentity = await new ShopifyAppIdentityAdapter({
+    graphql: (query) => admin.graphql(query),
+    expectedApiKey: env.SHOPIFY_API_KEY || null,
+    expectedAppId: env.SHOPIFY_PARTNER_APP_ID || null,
+  }).current();
 
   return {
     status,
     planHandle: projection?.planHandle ?? null,
-    pricingPlansUrl: pricingPlansUrl(session.shop, appHandle),
+    pricingPlansUrl: pricingPlansUrl(session.shop, appIdentity.handle),
     pricingReturn,
   };
 };

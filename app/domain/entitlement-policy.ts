@@ -18,13 +18,18 @@ export type ResolvedEntitlement =
   | { readonly allowed: false; readonly reason: EntitlementDenialReason };
 
 export function resolveUsageWindow(period: UsagePeriod, now: number, subscription: SubscriptionSnapshot): UsageWindow | null {
+  if (!Number.isSafeInteger(now)) return null;
   if (period === "lifetime") return { kind: "lifetime", key: "lifetime" };
   if (period === "calendar_month") {
     const date = new Date(now);
     const year = date.getUTCFullYear();
     const month = date.getUTCMonth();
+    if (!Number.isSafeInteger(year) || !Number.isSafeInteger(month)) return null;
+    const start = Date.UTC(year, month, 1);
+    const end = Date.UTC(year, month + 1, 1);
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end)) return null;
     const key = `${year}-${String(month + 1).padStart(2, "0")}`;
-    return { kind: period, key, start: Date.UTC(year, month, 1), end: Date.UTC(year, month + 1, 1) };
+    return { kind: period, key, start, end };
   }
   const { periodStart: start, periodEnd: end } = subscription;
   if (start === undefined || end === undefined || !Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start >= end || now < start || now >= end) return null;
@@ -37,7 +42,13 @@ function active(subscription: SubscriptionSnapshot, now: number): boolean {
 }
 function validMaximum(value: number): boolean { return Number.isSafeInteger(value) && value >= 0; }
 
+export function calculateRemaining(maximum: number, used: number): number | null {
+  if (!validMaximum(maximum) || !validMaximum(used)) return null;
+  return used >= maximum ? 0 : maximum - used;
+}
+
 export function resolveEntitlement(catalogue: EntitlementCatalogue, subscription: SubscriptionSnapshot, key: EntitlementKey, now: number): ResolvedEntitlement {
+  if (!Number.isSafeInteger(now)) return { allowed: false, reason: "invalid_usage_window" };
   if (catalogue.version !== 1) return { allowed: false, reason: "invalid_catalogue" };
   const definition = own(catalogue.features, key);
   if (!definition) return { allowed: false, reason: "unknown_feature" };

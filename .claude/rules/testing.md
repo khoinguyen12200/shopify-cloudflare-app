@@ -119,6 +119,9 @@ So, in this repo:
   assertion is `expect(mock).toHaveBeenCalledWith(...)` tests the
   implementation: it fails on a correct refactor and passes when the behavior
   breaks. Assert resulting **DB state** instead.
+- UI assertions must connect values to their semantic label, accessible name,
+  or containing region. A global substring match for a number can pass when the
+  intended metric is wrong because the same digits appear elsewhere in markup.
 - Forbidden: a test that fails only when you remove a mock; a partial mock
   missing fields the real API returns; test-only methods added to production
   code (helpers live in `app/test/`).
@@ -146,7 +149,7 @@ delete a check, or narrow scope silently to reach green.
 
 ### Checklist
 
-- [ ] Every new function has a test that **failed first**
+- [ ] Every new behavior has a test that **failed first** at the appropriate layer
 - [ ] Each failure was for the expected reason, and I can state the message
 - [ ] Minimal code written to pass each one
 - [ ] All relevant tests pass; output pristine

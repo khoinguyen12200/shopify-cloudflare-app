@@ -58,7 +58,7 @@ describe("TenantPurgeRepo", () => {
       await env.DB.prepare("INSERT INTO shops (shop, installed_at) VALUES (?, ?)").bind(shop, 1).run();
       await env.DB.prepare("INSERT INTO entitlement_usage (shop,key,period,committed,held,updated_at) VALUES (?,?,?,?,?,?)").bind(shop, "quota", "lifetime", 1, 0, 1).run();
       await env.DB.prepare("INSERT INTO entitlement_operations (shop,operation_id,key,period,requested_amount,reserved_amount,subscription_revision,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)").bind(shop, "op-count", "quota", "lifetime", 1, 1, 1, "held", 1, 1).run();
-      await env.DB.prepare("INSERT INTO entitlement_allocations (shop,key,allocation_id,subscription_revision,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?)").bind(shop, "quota", "alloc-count", 1, "allocated", 1, 1).run();
+      await env.DB.prepare("INSERT INTO entitlement_allocations (shop,key,allocation_id,operation_id,subscription_revision,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)").bind(shop, "quota", "alloc-count", "op-alloc-count", 1, "allocated", 1, 1).run();
       return new TenantPurgeRepo().deleteTenantRows(shop);
     });
     expect(affected).toBe(4);
@@ -87,7 +87,7 @@ describe("TenantPurgeRepo", () => {
         await env.DB.prepare("INSERT INTO pending_uploads (id,shop,r2_key,filename,content_type,size_bytes,created_at,expires_at) VALUES (?,?,?,?,?,?,?,?)").bind(`pending-${shop}`, shop, `uploads/pending-${shop}`, "draft.txt", "text/plain", 1, 1, 2).run();
         await env.DB.prepare("INSERT INTO entitlement_usage (shop,key,period,committed,held,updated_at) VALUES (?,?,?,?,?,?)").bind(shop, "test", "lifetime", 1, 0, 1).run();
         await env.DB.prepare("INSERT INTO entitlement_operations (shop,operation_id,key,period,requested_amount,reserved_amount,subscription_revision,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)").bind(shop, `op-${shop}`, "test", "lifetime", 1, 1, 1, "held", 1, 1).run();
-        await env.DB.prepare("INSERT INTO entitlement_allocations (shop,key,allocation_id,subscription_revision,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?)").bind(shop, "staff.max", `alloc-${shop}`, 1, "allocated", 1, 1).run();
+        await env.DB.prepare("INSERT INTO entitlement_allocations (shop,key,allocation_id,operation_id,subscription_revision,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)").bind(shop, "staff.max", `alloc-${shop}`, `op-alloc-${shop}`, 1, "allocated", 1, 1).run();
       }
       await env.DB.prepare("INSERT INTO notification_preferences (scope,event,channel,enabled,updated_at) VALUES (?,?,?,?,?)").bind("global", "test", "email", 1, 1).run();
       await env.DB.prepare("INSERT INTO notification_opt_outs (scope,channel,address,opted_out_at,source) VALUES (?,?,?,?,?)").bind("global", "email", "global@example.com", 1, "test").run();

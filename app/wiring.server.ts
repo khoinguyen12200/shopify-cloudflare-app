@@ -136,8 +136,10 @@ async function invalidateEntitlements(shop: string): Promise<void> {
 
 export function subscriptionsPort(): SubscriptionPort {
   return { async current(shop) {
+    const relationship = await shops().get(shop);
+    if (!relationship || relationship.relationshipStatus !== "INSTALLED") return { status: "UNKNOWN", planHandle: null, revision: 0 };
     const projection = await shopSubscriptions().currentForShop(shop);
-    return { status: projection?.status ?? "NONE", planHandle: projection?.planHandle ?? null,
+    return { status: projection?.status ?? "UNKNOWN", planHandle: projection?.planHandle ?? null,
       revision: projection?.revision ?? 0, periodStart: projection?.currentPeriodStartsAt ?? undefined,
       periodEnd: projection?.currentPeriodEndsAt ?? undefined,
       cancellationEffectiveAt: projection?.cancellationEffectiveAt ?? undefined };
@@ -163,7 +165,7 @@ export function entitlements(): EntitlementService {
           : { allowed: true, operationId: input.operationId, state: result.state === "committed" ? "committed" : "released" };
       },
     },
-    capacity: { allocate: (input) => repo.allocate(input), deallocate: (input) => repo.deallocate(input) },
+    capacity: { allocate: (input) => repo.allocate(input), confirmAllocation: (input) => repo.confirmAllocation(input), deallocate: (input) => repo.deallocate(input) },
     cache: entitlementCachePort(),
     catalogue: ENTITLEMENT_CATALOGUE,
   });

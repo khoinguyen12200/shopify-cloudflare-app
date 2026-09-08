@@ -4,14 +4,14 @@ export type { HeldDecision, HeldItem, HeldReconciliationPort } from "~/ports/ent
 export async function reconcileHeld(
   shop: string,
   port: HeldReconciliationPort,
-  decide: (item: HeldItem) => HeldDecision,
+  decide: (item: HeldItem) => HeldDecision | Promise<HeldDecision>,
 ) {
   let committed = 0;
   let allocated = 0;
   let released = 0;
   const failures: { id: string; key: string; reason: string }[] = [];
   for (const item of await port.listHeld(shop)) {
-    const decision = decide(item);
+    const decision = await decide(item);
     if (decision === "ignore") continue;
     const valid = item.kind === "quota"
       ? decision === "commit" || decision === "release"

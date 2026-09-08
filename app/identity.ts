@@ -1,5 +1,3 @@
-import type { Locale } from "~/i18n/config";
-
 /**
  * Stable product identity shared by public pages, legal copy, and notifications.
  * Keep this module pure: values are configured at authoring time, never per
@@ -32,3 +30,4 @@ export const identity = Object.freeze({
 export function emailSenderDisclosure(locale: Locale): string {
   return identity.copy.emailSenderDisclosure[locale];
 }
+import type { Locale } from "~/i18n/config";

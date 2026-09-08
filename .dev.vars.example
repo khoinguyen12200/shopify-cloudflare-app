@@ -41,3 +41,17 @@ ATTACHMENT_TOKEN_SECRET=dev-only-attachment-token-secret-change-me
 
 # NOTE: never set SHOPIFY_APP_URL here — it would shadow the live tunnel URL
 # that `shopify app dev` injects.
+
+# Partner billing/history identity (configuration, not a secret). Obtain this
+# from an authenticated Admin currentAppInstallation query as app.id and keep
+# it aligned with the app selected by the Shopify CLI. Use the
+# gid://shopify/App/<id> namespace; do not derive it from SHOPIFY_API_KEY or use
+# gid://partners/App/... (that legacy namespace belongs to a different query).
+# SHOPIFY_PARTNER_APP_ID=
+# SHOPIFY_PARTNER_ORGANIZATION_ID=
+# SHOPIFY_PARTNER_API_VERSION=2026-07
+
+# `npm run dev` injects SHOPIFY_API_KEY, SHOPIFY_API_SECRET, SCOPES, and the
+# tunnel URL. It does not inject SHOPIFY_PARTNER_APP_ID, so set that value
+# explicitly for the selected development app. Production sets the same keys
+# under env.production.vars in wrangler.jsonc; secrets stay in Wrangler.

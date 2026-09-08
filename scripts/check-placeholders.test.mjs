@@ -9,7 +9,7 @@ function validFiles() {
     vars: {
       SHOPIFY_API_KEY: "client-key",
       SHOPIFY_APP_URL: "https://app.example.org",
-      SHOPIFY_PARTNER_APP_ID: "gid://partners/App/1",
+      SHOPIFY_PARTNER_APP_ID: "gid://shopify/App/1",
       SHOPIFY_PARTNER_ORGANIZATION_ID: "1234567",
       SHOPIFY_PARTNER_API_VERSION: "2026-07",
       AI_GATEWAY_ID: "",
@@ -52,6 +52,22 @@ test("rejects missing Partner organization and API version", () => {
   const issues = validateLaunchContract(files).join("\n");
   assert.match(issues, /SHOPIFY_PARTNER_ORGANIZATION_ID/);
   assert.match(issues, /SHOPIFY_PARTNER_API_VERSION/);
+});
+
+test("requires the Partner pricing/history app ID to use the Shopify App GID namespace", () => {
+  const files = validFiles();
+  files.wrangler.env.production.vars.SHOPIFY_PARTNER_APP_ID = "gid://partners/App/1";
+  const issues = validateLaunchContract(files).join("\n");
+  assert.match(issues, /SHOPIFY_PARTNER_APP_ID.*gid:\/\/shopify\/App/);
+});
+
+test("rejects a client ID, installation ID, or unqualified app ID as Partner app ID", () => {
+  for (const value of ["c0a58386cf12f142409e63d22589b9d9", "gid://shopify/AppInstallation/1", "1"]) {
+    const files = validFiles();
+    files.wrangler.env.production.vars.SHOPIFY_PARTNER_APP_ID = value;
+    const issues = validateLaunchContract(files).join("\n");
+    assert.match(issues, /SHOPIFY_PARTNER_APP_ID.*gid:\/\/shopify\/App/);
+  }
 });
 
 test("reports an absent production binding by its exact key", () => {
@@ -101,4 +117,11 @@ test("rejects every launch placeholder and redirect drift", () => {
     "Managed Pricing plan handle",
     "public pricing/support/privacy copy",
   ]) assert.match(issues, new RegExp(expected));
+});
+
+test("rejects placeholders in the dedicated identity source", () => {
+  const files = validFiles();
+  files.identity = 'effectiveDate: "2026-09-01"\nname: "TODO: replace"';
+  const issues = validateLaunchContract(files).join("\n");
+  assert.match(issues, /legal identity\/contact\/date/);
 });

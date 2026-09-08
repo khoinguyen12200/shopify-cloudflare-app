@@ -8,14 +8,14 @@ export type PreviewResult = (ResolvedEntitlement | EntitlementOperationFailure) 
 export type ReserveResult = { readonly allowed: true; readonly operationId: string; readonly amount: number; readonly period: string; readonly subscriptionRevision: number; readonly remaining: number; readonly state?: "held"|"committed"|"released"; readonly replayed?: boolean } | EntitlementOperationFailure;
 export type CommitResult = { readonly allowed: true; readonly operationId: string; readonly state: "committed"; readonly replayed?: boolean } | EntitlementOperationFailure;
 export type ReleaseResult = { readonly allowed: true; readonly operationId: string; readonly state: "released" | "committed" } | EntitlementOperationFailure;
-export type AllocateResult = { readonly allowed: true; readonly allocationId: string; readonly subscriptionRevision: number; readonly remaining: number } | EntitlementOperationFailure;
-export type DeallocateResult = { readonly allowed: true; readonly allocationId: string; readonly state: "released" } | EntitlementOperationFailure;
+export type AllocateResult = { readonly allowed: true; readonly allocationId: string; readonly operationId: string; readonly subscriptionRevision: number; readonly remaining: number; readonly state: "held" } | EntitlementOperationFailure;
+export type DeallocateResult = { readonly allowed: true; readonly allocationId: string; readonly operationId: string; readonly state: "released" } | EntitlementOperationFailure;
 
 export interface SubscriptionPort { current(shop: string): Promise<SubscriptionSnapshot>; }
 export interface CapacityPort {
-  allocate(input: { readonly shop: string; readonly key: EntitlementKey; readonly allocationId: string; readonly operationId?: string; readonly maximum: number; readonly subscriptionRevision: number }): Promise<AllocateResult>;
-  confirmAllocation?(input: { readonly shop: string; readonly key: EntitlementKey; readonly allocationId: string; readonly operationId?: string }): Promise<DeallocateResult>;
-  deallocate(input: { readonly shop: string; readonly key: EntitlementKey; readonly allocationId: string }): Promise<DeallocateResult>;
+  allocate(input: { readonly shop: string; readonly key: EntitlementKey; readonly allocationId: string; readonly operationId: string; readonly maximum: number; readonly subscriptionRevision: number }): Promise<AllocateResult>;
+  confirmAllocation(input: { readonly shop: string; readonly key: EntitlementKey; readonly allocationId: string; readonly operationId: string }): Promise<{allowed:true; allocationId:string; state:"allocated"}|EntitlementOperationFailure>;
+  deallocate(input: { readonly shop: string; readonly key: EntitlementKey; readonly allocationId: string; readonly operationId: string }): Promise<DeallocateResult>;
 }
 export interface UsagePort {
   reserve(input: { readonly shop: string; readonly key: EntitlementKey; readonly operationId: string; readonly amount: number; readonly maximum: number; readonly period: string; readonly periodStart?: number; readonly periodEnd?: number; readonly subscriptionRevision: number }): Promise<ReserveResult>;

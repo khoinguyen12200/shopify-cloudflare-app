@@ -17,6 +17,7 @@ import { dirname, join } from "node:path";
 
 /** Anything that looks like "fill this in". */
 const PLACEHOLDER = /REPLACE|CHANGE_?ME|TODO|XXXX|your-?(domain|account)/i;
+const SHOPIFY_APP_GID = /^gid:\/\/shopify\/App\/[^/]+$/;
 
 /**
  * Strip JSONC comments so the config can be parsed as JSON.
@@ -187,6 +188,9 @@ export function validateLaunchContract(files) {
       issues.push(`${key} is missing or placeholder`);
     }
   }
+  if (typeof vars.SHOPIFY_PARTNER_APP_ID === "string" && vars.SHOPIFY_PARTNER_APP_ID && !SHOPIFY_APP_GID.test(vars.SHOPIFY_PARTNER_APP_ID)) {
+    issues.push("SHOPIFY_PARTNER_APP_ID must be a Shopify App GID in the form gid://shopify/App/<id>");
+  }
   if (!(production.secrets?.required ?? []).includes("SHOPIFY_PARTNER_API_TOKEN")) {
     issues.push("SHOPIFY_PARTNER_API_TOKEN secret is not declared");
   }
@@ -239,7 +243,8 @@ export function validateLaunchContract(files) {
   if (vars.SHOPIFY_PARTNER_API_VERSION !== supportedShopifyVersion) {
     issues.push(`SHOPIFY_PARTNER_API_VERSION must be ${supportedShopifyVersion}`);
   }
-  if (PLACEHOLDER.test(files.legal) || !/LAST_UPDATED\s*=\s*"\d{4}-\d{2}-\d{2}"/.test(files.legal)) {
+  const identitySource = files.identity ?? "";
+  if (PLACEHOLDER.test(files.legal) || PLACEHOLDER.test(identitySource) || !/effectiveDate\s*:\s*"\d{4}-\d{2}-\d{2}"/.test(identitySource) && !/LAST_UPDATED\s*=\s*"\d{4}-\d{2}-\d{2}"/.test(files.legal)) {
     issues.push("legal identity/contact/date contains TODO or invalid effective date");
   }
   if (PLACEHOLDER.test(files.plans)) issues.push("Managed Pricing plan handle contains placeholder");
@@ -285,7 +290,8 @@ function main() {
     wrangler: config,
     productionToml: readFileSync(join(repoRoot, "shopify.app.toml"), "utf8"),
     developmentToml: readFileSync(join(repoRoot, "shopify.app.dev.toml"), "utf8"),
-    legal: readFileSync(join(repoRoot, "app/legal/content.ts"), "utf8"),
+    legal: readFileSync(join(repoRoot, "app/legal/content.ts"), "utf8") + readFileSync(join(repoRoot, "app/identity.ts"), "utf8"),
+    identity: readFileSync(join(repoRoot, "app/identity.ts"), "utf8"),
     plans: readFileSync(join(repoRoot, "app/billing/plans.ts"), "utf8"),
     publicCopy: readFileSync(join(repoRoot, "app/i18n/locales/en/public.json"), "utf8"),
   };

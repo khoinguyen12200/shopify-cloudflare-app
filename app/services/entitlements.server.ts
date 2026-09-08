@@ -1,14 +1,14 @@
 import { resolveEntitlement, type EntitlementCatalogue, type EntitlementKey } from "~/domain/entitlement-policy";
 import type { AllocateResult, CapacityPort, CheckResult, CommitResult, DeallocateResult, EntitlementCachePort, EntitlementOperationFailure, PreviewResult, ReleaseResult, ReserveResult, SubscriptionPort, UsagePort } from "~/ports/entitlements";
 interface Dependencies { readonly subscriptions: SubscriptionPort; readonly catalogue: EntitlementCatalogue; readonly capacity?: CapacityPort; readonly usage?: UsagePort; readonly cache?: EntitlementCachePort; readonly now?: () => number; readonly maxSnapshotAgeMs?: number; }
-interface AllocationInput { readonly shop: string; readonly key: EntitlementKey; readonly allocationId: string; readonly operationId?: string; }
+interface AllocationInput { readonly shop: string; readonly key: EntitlementKey; readonly allocationId: string; readonly operationId: string; }
 interface ReserveInput { readonly shop: string; readonly key: EntitlementKey; readonly operationId: string; readonly amount: number; }
 export interface EntitlementService {
   check(shop: string, key: EntitlementKey): Promise<CheckResult>;
   preview(shop: string, key: EntitlementKey): Promise<PreviewResult>;
   allocate(input: AllocationInput): Promise<AllocateResult>;
   deallocate(input: AllocationInput): Promise<DeallocateResult>;
-  confirmAllocation(input: AllocationInput): Promise<DeallocateResult>;
+  confirmAllocation(input: AllocationInput): Promise<{allowed:true;allocationId:string;state:"allocated"}|EntitlementOperationFailure>;
   reserve(input: ReserveInput): Promise<ReserveResult>;
   commit(input: { readonly shop: string; readonly operationId: string; readonly actualAmount?: number }): Promise<CommitResult>;
   release(input: { readonly shop: string; readonly operationId: string }): Promise<ReleaseResult>;
@@ -60,7 +60,7 @@ function makePreview(deps: Dependencies, now: () => number) {
 function makeAllocate(deps: Dependencies, now: () => number) {
   return async (input: AllocationInput): Promise<AllocateResult> => {
     const port = capacityPort(deps.capacity);
-    if (!valid(input.shop) || !valid(input.key) || !valid(input.allocationId)) return invalidRequest;
+    if (!valid(input.shop) || !valid(input.key) || !valid(input.allocationId) || !valid(input.operationId)) return invalidRequest;
     const snapshot = await authoritative(deps, input.shop);
     const resolved = resolveEntitlement(deps.catalogue, snapshot, input.key, now());
     if (!resolved.allowed) return resolved;
@@ -81,8 +81,8 @@ function makeReserve(deps: Dependencies, now: () => number) {
 }
 export function createEntitlements(deps: Dependencies): EntitlementService { const now = deps.now ?? Date.now; return {
   check: makeCheck(deps, now), preview: makePreview(deps, now), allocate: makeAllocate(deps, now), reserve: makeReserve(deps, now),
-  async confirmAllocation(input) { const port = capacityPort(deps.capacity); if (!port.confirmAllocation || !valid(input.shop) || !valid(input.key) || !valid(input.allocationId)) return invalidRequest; return port.confirmAllocation(input); },
-  async deallocate(input) { const port = capacityPort(deps.capacity); if (!valid(input.shop) || !valid(input.key) || !valid(input.allocationId)) return invalidRequest; return port.deallocate(input); },
+  async confirmAllocation(input) { const port = capacityPort(deps.capacity); if (!valid(input.shop) || !valid(input.key) || !valid(input.allocationId) || !valid(input.operationId)) return invalidRequest; return port.confirmAllocation(input); },
+  async deallocate(input) { const port = capacityPort(deps.capacity); if (!valid(input.shop) || !valid(input.key) || !valid(input.allocationId) || !valid(input.operationId)) return invalidRequest; return port.deallocate(input); },
   async commit(input) { const port = usagePort(deps.usage); if (!valid(input.shop) || !valid(input.operationId) || (input.actualAmount !== undefined && (!Number.isSafeInteger(input.actualAmount) || input.actualAmount < 0))) return invalidRequest; return port.commit(input); },
   async release(input) { const port = usagePort(deps.usage); if (!valid(input.shop) || !valid(input.operationId)) return invalidRequest; return port.release(input); },
   async invalidate(shop) {

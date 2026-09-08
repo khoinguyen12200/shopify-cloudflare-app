@@ -32,6 +32,13 @@ async function render(data: LoaderData) {
   return html;
 }
 
+function expectStat(html: string, label: string, value: string) {
+  const labelIndex = html.indexOf(label);
+  expect(labelIndex, `missing stat label: ${label}`).toBeGreaterThanOrEqual(0);
+  const statMarkup = html.slice(labelIndex, labelIndex + 300);
+  expect(statMarkup, `wrong value for ${label}`).toContain(value);
+}
+
 describe("the internal dashboard", () => {
   it("shows shop counts and MRR", async () => {
     const html = await render({
@@ -42,9 +49,9 @@ describe("the internal dashboard", () => {
       health: { failedWebhooks: 2, deadLetterWebhooks: 1, lifecycleEvents: 4, subscriptionEvents: 3, checkpoint: { lastSucceededAt: 100, lastFailedAt: null } },
     });
     expect(html).toContain("Jamie");
-    expect(html).toContain("10");
-    expect(html).toContain("4");
-    expect(html).toContain("6");
+    expectStat(html, "Installed shops", "10");
+    expectStat(html, "Paid shops", "4");
+    expectStat(html, "Free shops", "6");
     expect(html).toContain("$76.00");
   });
 

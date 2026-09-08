@@ -67,11 +67,11 @@ describe("entitlements service", () => {
   it("allocates reusable capacity through the capacity port", async () => {
     const service = createEntitlements({
       subscriptions: { current: async () => ({ status: "ACTIVE", planHandle: "free", revision: 7 }) },
-      capacity: { allocate: async (input) => ({ allowed: true as const, allocationId: input.allocationId, subscriptionRevision: input.subscriptionRevision, remaining: 0 }), deallocate: async (input) => ({ allowed: true as const, allocationId: input.allocationId, state: "released" as const }) },
+      capacity: { confirmAllocation: async (input) => ({ allowed: true as const, allocationId: input.allocationId, state: "allocated" as const }), allocate: async (input) => ({ allowed: true as const, allocationId: input.allocationId, operationId: input.operationId, subscriptionRevision: input.subscriptionRevision, remaining: 0, state: "held" as const }), deallocate: async (input) => ({ allowed: true as const, allocationId: input.allocationId, operationId: input.operationId, state: "released" as const }) },
       catalogue: { version: 1, freePlan: "free", features: { staff: { kind: "capacity" } }, plans: { free: { staff: { kind: "limit", maximum: 1 } } } },
       now: () => 0,
     });
-    expect(await service.allocate({ shop: "shop", key: "staff", allocationId: "user-1" })).toEqual({ allowed: true, allocationId: "user-1", subscriptionRevision: 7, remaining: 0 });
+    expect(await service.allocate({ shop: "shop", key: "staff", allocationId: "user-1", operationId: "op-1" })).toEqual({ allowed: true, allocationId: "user-1", operationId: "op-1", subscriptionRevision: 7, remaining: 0, state: "held" });
   });
 
   it("uses the authoritative subscription for capacity writes instead of the preview cache", async () => {
@@ -84,13 +84,14 @@ describe("entitlements service", () => {
         invalidate: async () => undefined,
       },
       capacity: {
-        allocate: async (input) => { allocated = true; return { allowed: true, allocationId: input.allocationId, subscriptionRevision: input.subscriptionRevision, remaining: 0 }; },
-        deallocate: async (input) => ({ allowed: true, allocationId: input.allocationId, state: "released" }),
+        confirmAllocation: async (input) => ({ allowed: true as const, allocationId: input.allocationId, state: "allocated" as const }),
+        allocate: async (input) => { allocated = true; return { allowed: true, allocationId: input.allocationId, operationId: input.operationId, subscriptionRevision: input.subscriptionRevision, remaining: 0, state: "held" as const }; },
+        deallocate: async (input) => ({ allowed: true, allocationId: input.allocationId, operationId: input.operationId, state: "released" as const }),
       },
       catalogue: { version: 1, freePlan: "free", features: { staff: { kind: "capacity" } }, plans: { free: { staff: { kind: "limit", maximum: 1 } } } },
       now: () => 0,
     });
-    expect(await service.allocate({ shop: "shop", key: "staff", allocationId: "user-1" })).toEqual({ allowed: false, reason: "inactive_subscription" });
+    expect(await service.allocate({ shop: "shop", key: "staff", allocationId: "user-1", operationId: "op-1" })).toEqual({ allowed: false, reason: "inactive_subscription" });
     expect(allocated).toBe(false);
   });
 
@@ -108,11 +109,11 @@ describe("entitlements service", () => {
     let called = false;
     const service = createEntitlements({
       subscriptions: { current: async () => ({ status: "ACTIVE", planHandle: "free", revision: 1 }) },
-      capacity: { allocate: async (input) => { called = true; return { allowed: true as const, allocationId: input.allocationId, subscriptionRevision: input.subscriptionRevision, remaining: 0 }; }, deallocate: async (input) => ({ allowed: true as const, allocationId: input.allocationId, state: "released" as const }) },
+      capacity: { confirmAllocation: async (input) => ({ allowed: true as const, allocationId: input.allocationId, state: "allocated" as const }), allocate: async (input) => { called = true; return { allowed: true as const, allocationId: input.allocationId, operationId: input.operationId, subscriptionRevision: input.subscriptionRevision, remaining: 0, state: "held" as const }; }, deallocate: async (input) => ({ allowed: true as const, allocationId: input.allocationId, operationId: input.operationId, state: "released" as const }) },
       catalogue: { version: 1, freePlan: "free", features: { staff: { kind: "capacity" } }, plans: { free: { staff: { kind: "disabled" } } } },
       now: () => 0,
     });
-    expect(await service.allocate({ shop: "shop", key: "staff", allocationId: "u" })).toEqual({ allowed: false, reason: "disabled" });
+    expect(await service.allocate({ shop: "shop", key: "staff", allocationId: "u", operationId: "op-u" })).toEqual({ allowed: false, reason: "disabled" });
     expect(called).toBe(false);
   });
 
@@ -120,12 +121,12 @@ describe("entitlements service", () => {
     const service = createEntitlements({
       subscriptions: { current: async () => ({ status: "ACTIVE", planHandle: "free", revision: 1 }) },
       usage: { reserve: async (input) => ({ allowed: true as const, operationId: input.operationId, amount: input.amount, period: input.period, subscriptionRevision: input.subscriptionRevision, remaining: 0 }), commit: async (input) => ({ allowed: true as const, operationId: input.operationId, state: "committed" as const }), release: async (input) => ({ allowed: true as const, operationId: input.operationId, state: "released" as const }) },
-      capacity: { allocate: async (input) => ({ allowed: true as const, allocationId: input.allocationId, subscriptionRevision: input.subscriptionRevision, remaining: 0 }), deallocate: async (input) => ({ allowed: true as const, allocationId: input.allocationId, state: "released" as const }) },
+      capacity: { confirmAllocation: async (input) => ({ allowed: true as const, allocationId: input.allocationId, state: "allocated" as const }), allocate: async (input) => ({ allowed: true as const, allocationId: input.allocationId, operationId: input.operationId, subscriptionRevision: input.subscriptionRevision, remaining: 0, state: "held" as const }), deallocate: async (input) => ({ allowed: true as const, allocationId: input.allocationId, operationId: input.operationId, state: "released" as const }) },
       catalogue: { version: 1, freePlan: "free", features: {}, plans: { free: {} } },
     });
     expect(await service.commit({ shop: "shop", operationId: "op", actualAmount: 2 })).toEqual({ allowed: true, operationId: "op", state: "committed" });
     expect(await service.release({ shop: "shop", operationId: "op" })).toEqual({ allowed: true, operationId: "op", state: "released" });
-    expect(await service.deallocate({ shop: "shop", key: "staff", allocationId: "u" })).toEqual({ allowed: true, allocationId: "u", state: "released" });
+    expect(await service.deallocate({ shop: "shop", key: "staff", allocationId: "u", operationId: "op-u" })).toEqual({ allowed: true, allocationId: "u", operationId: "op-u", state: "released" });
   });
 
   it("rejects invalid request identifiers before calling storage", async () => {

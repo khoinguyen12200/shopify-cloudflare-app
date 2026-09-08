@@ -9,9 +9,12 @@ import * as wiring from "~/wiring.server";
 setupTestDatabase();
 
 async function seedHeld(shop: string) {
-  await new EntitlementRepo().reserve({ shop, key: "exports", operationId: "quota-1", period: "lifetime", amount: 2, maximum: 2, subscriptionRevision: 1 });
-  await env.DB.prepare("INSERT INTO entitlement_allocations (shop,key,allocation_id,subscription_revision,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?)")
-    .bind(shop, "staff.max", "staff-1", 1, "held", 1, 1).run();
+  await env.DB.prepare("INSERT INTO shop_subscriptions (shop,subscription_id,status,applied_occurred_at,applied_external_id,revision) VALUES (?,?,?,?,?,?)")
+    .bind(shop, "subscription", "ACTIVE", 1, "event", 1).run();
+  expect(await new EntitlementRepo().reserve({ shop, key: "exports", operationId: "quota-1", period: "lifetime", amount: 2, maximum: 2, subscriptionRevision: 1 }))
+    .toMatchObject({ allowed: true, state: "held" });
+  await env.DB.prepare("INSERT INTO entitlement_allocations (shop,key,allocation_id,operation_id,subscription_revision,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)")
+    .bind(shop, "staff.max", "staff-1", "capacity-op-1", 1, "held", 1, 1).run();
 }
 
 describe("wired entitlement reconciliation", () => {
@@ -54,7 +57,7 @@ describe("wired entitlement reconciliation", () => {
       }
       expect(await port.listHeld("reconcile-release")).toEqual([]);
       expect(await env.DB.prepare("SELECT committed, held FROM entitlement_usage WHERE shop = ?").bind("reconcile-release").first()).toEqual({ committed: 0, held: 0 });
-      expect(await new EntitlementRepo().allocate({ shop: "reconcile-release", key: "staff.max", allocationId: "new-resource", maximum: 1, subscriptionRevision: 1 })).toMatchObject({ allowed: true, remaining: 0 });
+      expect(await new EntitlementRepo().allocate({ shop: "reconcile-release", key: "staff.max", allocationId: "new-resource", operationId: "op-new-resource", maximum: 1, subscriptionRevision: 1 })).toMatchObject({ allowed: true, remaining: 0 });
     });
   });
 });

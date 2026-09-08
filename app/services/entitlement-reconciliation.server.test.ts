@@ -2,6 +2,16 @@ import { describe, expect, it } from "vitest";
 import { reconcileHeld, type HeldReconciliationPort } from "./entitlement-reconciliation.server";
 
 describe("reconcileHeld", () => {
+  it("awaits asynchronous ownership decisions before settlement", async () => {
+    let held = true;
+    const port: HeldReconciliationPort = {
+      listHeld: async (shop) => [{ kind: "quota", id: "op", key: "exports", shop }],
+      apply: async () => { held = false; return { state: "committed" }; },
+    };
+    const result = await reconcileHeld("shop", port, async () => "commit" as const);
+    expect(result).toEqual({ processed: 1, committed: 1, allocated: 0, released: 0, failures: [] });
+    expect(held).toBe(false);
+  });
   it("applies explicit decisions and preserves shop scope", async () => {
     const calls: string[] = [];
     const port: HeldReconciliationPort = {
