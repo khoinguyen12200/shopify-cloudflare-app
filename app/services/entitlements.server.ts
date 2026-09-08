@@ -50,7 +50,7 @@ function makePreview(deps: Dependencies, now: () => number) {
   return async (shop: string, key: EntitlementKey): Promise<PreviewResult> => {
     if (!valid(shop) || !valid(key)) return { ...invalidRequest, authoritative: false };
     const result = resolveEntitlement(deps.catalogue, await preview(deps, shop), key, now());
-    return { ...result, authoritative: false } as PreviewResult;
+    return Object.assign(result, { authoritative: false as const });
   };
 }
 function makeAllocate(deps: Dependencies, now: () => number) {
