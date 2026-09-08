@@ -6,53 +6,97 @@ import { EntitlementRepo } from "./entitlements.server";
 
 setupTestDatabase();
 
+async function seedProjection(shop: string, revision = 1) {
+  await env.DB.prepare("INSERT INTO shop_subscriptions (shop,subscription_id,status,applied_occurred_at,applied_external_id,revision) VALUES (?,?,?,?,?,?)")
+    .bind(shop, "subscription", "ACTIVE", 1, "event", revision).run();
+}
+
 describe("EntitlementRepo", () => {
+  it("classifies quota exhaustion using numeric revision rather than event time", async () => {
+    await runWithRequestContext(env, async () => {
+      await seedProjection("exhaustion", 3);
+      const repo = new EntitlementRepo();
+      const quota = { shop: "exhaustion", key: "exports", operationId: "a", period: "lifetime", amount: 1, maximum: 1, subscriptionRevision: 3 };
+      expect(await repo.reserve(quota)).toMatchObject({ allowed: true });
+      expect(await repo.reserve({ ...quota, operationId: "b" })).toEqual({ allowed: false, reason: "quota_exhausted" });
+    });
+  });
+
+  it("classifies capacity exhaustion using numeric revision rather than event time", async () => {
+    await runWithRequestContext(env, async () => {
+      await seedProjection("exhaustion", 3);
+      const repo = new EntitlementRepo();
+      const capacity = { shop: "exhaustion", key: "staff", allocationId: "a", operationId: "op-a", maximum: 1, subscriptionRevision: 3 };
+      expect(await repo.allocate(capacity)).toMatchObject({ allowed: true });
+      expect(await repo.allocate({ ...capacity, allocationId: "b", operationId: "op-b" })).toEqual({ allowed: false, reason: "capacity_exhausted" });
+    });
+  });
   it("enforces a capacity maximum and returns the slot after release", async () => {
     await runWithRequestContext(env, async () => {
+      await seedProjection("one");
       const repo = new EntitlementRepo();
-      expect(await repo.allocate({ shop: "one", key: "staff.max", allocationId: "staff-1", maximum: 1, subscriptionRevision: 1 })).toMatchObject({ allowed: true });
-      expect(await repo.allocate({ shop: "one", key: "staff.max", allocationId: "staff-2", maximum: 1, subscriptionRevision: 1 })).toEqual({ allowed: false, reason: "capacity_exhausted" });
-      expect(await repo.deallocate({ shop: "one", key: "staff.max", allocationId: "staff-1" })).toMatchObject({ allowed: true });
-      expect(await repo.allocate({ shop: "one", key: "staff.max", allocationId: "staff-2", maximum: 1, subscriptionRevision: 1 })).toMatchObject({ allowed: true });
+      expect(await repo.allocate({ shop: "one", key: "staff.max", allocationId: "staff-1", operationId: "op-staff-1", maximum: 1, subscriptionRevision: 1 })).toMatchObject({ allowed: true });
+      expect(await env.DB.prepare("SELECT state FROM entitlement_allocations WHERE shop='one'").first()).toEqual({ state: "held" });
+      expect(await repo.allocate({ shop: "one", key: "staff.max", allocationId: "staff-2", operationId: "op-staff-2", maximum: 1, subscriptionRevision: 1 })).toEqual({ allowed: false, reason: "capacity_exhausted" });
+      expect(await repo.deallocate({ shop: "one", key: "staff.max", allocationId: "staff-1", operationId: "op-staff-1" })).toMatchObject({ allowed: true });
+      expect(await repo.allocate({ shop: "one", key: "staff.max", allocationId: "staff-2", operationId: "op-staff-2", maximum: 1, subscriptionRevision: 1 })).toMatchObject({ allowed: true });
     });
   });
 
   it("atomically admits only one of two concurrent allocations at a one-slot limit", async () => {
     await runWithRequestContext(env, async () => {
+      await seedProjection("race");
       const repo = new EntitlementRepo();
       const results = await Promise.all([
-        repo.allocate({ shop: "race", key: "staff.max", allocationId: "staff-1", maximum: 1, subscriptionRevision: 1 }),
-        repo.allocate({ shop: "race", key: "staff.max", allocationId: "staff-2", maximum: 1, subscriptionRevision: 1 }),
+        repo.allocate({ shop: "race", key: "staff.max", allocationId: "staff-1", operationId: "op-staff-1", maximum: 1, subscriptionRevision: 1 }),
+        repo.allocate({ shop: "race", key: "staff.max", allocationId: "staff-2", operationId: "op-staff-2", maximum: 1, subscriptionRevision: 1 }),
       ]);
       expect(results.filter((result) => result.allowed)).toHaveLength(1);
       expect(results.filter((result) => !result.allowed)).toEqual([{ allowed: false, reason: "capacity_exhausted" }]);
     });
   });
 
+  it("rejects a concurrent allocation that reuses an operation ID with different input", async () => {
+    await runWithRequestContext(env, async () => {
+      await seedProjection("operation-race");
+      const repo = new EntitlementRepo();
+      const results = await Promise.all([
+        repo.allocate({ shop: "operation-race", key: "staff.max", allocationId: "staff-1", operationId: "same-operation", maximum: 2, subscriptionRevision: 1 }),
+        repo.allocate({ shop: "operation-race", key: "staff.max", allocationId: "staff-2", operationId: "same-operation", maximum: 2, subscriptionRevision: 1 }),
+      ]);
+
+      expect(results.filter((result) => result.allowed)).toHaveLength(1);
+      expect(results.filter((result) => !result.allowed)).toEqual([{ allowed: false, reason: "operation_conflict" }]);
+    });
+  });
+
   it("keeps capacity retries idempotent and rejects revision conflicts", async () => {
     await runWithRequestContext(env, async () => {
+      await seedProjection("capacity-replay", 4);
       const repo = new EntitlementRepo();
-      const input = { shop: "capacity-replay", key: "staff.max", allocationId: "staff-1", maximum: 2, subscriptionRevision: 4 };
-      expect(await repo.allocate(input)).toMatchObject({ allowed: true, allocationId: "staff-1", subscriptionRevision: 4, remaining: 1 });
-      expect(await repo.allocate(input)).toMatchObject({ allowed: true, allocationId: "staff-1", subscriptionRevision: 4, remaining: 1 });
+      const input = { shop: "capacity-replay", key: "staff.max", allocationId: "staff-1", operationId: "op-staff-1", maximum: 2, subscriptionRevision: 4 };
+      expect(await repo.allocate(input)).toMatchObject({ allowed: true, allocationId: "staff-1", operationId: "op-staff-1", subscriptionRevision: 4, remaining: 1 });
+      expect(await repo.allocate(input)).toMatchObject({ allowed: true, allocationId: "staff-1", operationId: "op-staff-1", subscriptionRevision: 4, remaining: 1 });
       expect(await repo.allocate({ ...input, subscriptionRevision: 5 })).toEqual({ allowed: false, reason: "conflict" });
-      expect(await repo.deallocate({ shop: input.shop, key: input.key, allocationId: input.allocationId })).toEqual({ allowed: true, allocationId: "staff-1", state: "released" });
-      expect(await repo.deallocate({ shop: input.shop, key: input.key, allocationId: input.allocationId })).toEqual({ allowed: true, allocationId: "staff-1", state: "released" });
+      expect(await repo.deallocate({ shop: input.shop, key: input.key, allocationId: input.allocationId, operationId: input.operationId })).toEqual({ allowed: true, allocationId: "staff-1", operationId: "op-staff-1", state: "released" });
+      expect(await repo.deallocate({ shop: input.shop, key: input.key, allocationId: input.allocationId, operationId: input.operationId })).toEqual({ allowed: true, allocationId: "staff-1", operationId: "op-staff-1", state: "released" });
     });
   });
   it("deallocates only an active allocation", async () => {
     await runWithRequestContext(env, async () => {
+      await seedProjection("deallocate-guard");
       const repo = new EntitlementRepo();
-      await repo.allocate({ shop: "deallocate-guard", key: "staff.max", allocationId: "a", maximum: 1, subscriptionRevision: 1 });
-      expect(await repo.deallocate({ shop: "deallocate-guard", key: "staff.max", allocationId: "a" })).toMatchObject({ allowed: true, state: "released" });
-      expect(await repo.deallocate({ shop: "deallocate-guard", key: "staff.max", allocationId: "missing" })).toEqual({ allowed: false, reason: "not_found" });
+      await repo.allocate({ shop: "deallocate-guard", key: "staff.max", allocationId: "a", operationId: "op-a", maximum: 1, subscriptionRevision: 1 });
+      expect(await repo.deallocate({ shop: "deallocate-guard", key: "staff.max", allocationId: "a", operationId: "op-a" })).toMatchObject({ allowed: true, state: "released" });
+      expect(await repo.deallocate({ shop: "deallocate-guard", key: "staff.max", allocationId: "missing", operationId: "op-missing" })).toEqual({ allowed: false, reason: "not_found" });
     });
   });
 
   it("does not write a second release under concurrent deallocation", async () => {
     await runWithRequestContext(env, async () => {
+      await seedProjection("conditional-deallocation");
       const repo = new EntitlementRepo();
-      const input = { shop: "conditional-deallocation", key: "staff.max", allocationId: "a" };
+      const input = { shop: "conditional-deallocation", key: "staff.max", allocationId: "a", operationId: "op-a" };
       await repo.allocate({ ...input, maximum: 1, subscriptionRevision: 1 });
       await env.DB.prepare(`CREATE TRIGGER reject_redundant_allocation_release BEFORE UPDATE ON entitlement_allocations
         WHEN OLD.shop = 'conditional-deallocation' AND OLD.state = 'released' AND NEW.state = 'released'
@@ -60,8 +104,8 @@ describe("EntitlementRepo", () => {
       try {
         const results = await Promise.all([repo.deallocate(input), repo.deallocate(input)]);
         expect(results).toEqual([
-          { allowed: true, allocationId: "a", state: "released" },
-          { allowed: true, allocationId: "a", state: "released" },
+          { allowed: true, allocationId: "a", operationId: "op-a", state: "released" },
+          { allowed: true, allocationId: "a", operationId: "op-a", state: "released" },
         ]);
       } finally {
         await env.DB.prepare("DROP TRIGGER reject_redundant_allocation_release").run();
@@ -71,6 +115,7 @@ describe("EntitlementRepo", () => {
 
   it.each(["commit", "release"])("preserves held state when %s has no matching aggregate", async (action) => {
     await runWithRequestContext(env, async () => {
+      await seedProjection("missing-aggregate");
       const repo = new EntitlementRepo();
       const input = { shop: "missing-aggregate", operationId: "op" };
       await repo.reserve({ ...input, key: "exports", period: "lifetime", amount: 2, maximum: 2, subscriptionRevision: 1 });
@@ -83,6 +128,7 @@ describe("EntitlementRepo", () => {
 
   it.each(["commit", "release"])("rolls back %s when the aggregate SQL write fails", async (action) => {
     await runWithRequestContext(env, async () => {
+      await seedProjection("aggregate-error");
       const repo = new EntitlementRepo();
       const input = { shop: "aggregate-error", operationId: "op" };
       await repo.reserve({ ...input, key: "exports", period: "lifetime", amount: 2, maximum: 2, subscriptionRevision: 1 });
@@ -102,7 +148,7 @@ describe("EntitlementRepo", () => {
     await runWithRequestContext(env, async () => {
       const repo = new EntitlementRepo();
       await env.DB.prepare("INSERT INTO shop_subscriptions (shop,subscription_id,status,applied_occurred_at,applied_external_id) VALUES (?,?,?,?,?)").bind("revision-cap", "sub", "ACTIVE", 9, "evt").run();
-      expect(await repo.allocate({ shop: "revision-cap", key: "staff.max", allocationId: "a", maximum: 1, subscriptionRevision: 8 })).toEqual({ allowed: false, reason: "conflict" });
+      expect(await repo.allocate({ shop: "revision-cap", key: "staff.max", allocationId: "a", operationId: "op-a", maximum: 1, subscriptionRevision: 8 })).toEqual({ allowed: false, reason: "conflict" });
     });
   });
 
@@ -125,6 +171,8 @@ describe("EntitlementRepo", () => {
 
   it("keeps quota usage isolated by shop and makes replay idempotent", async () => {
     await runWithRequestContext(env, async () => {
+      await seedProjection("one");
+      await seedProjection("two");
       const repo = new EntitlementRepo();
       const input = { shop: "one", key: "exports", operationId: "op-1", period: "lifetime", amount: 3, maximum: 5, subscriptionRevision: 1 };
       expect(await repo.reserve(input)).toMatchObject({ allowed: true, amount: 3, remaining: 2 });
@@ -139,6 +187,7 @@ describe("EntitlementRepo", () => {
 
   it("reports replay remaining from aggregate usage, not only the replay amount", async () => {
     await runWithRequestContext(env, async () => {
+      await seedProjection("aggregate-replay");
       const repo = new EntitlementRepo();
       await repo.reserve({ shop: "aggregate-replay", key: "exports", operationId: "first", period: "lifetime", amount: 2, maximum: 5, subscriptionRevision: 1 });
       await repo.reserve({ shop: "aggregate-replay", key: "exports", operationId: "second", period: "lifetime", amount: 1, maximum: 5, subscriptionRevision: 1 });
@@ -149,6 +198,7 @@ describe("EntitlementRepo", () => {
 
   it("never admits concurrent reservations beyond the quota maximum", async () => {
     await runWithRequestContext(env, async () => {
+      await seedProjection("quota-race");
       const repo = new EntitlementRepo();
       const results = await Promise.all([
         repo.reserve({ shop: "quota-race", key: "exports", operationId: "a", period: "lifetime", amount: 1, maximum: 1, subscriptionRevision: 1 }),
@@ -165,6 +215,7 @@ describe("EntitlementRepo", () => {
 
   it("commits a held reservation exactly once under concurrent retries", async () => {
     await runWithRequestContext(env, async () => {
+      await seedProjection("commit-race");
       const repo = new EntitlementRepo();
       await repo.reserve({ shop: "commit-race", key: "exports", operationId: "op", period: "lifetime", amount: 3, maximum: 5, subscriptionRevision: 1 });
       await repo.reserve({ shop: "commit-race", key: "exports", operationId: "other", period: "lifetime", amount: 3, maximum: 6, subscriptionRevision: 1 });
@@ -180,6 +231,7 @@ describe("EntitlementRepo", () => {
 
   it("releases a held reservation exactly once under concurrent retries", async () => {
     await runWithRequestContext(env, async () => {
+      await seedProjection("release-race");
       const repo = new EntitlementRepo();
       await repo.reserve({ shop: "release-race", key: "exports", operationId: "op", period: "lifetime", amount: 3, maximum: 5, subscriptionRevision: 1 });
       await repo.reserve({ shop: "release-race", key: "exports", operationId: "other", period: "lifetime", amount: 2, maximum: 5, subscriptionRevision: 1 });
@@ -194,6 +246,7 @@ describe("EntitlementRepo", () => {
 
   it("lists and explicitly reconciles crash-left held operations", async () => {
     await runWithRequestContext(env, async () => {
+      await seedProjection("one");
       const repo = new EntitlementRepo();
       await repo.reserve({ shop: "one", key: "exports", operationId: "held", period: "month", amount: 1, maximum: 2, subscriptionRevision: 1 });
       expect(await repo.listHeld("two")).toEqual([]);
@@ -205,10 +258,11 @@ describe("EntitlementRepo", () => {
 
   it("lists held capacity allocations by shop", async () => {
     await runWithRequestContext(env, async () => {
+      await seedProjection("capacity-held");
       const repo = new EntitlementRepo();
-      await repo.allocate({ shop: "capacity-held", key: "staff.max", allocationId: "staff-1", maximum: 1, subscriptionRevision: 1 });
+      await repo.allocate({ shop: "capacity-held", key: "staff.max", allocationId: "staff-1", operationId: "op-staff-1", maximum: 1, subscriptionRevision: 1 });
       await env.DB.prepare("UPDATE entitlement_allocations SET state = 'held' WHERE shop = ?").bind("capacity-held").run();
-      expect(await repo.listHeldAllocations("capacity-held")).toEqual([{ key: "staff.max", allocationId: "staff-1" }]);
+      expect(await repo.listHeldAllocations("capacity-held")).toEqual([{ key: "staff.max", allocationId: "staff-1", operationId: "op-staff-1" }]);
       expect(await repo.listHeldAllocations("other-shop")).toEqual([]);
     });
   });

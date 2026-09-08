@@ -1,7 +1,7 @@
 import type { LoaderFunctionArgs, MetaFunction } from "react-router";
 import { useTranslation } from "react-i18next";
 import { i18nServer } from "~/i18n/i18n.server";
-import { CONTACT_EMAIL } from "~/legal/content";
+import { identity } from "~/identity";
 
 export const handle = { i18n: ["common", "public"] };
 
@@ -44,7 +44,7 @@ export default function Support() {
         <p>{t("support.faqBody")}</p>
 
         <h2>{t("support.contact")}</h2>
-        <p>{t("support.contactBody", { email: CONTACT_EMAIL })}</p>
+        <p>{t("support.contactBody", { email: identity.contacts.supportEmail })}</p>
       </div>
     </section>
   );

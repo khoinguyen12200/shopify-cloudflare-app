@@ -56,3 +56,15 @@ event** — never `catch {}`, never a blank page from one bad query.
 secondary panel may fall back to an empty value. Anything the page cannot be
 correct without — an amount, a total, an entitlement, a status the merchant will
 act on — fails loudly instead of rendering a plausible wrong number.
+
+## Drizzle-first queries and narrow SQL exceptions
+
+Use schema-backed Drizzle builders (`select`, `insert`, `update`, `delete`, joins,
+predicates, aggregates, and conflict clauses) for ordinary CRUD and reads. Keep
+direct D1 statements or `sql.raw()` only inside the model adapter when a SQLite
+operation cannot be expressed without changing its semantics (for example, a
+guarded `INSERT ... SELECT` admission or a `changes() = 1` dependent counter
+update). Values must remain bound parameters, and any retained exception must
+document the invariant it protects and have integration coverage for isolation,
+replay, failure rollback, and concurrency. Never split a guard and its write into
+separate application-level queries.

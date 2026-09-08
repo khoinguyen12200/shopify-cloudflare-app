@@ -14,6 +14,8 @@ import {
 } from "@react-email/components";
 import type { ReactNode } from "react";
 import { styles } from "./tokens";
+import { identity } from "~/identity";
+import { toLocale } from "~/i18n/config";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // THE email layout. Every email in this app composes this one component plus the
@@ -48,22 +50,27 @@ export function EmailLayout({
   heading,
   children,
   logoUrl,
-  brandName = "TODO: Your App Name",
-  footer = "TODO: your footer line — who sent this and why.",
+  brandName = identity.brandName,
+  footer,
   locale = "en",
 }: EmailLayoutProps) {
+  const resolvedLocale = toLocale(locale);
+  const resolvedFooter =
+    footer ?? identity.copy.emailSenderDisclosure[resolvedLocale];
   return (
-    <Html lang={locale}>
+    <Html lang={resolvedLocale}>
       <Head />
       <Preview>{preview}</Preview>
       <Body style={styles.body}>
         <Container style={styles.card}>
-          {logoUrl ? <Img src={logoUrl} alt={brandName} style={styles.logo} /> : null}
+          {logoUrl ? (
+            <Img src={logoUrl} alt={brandName} style={styles.logo} />
+          ) : null}
           <Text style={styles.brand}>{brandName}</Text>
           <Heading style={styles.heading}>{heading}</Heading>
           {children}
           <Hr style={styles.hr} />
-          <Text style={styles.footer}>{footer}</Text>
+          <Text style={styles.footer}>{resolvedFooter}</Text>
         </Container>
       </Body>
     </Html>

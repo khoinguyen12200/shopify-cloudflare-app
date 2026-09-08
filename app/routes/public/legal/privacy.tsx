@@ -3,12 +3,7 @@ import { useTranslation } from "react-i18next";
 import { i18nServer } from "~/i18n/i18n.server";
 import { useLocale } from "~/i18n/useLocale";
 import { formatDate } from "~/i18n/format";
-import {
-  COMPANY_NAME,
-  COMPANY_ADDRESS,
-  CONTACT_EMAIL,
-  LAST_UPDATED,
-} from "~/legal/content";
+import { identity } from "~/identity";
 
 export const handle = { i18n: ["common", "public"] };
 
@@ -50,9 +45,9 @@ export default function PrivacyPolicy() {
 
   // A date is formatted, never printed raw: 1/2/2026 means different days in
   // different locales.
-  const updated = Number.isNaN(Date.parse(LAST_UPDATED))
-    ? LAST_UPDATED
-    : formatDate(locale, new Date(LAST_UPDATED), { dateStyle: "long" });
+  const updated = Number.isNaN(Date.parse(identity.legal.effectiveDate))
+    ? identity.legal.effectiveDate
+    : formatDate(locale, new Date(identity.legal.effectiveDate), { dateStyle: "long" });
 
   return (
     <section className="section">
@@ -62,7 +57,7 @@ export default function PrivacyPolicy() {
 
         <p className="notice notice--warning">{t("legal.privacy.warning")}</p>
 
-        <p>{t("legal.privacy.intro", { company: COMPANY_NAME, appName })}</p>
+        <p>{t("legal.privacy.intro", { company: identity.companyName, appName })}</p>
 
         {SECTION_KEYS.map((key) => (
           <section key={key}>
@@ -75,11 +70,11 @@ export default function PrivacyPolicy() {
           <p>
             <strong>{t("legal.privacy.contact")}</strong>
             <br />
-            {COMPANY_NAME}
+            {identity.companyName}
             <br />
-            {COMPANY_ADDRESS}
+            {identity.legal.address}
             <br />
-            <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
+            <a href={`mailto:${identity.contacts.privacyEmail}`}>{identity.contacts.privacyEmail}</a>
           </p>
         </div>
       </div>

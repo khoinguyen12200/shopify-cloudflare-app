@@ -16,13 +16,6 @@
  * legal advice; have qualified counsel review final wording.
  */
 
-export const APP_NAME = "TODO: Your App Name";
-export const COMPANY_NAME = "TODO: Your Legal Entity Name";
-export const CONTACT_EMAIL = "TODO: privacy@example.com";
-/** Some jurisdictions require a physical address in the privacy policy. */
-export const COMPANY_ADDRESS = "TODO: Street, City, Region, Postcode, Country";
-export const LAST_UPDATED = "TODO: YYYY-MM-DD";
-
 /**
  * The questions Shopify says a privacy policy should answer. Keep the headings
  * and replace the bodies — a reviewer reads for these specifically.

@@ -162,6 +162,10 @@ export class ShopifyEventRepo {
         eq(shopSubscriptionItems.subscriptionId, event.subscriptionId),
         sql`exists (select 1 from ${shopSubscriptions} where ${shopSubscriptions.shop} = ${event.shop} and ${shopSubscriptions.subscriptionId} = ${event.subscriptionId} and ${shopSubscriptions.appliedOccurredAt} = ${event.occurredAt} and ${shopSubscriptions.appliedExternalId} = ${event.id})`,
       )),
+      // Keep this guarded INSERT ... SELECT as a narrow SQL exception. Item
+      // replacement must only occur when this event won the subscription
+      // projection race; splitting the guard and insert would allow stale
+      // events to overwrite newer items.
       ...event.items.map((item, position) => db.run(sql`insert into ${shopSubscriptionItems} (shop, subscription_id, position, item_type, price_amount, price_currency, capped_amount_amount, capped_amount_currency) select ${event.shop}, ${event.subscriptionId}, ${position}, ${item.itemType}, ${item.priceAmount ?? null}, ${item.priceCurrency ?? null}, ${item.cappedAmountAmount ?? null}, ${item.cappedAmountCurrency ?? null} where exists (select 1 from ${shopSubscriptions} where ${shopSubscriptions.shop} = ${event.shop} and ${shopSubscriptions.subscriptionId} = ${event.subscriptionId} and ${shopSubscriptions.appliedOccurredAt} = ${event.occurredAt} and ${shopSubscriptions.appliedExternalId} = ${event.id})`)),
     ] : [];
     const [inserted] = await db.batch([
