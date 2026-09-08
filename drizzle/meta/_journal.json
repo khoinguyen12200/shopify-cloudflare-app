@@ -127,6 +127,13 @@
       "when": 1788783054017,
       "tag": "0017_bitter_anthem",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1788833624370,
+      "tag": "0018_brave_tyrannus",
+      "breakpoints": true
     }
   ]
 }

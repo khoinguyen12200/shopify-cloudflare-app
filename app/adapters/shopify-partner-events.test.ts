@@ -2,6 +2,14 @@ import { describe, expect, it } from "vitest";
 import { parsePartnerEvent } from "./shopify-partner-events";
 
 describe("parsePartnerEvent", () => {
+  it.each(["2026-02-30", "2026-13-01", "not-a-date", "2026-02-01T00:00:00Z", 42])("rejects malformed cancellation date %s", (cancelEffectiveOn) => {
+    expect(() => parsePartnerEvent({
+      id: "invalid-date", eventType: "SUBSCRIPTION_CANCELLATION_SCHEDULED",
+      occurredAt: "2026-01-02T00:00:00Z", state: "CANCELLATION_SCHEDULED",
+      shop: { id: "gid://shopify/Shop/1", myshopifyDomain: "example.myshopify.com" },
+      cancelEffectiveOn,
+    })).toThrow("invalid cancellation date");
+  });
   it("maps relationship history to typed lifecycle facts", () => {
     expect(parsePartnerEvent({
       id: "evt-1", eventType: "RELATIONSHIP_UNINSTALLED", occurredAt: "2026-01-01T00:00:00Z",

@@ -34,6 +34,7 @@ export type SubscriptionLedgerEvent = {
   readonly status: "NONE" | "PENDING" | "ACTIVE" | "CANCELLATION_SCHEDULED" | "FROZEN" | "CANCELED" | "UNKNOWN";
   readonly planHandle?: string | null;
   readonly billingInterval?: string | null;
+  readonly cancelEffectiveOn?: string | null;
 };
 export type ReconcileResult =
   | { readonly status: "succeeded"; readonly pages: number; readonly events: number }
@@ -52,7 +53,7 @@ function ledgerEvent(event: PartnerHistoryEvent, synchronizedAt: number): Relati
   const status = event.type === "CREATED" ? "PENDING" : event.type === "UPDATED" || event.type === "UNFROZEN" ? "ACTIVE" : event.type;
   // SubscriptionStatus.id identifies this event, not a subscription. Partner
   // exposes one active subscription per shop, so history uses same projection key.
-  return { id: event.id, shop: event.shop, shopifyShopId: event.shopId, type: event.type, occurredAt, synchronizedAt, subscriptionId: `active:${event.shopId}`, status, planHandle: event.planHandle, billingInterval: event.billingPeriod };
+  return { id: event.id, shop: event.shop, shopifyShopId: event.shopId, type: event.type, occurredAt, synchronizedAt, subscriptionId: `active:${event.shopId}`, status, planHandle: event.planHandle, billingInterval: event.billingPeriod, cancelEffectiveOn: event.cancelEffectiveOn };
 }
 
 export async function reconcileHistory(deps: {

@@ -13,6 +13,7 @@ export type SubscriptionObservationInput = SubscriptionObservation & {
   readonly currentPeriodStartsAt?: number | null;
   readonly currentPeriodEndsAt?: number | null;
   readonly cancellationEffectiveAt?: number | null;
+  readonly cancelEffectiveOn?: string | null;
   readonly pendingPlanHandle?: string | null;
   readonly pendingBillingInterval?: string | null;
   readonly pendingLegacySubscriptionId?: string | null;
@@ -113,6 +114,7 @@ export class ShopSubscriptionRepo {
       trialEndsAt: observation.trialEndsAt === undefined ? current?.trialEndsAt ?? null : observation.trialEndsAt,
       currentPeriodStartsAt: observation.currentPeriodStartsAt === undefined ? current?.currentPeriodStartsAt ?? null : observation.currentPeriodStartsAt,
       currentPeriodEndsAt: observation.currentPeriodEndsAt === undefined ? current?.currentPeriodEndsAt ?? null : observation.currentPeriodEndsAt,
+      cancelEffectiveOn: observation.cancelEffectiveOn === undefined ? current?.cancelEffectiveOn ?? null : observation.cancelEffectiveOn,
       cancellationEffectiveAt: observation.cancellationEffectiveAt === undefined ? current?.cancellationEffectiveAt ?? null : observation.cancellationEffectiveAt,
       pendingPlanHandle: observation.pendingPlanHandle === undefined ? current?.pendingPlanHandle ?? null : observation.pendingPlanHandle,
       pendingBillingInterval: observation.pendingBillingInterval === undefined ? current?.pendingBillingInterval ?? null : observation.pendingBillingInterval,
@@ -125,6 +127,7 @@ export class ShopSubscriptionRepo {
       trialEndsAt: observation.trialEndsAt === undefined ? current?.trialEndsAt ?? null : observation.trialEndsAt,
       currentPeriodStartsAt: observation.currentPeriodStartsAt === undefined ? current?.currentPeriodStartsAt ?? null : observation.currentPeriodStartsAt,
       currentPeriodEndsAt: observation.currentPeriodEndsAt === undefined ? current?.currentPeriodEndsAt ?? null : observation.currentPeriodEndsAt,
+      cancelEffectiveOn: observation.cancelEffectiveOn === undefined ? current?.cancelEffectiveOn ?? null : observation.cancelEffectiveOn,
       cancellationEffectiveAt: observation.cancellationEffectiveAt === undefined ? current?.cancellationEffectiveAt ?? null : observation.cancellationEffectiveAt,
       pendingPlanHandle: observation.pendingPlanHandle === undefined ? current?.pendingPlanHandle ?? null : observation.pendingPlanHandle,
       pendingBillingInterval: observation.pendingBillingInterval === undefined ? current?.pendingBillingInterval ?? null : observation.pendingBillingInterval,

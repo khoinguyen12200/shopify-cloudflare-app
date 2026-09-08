@@ -18,6 +18,7 @@ export interface SubscriptionObservation {
   readonly currentPeriodStartsAt?: number | null;
   readonly currentPeriodEndsAt?: number | null;
   readonly cancellationEffectiveAt?: number | null;
+  readonly cancelEffectiveOn?: string | null;
   readonly pendingPlanHandle?: string | null;
   readonly pendingBillingInterval?: string | null;
   readonly pendingLegacySubscriptionId?: string | null;
@@ -76,6 +77,7 @@ export async function refreshSubscription(deps: {
       trialEndsAt: Number.isFinite(trialEndsAt) ? trialEndsAt : null,
       currentPeriodStartsAt: Number.isFinite(currentPeriodStartsAt) ? currentPeriodStartsAt : null,
       currentPeriodEndsAt: Number.isFinite(currentPeriodEndsAt) ? currentPeriodEndsAt : null,
+      cancelEffectiveOn: null,
       cancellationEffectiveAt: response?.cancelAtEndOfCycle && Number.isFinite(currentPeriodEndsAt) ? currentPeriodEndsAt : null,
       pendingPlanHandle: pendingItem?.handle ?? null,
       pendingBillingInterval: response?.pendingUpdate?.billingPeriod ?? null,

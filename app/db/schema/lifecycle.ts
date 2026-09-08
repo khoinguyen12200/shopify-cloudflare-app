@@ -127,6 +127,7 @@ export const shopifySubscriptionEvents = sqliteTable(
     trialEndsAt: integer("trial_ends_at"),
     currentPeriodEndsAt: integer("current_period_ends_at"),
     cancellationEffectiveAt: integer("cancellation_effective_at"),
+    cancelEffectiveOn: text("cancel_effective_on"),
     ...nullableMoney("price"),
   },
   (table) => [
@@ -164,6 +165,7 @@ export const shopSubscriptions = sqliteTable(
     currentPeriodStartsAt: integer("current_period_starts_at"),
     currentPeriodEndsAt: integer("current_period_ends_at"),
     cancellationEffectiveAt: integer("cancellation_effective_at"),
+    cancelEffectiveOn: text("cancel_effective_on"),
     pendingPlanHandle: text("pending_plan_handle"),
     pendingBillingInterval: text("pending_billing_interval"),
     pendingLegacySubscriptionId: text("pending_legacy_subscription_id"),
