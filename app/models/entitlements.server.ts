@@ -131,7 +131,10 @@ export class EntitlementRepo {
   async commit(input: { shop: string; operationId: string; actualAmount?: number; now?: number }): Promise<{ state: OperationState } | { reason: "not_found" | "invalid_state" | "invalid_amount" }> {
     const row = (await getDb().select().from(entitlementOperations).where(sql`${entitlementOperations.shop} = ${input.shop} AND ${entitlementOperations.operationId} = ${input.operationId}`).limit(1))[0];
     if (!row) return { reason: "not_found" };
-    if (row.state === "committed") return { state: "committed" };
+    if (row.state === "committed") {
+      const expected = row.actualAmount ?? row.reservedAmount;
+      return input.actualAmount !== undefined && input.actualAmount !== expected ? { reason: "invalid_amount" } : { state: "committed" };
+    }
     if (row.state === "released") return { reason: "invalid_state" };
     const actual = input.actualAmount ?? row.reservedAmount;
     if (actual < 0 || actual > row.reservedAmount) return { reason: "invalid_amount" };
