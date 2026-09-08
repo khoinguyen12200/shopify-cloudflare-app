@@ -1,6 +1,6 @@
 import type { EntitlementDenialReason, EntitlementKey, ResolvedEntitlement, SubscriptionSnapshot } from "~/domain/entitlement-policy";
 
-export type OperationDenialReason = EntitlementDenialReason | "operation_conflict" | "conflict" | "quota_exhausted" | "capacity_exhausted" | "not_found" | "invalid_request" | "invalid_amount" | "invalid_state";
+export type OperationDenialReason = EntitlementDenialReason | "operation_conflict" | "conflict" | "quota_exhausted" | "capacity_exhausted" | "not_found" | "invalid_request" | "invalid_amount" | "invalid_state" | "subscription_unavailable";
 export type EntitlementOperationFailure = { readonly allowed: false; readonly reason: OperationDenialReason };
 export type EntitlementOperationResult = EntitlementOperationFailure;
 export type CheckResult = ResolvedEntitlement | EntitlementOperationFailure;
@@ -13,7 +13,8 @@ export type DeallocateResult = { readonly allowed: true; readonly allocationId: 
 
 export interface SubscriptionPort { current(shop: string): Promise<SubscriptionSnapshot>; }
 export interface CapacityPort {
-  allocate(input: { readonly shop: string; readonly key: EntitlementKey; readonly allocationId: string; readonly maximum: number; readonly subscriptionRevision: number }): Promise<AllocateResult>;
+  allocate(input: { readonly shop: string; readonly key: EntitlementKey; readonly allocationId: string; readonly operationId?: string; readonly maximum: number; readonly subscriptionRevision: number }): Promise<AllocateResult>;
+  confirmAllocation?(input: { readonly shop: string; readonly key: EntitlementKey; readonly allocationId: string; readonly operationId?: string }): Promise<DeallocateResult>;
   deallocate(input: { readonly shop: string; readonly key: EntitlementKey; readonly allocationId: string }): Promise<DeallocateResult>;
 }
 export interface UsagePort {
