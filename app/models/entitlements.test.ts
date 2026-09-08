@@ -266,4 +266,15 @@ describe("EntitlementRepo", () => {
       expect(await repo.listHeldAllocations("other-shop")).toEqual([]);
     });
   });
+
+  it("does not reconcile a capacity attempt with the wrong operation identity", async () => {
+    await runWithRequestContext(env, async () => {
+      await seedProjection("capacity-identity");
+      const repo = new EntitlementRepo();
+      await repo.allocate({ shop: "capacity-identity", key: "staff.max", allocationId: "staff-1", operationId: "real-op", maximum: 1, subscriptionRevision: 1 });
+      const result = await repo.applyReconciliation("capacity-identity", { kind: "capacity", shop: "capacity-identity", key: "staff.max", id: "staff-1", operationId: "wrong-op" }, "allocate");
+      expect(result).toEqual({ reason: "invalid_state" });
+      expect(await env.DB.prepare("SELECT state FROM entitlement_allocations WHERE shop=? AND allocation_id=?").bind("capacity-identity", "staff-1").first()).toEqual({ state: "held" });
+    });
+  });
 });

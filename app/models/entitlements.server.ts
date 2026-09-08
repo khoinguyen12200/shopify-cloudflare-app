@@ -40,6 +40,7 @@ export class EntitlementRepo {
         eq(entitlementAllocations.shop, shop),
         eq(entitlementAllocations.key, item.key),
         eq(entitlementAllocations.allocationId, item.id),
+        ...(item.operationId ? [eq(entitlementAllocations.operationId, item.operationId)] : []),
         eq(entitlementAllocations.state, "held"),
       ));
       const [row] = await getDb().select({ state: entitlementAllocations.state }).from(entitlementAllocations).where(and(
@@ -64,7 +65,7 @@ export class EntitlementRepo {
     if ("reason" in result) return result;
     return result.state === target ? { state: target } : { reason: "invalid_state" };
   }
-  async listHeldAllocations(shop: string): Promise<readonly { key: string; allocationId: string }[]> {
+  async listHeldAllocations(shop: string): Promise<readonly { key: string; allocationId: string; operationId: string }[]> {
     return getDb()
       .select({ key: entitlementAllocations.key, allocationId: entitlementAllocations.allocationId, operationId: entitlementAllocations.operationId })
       .from(entitlementAllocations)

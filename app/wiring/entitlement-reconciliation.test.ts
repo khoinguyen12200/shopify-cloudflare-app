@@ -27,7 +27,7 @@ describe("wired entitlement reconciliation", () => {
       const held = await port.listHeld("reconcile-one");
       expect(held).toEqual([
         { kind: "quota", shop: "reconcile-one", key: "exports", id: "quota-1", period: "lifetime", amount: 2 },
-        { kind: "capacity", shop: "reconcile-one", key: "staff.max", id: "staff-1" },
+        { kind: "capacity", shop: "reconcile-one", key: "staff.max", id: "staff-1", operationId: "capacity-op-1" },
       ]);
       expect(await reconcileHeld("reconcile-one", port, (item) => item.kind === "quota" ? "commit" : "allocate")).toEqual({
         processed: 2, committed: 1, allocated: 1, released: 0, failures: [],

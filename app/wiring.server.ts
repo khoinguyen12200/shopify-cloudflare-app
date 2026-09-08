@@ -45,7 +45,7 @@ export function entitlementReconciliationPort(): HeldReconciliationPort {
       const capacity = await repo.listHeldAllocations(shop);
       return [
         ...quota.map((row): import("~/ports/entitlement-reconciliation").HeldItem => ({ kind: "quota", shop, key: row.key, id: row.operationId, period: row.period, amount: row.amount })),
-        ...capacity.map((row): import("~/ports/entitlement-reconciliation").HeldItem => ({ kind: "capacity", shop, key: row.key, id: row.allocationId })),
+        ...capacity.map((row): import("~/ports/entitlement-reconciliation").HeldItem => ({ kind: "capacity", shop, key: row.key, id: row.allocationId, operationId: row.operationId })),
       ];
     },
     apply: (shop, item, decision) => repo.applyReconciliation(shop, item, decision),
