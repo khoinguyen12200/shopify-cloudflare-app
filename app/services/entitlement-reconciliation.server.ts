@@ -15,7 +15,7 @@ export async function reconcileHeld(
     if (decision === "ignore") continue;
     const valid = item.kind === "quota"
       ? decision === "commit" || decision === "release"
-      : decision === "allocate" || decision === "deallocate";
+      : decision === "confirm" || decision === "release";
     const result = valid ? await port.apply(shop, item, decision) : { reason: "invalid_decision" };
     if ("reason" in result) failures.push({ id: item.id, key: item.key, reason: result.reason });
     else if (result.state === "committed") committed += 1;

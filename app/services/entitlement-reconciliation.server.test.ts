@@ -32,7 +32,7 @@ describe("reconcileHeld", () => {
       ],
       apply: async (_shop, item) => item.kind === "capacity" ? { state: "allocated" } : { reason: "invalid_state" },
     };
-    expect(await reconcileHeld("shop-1", port, (item) => item.kind === "capacity" ? "allocate" : item.id === "failed" ? "commit" : "ignore")).toEqual({
+    expect(await reconcileHeld("shop-1", port, (item) => item.kind === "capacity" ? "confirm" : item.id === "failed" ? "commit" : "ignore")).toEqual({
       processed: 1, committed: 0, allocated: 1, released: 0, failures: [{ id: "failed", key: "exports", reason: "invalid_state" }],
     });
   });

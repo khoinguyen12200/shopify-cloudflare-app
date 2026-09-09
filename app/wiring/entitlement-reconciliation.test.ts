@@ -29,13 +29,13 @@ describe("wired entitlement reconciliation", () => {
         { kind: "quota", shop: "reconcile-one", key: "exports", id: "quota-1", period: "lifetime", amount: 2 },
         { kind: "capacity", shop: "reconcile-one", key: "staff.max", id: "staff-1", operationId: "capacity-op-1" },
       ]);
-      expect(await reconcileHeld("reconcile-one", port, (item) => item.kind === "quota" ? "commit" : "allocate")).toEqual({
+      expect(await reconcileHeld("reconcile-one", port, (item) => item.kind === "quota" ? "commit" : "confirm")).toEqual({
         processed: 2, committed: 1, allocated: 1, released: 0, failures: [],
       });
       expect(await port.listHeld("reconcile-one")).toEqual([]);
       expect(await port.listHeld("reconcile-two")).toHaveLength(2);
       for (const item of held) {
-        expect(await port.apply("reconcile-one", item, item.kind === "quota" ? "commit" : "allocate")).toEqual({ state: item.kind === "quota" ? "committed" : "allocated" });
+        expect(await port.apply("reconcile-one", item, item.kind === "quota" ? "commit" : "confirm")).toEqual({ state: item.kind === "quota" ? "committed" : "allocated" });
       }
       expect(await env.DB.prepare("SELECT committed, held FROM entitlement_usage WHERE shop = ?").bind("reconcile-one").first()).toEqual({ committed: 2, held: 0 });
       expect(await env.DB.prepare("SELECT state FROM entitlement_allocations WHERE shop = ?").bind("reconcile-one").first()).toEqual({ state: "allocated" });
@@ -49,11 +49,11 @@ describe("wired entitlement reconciliation", () => {
       const port = wiring.entitlementReconciliationPort();
       const held = await port.listHeld("reconcile-release");
       for (const item of held) {
-        const decision = item.kind === "quota" ? "release" : "deallocate";
+        const decision = item.kind === "quota" ? "release" : "release";
         expect(await port.apply("wrong-shop", item, decision)).toEqual({ reason: "invalid_request" });
         expect(await port.apply(item.shop, item, decision)).toEqual({ state: "released" });
         expect(await port.apply(item.shop, item, decision)).toEqual({ state: "released" });
-        expect(await port.apply(item.shop, item, item.kind === "quota" ? "commit" : "allocate")).toEqual({ reason: "invalid_state" });
+        expect(await port.apply(item.shop, item, item.kind === "quota" ? "commit" : "confirm")).toEqual({ reason: "invalid_state" });
       }
       expect(await port.listHeld("reconcile-release")).toEqual([]);
       expect(await env.DB.prepare("SELECT committed, held FROM entitlement_usage WHERE shop = ?").bind("reconcile-release").first()).toEqual({ committed: 0, held: 0 });

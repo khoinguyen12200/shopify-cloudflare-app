@@ -34,8 +34,8 @@ export class EntitlementRepo {
   async applyReconciliation(shop: string, item: HeldItem, decision: Exclude<HeldDecision, "ignore">): Promise<ReconciliationResult> {
     if (shop !== item.shop) return { reason: "invalid_request" };
     if (item.kind === "capacity") {
-      if (decision !== "allocate" && decision !== "deallocate") return { reason: "invalid_decision" };
-      const state = decision === "allocate" ? "allocated" : "released";
+      if (decision !== "confirm" && decision !== "release") return { reason: "invalid_decision" };
+      const state = decision === "confirm" ? "allocated" : "released";
       await getDb().update(entitlementAllocations).set({ state, updatedAt: Date.now() }).where(and(
         eq(entitlementAllocations.shop, shop),
         eq(entitlementAllocations.key, item.key),
@@ -121,14 +121,14 @@ export class EntitlementRepo {
       return { allowed: false, reason: typeof projection?.revision === "number" && projection.revision !== input.subscriptionRevision ? "conflict" : "capacity_exhausted" };
     }
     const [allocationCount] = await getDb().select({ count: count() }).from(entitlementAllocations).where(and(eq(entitlementAllocations.shop, input.shop), eq(entitlementAllocations.key, input.key), inArray(entitlementAllocations.state, ["held", "allocated"])));
-    return { allowed: true, allocationId: input.allocationId, operationId: input.operationId, subscriptionRevision: input.subscriptionRevision, remaining: input.maximum - Number(allocationCount?.count ?? 0), state: "held" };
+    return { allowed: true, allocationId: input.allocationId, operationId: input.operationId, subscriptionRevision: input.subscriptionRevision, remaining: Math.max(0, input.maximum - Number(allocationCount?.count ?? 0)), state: "held" };
   }
 
   async confirmAllocation(input: {shop:string; key:string; allocationId:string; operationId:string}): Promise<{allowed:true; allocationId:string; state:"allocated"}|EntitlementOperationFailure> {
     const db=getDb(); const [row] = await db.select().from(entitlementAllocations).where(and(eq(entitlementAllocations.shop, input.shop), eq(entitlementAllocations.operationId, input.operationId))).limit(1);
-    if(!row) return {allowed:false,reason:"not_found"}; if(row.operationId!==input.operationId) return {allowed:false,reason:"operation_conflict"}; if(row.state==="allocated") return {allowed:true,allocationId:input.allocationId,state:"allocated"}; if(row.state!=="held") return {allowed:false,reason:"invalid_state"};
+    if(!row) return {allowed:false,reason:"not_found"}; if(row.key !== input.key || row.allocationId !== input.allocationId) return {allowed:false,reason:"operation_conflict"}; if(row.state==="allocated") return {allowed:true,allocationId:row.allocationId,state:"allocated"}; if(row.state!=="held") return {allowed:false,reason:"invalid_state"};
     const updated = await db.update(entitlementAllocations).set({state:"allocated",updatedAt:Date.now()}).where(and(eq(entitlementAllocations.shop, input.shop), eq(entitlementAllocations.operationId, input.operationId), eq(entitlementAllocations.state, "held"))).returning({state:entitlementAllocations.state});
-    return updated.length ? {allowed:true,allocationId:input.allocationId,state:"allocated"} : {allowed:false,reason:"invalid_state"};
+    return updated.length ? {allowed:true,allocationId:row.allocationId,state:"allocated"} : {allowed:false,reason:"invalid_state"};
   }
 
   async deallocate(input: { shop: string; key: string; allocationId: string; operationId: string }): Promise<DeallocateResult> {

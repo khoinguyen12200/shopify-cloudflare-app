@@ -267,12 +267,22 @@ describe("EntitlementRepo", () => {
     });
   });
 
+  it("rejects confirmation with the wrong resource identity", async () => {
+    await runWithRequestContext(env, async () => {
+      await seedProjection("confirm-identity");
+      const repo = new EntitlementRepo();
+      await repo.allocate({ shop: "confirm-identity", key: "staff.max", allocationId: "staff-1", operationId: "real-op", maximum: 1, subscriptionRevision: 1 });
+      expect(await repo.confirmAllocation({ shop: "confirm-identity", key: "wrong.key", allocationId: "wrong-resource", operationId: "real-op" })).toEqual({ allowed: false, reason: "operation_conflict" });
+      expect(await env.DB.prepare("SELECT state FROM entitlement_allocations WHERE shop=? AND operation_id=?").bind("confirm-identity", "real-op").first()).toEqual({ state: "held" });
+    });
+  });
+
   it("does not reconcile a capacity attempt with the wrong operation identity", async () => {
     await runWithRequestContext(env, async () => {
       await seedProjection("capacity-identity");
       const repo = new EntitlementRepo();
       await repo.allocate({ shop: "capacity-identity", key: "staff.max", allocationId: "staff-1", operationId: "real-op", maximum: 1, subscriptionRevision: 1 });
-      const result = await repo.applyReconciliation("capacity-identity", { kind: "capacity", shop: "capacity-identity", key: "staff.max", id: "staff-1", operationId: "wrong-op" }, "allocate");
+      const result = await repo.applyReconciliation("capacity-identity", { kind: "capacity", shop: "capacity-identity", key: "staff.max", id: "staff-1", operationId: "wrong-op" }, "confirm");
       expect(result).toEqual({ reason: "invalid_state" });
       expect(await env.DB.prepare("SELECT state FROM entitlement_allocations WHERE shop=? AND allocation_id=?").bind("capacity-identity", "staff-1").first()).toEqual({ state: "held" });
     });
