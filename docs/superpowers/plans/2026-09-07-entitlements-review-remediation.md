@@ -132,12 +132,56 @@ For every code task: add one regression at a time, run the stated focused comman
 
 **Interfaces:** Consumes the current implementation; produces an evidence ledger mapping R1-R12 to named regression tests and verification results.
 
-- [ ] Read `AGENTS.md`, the original plans, applicable rules and current callers. Run `git status --short` and preserve any existing work.
-- [ ] Run `npm run verify` before changes. Record actual totals and warnings; do not call warning-bearing output pristine.
-- [ ] Inventory existing tests with `rg -n 'it\(|it.each|test\(' app/domain/entitlement-policy.test.ts app/models/entitlements.test.ts app/services/entitlements.server.test.ts`. Separate observed coverage from missing assertions.
-- [ ] Use the Partner skill to verify `SubscriptionStatus.cancelEffectiveOn`, `ActiveSubscription`, `BillingCycle`, trials, cancellation/replacement, freeze/unfreeze and renewal event behavior for the configured API version. Also verify current auth/uninstall integration and Cloudflare KV expiration constraints before relying on them.
-- [ ] Record supported facts and explicit unknowns in `.claude/rules/shopify-api-invariants.md`. If an API cannot distinguish a required state, record the limitation and a fail-closed path; never manufacture status from the existence of an object alone.
-- [ ] Name each reproduction before changing behavior. A result that already passes is retained as a control; add the missing interleaving rather than weakening the test to create RED.
+- [x] Read `AGENTS.md`, the original plans, applicable rules and current callers. Run `git status --short` and preserve any existing work.
+- [x] Run `npm run verify` before changes. Record actual totals and warnings; do not call warning-bearing output pristine.
+- [x] Inventory existing tests with `rg -n 'it\(|it.each|test\(' app/domain/entitlement-policy.test.ts app/models/entitlements.test.ts app/services/entitlements.server.test.ts`. Separate observed coverage from missing assertions.
+- [x] Use the Partner skill to verify `SubscriptionStatus.cancelEffectiveOn`, `ActiveSubscription`, `BillingCycle`, trials, cancellation/replacement, freeze/unfreeze and renewal event behavior for the configured API version. Also verify current auth/uninstall integration and Cloudflare KV expiration constraints before relying on them.
+- [x] Record supported facts and explicit unknowns in `.claude/rules/shopify-api-invariants.md`. If an API cannot distinguish a required state, record the limitation and a fail-closed path; never manufacture status from the existence of an object alone.
+- [x] Name each reproduction before changing behavior. A result that already passes is retained as a control; add the missing interleaving rather than weakening the test to create RED.
+
+#### Task 1 evidence ledger (observed 2026-09-09)
+
+**Baseline commands and outputs**
+
+- `git status --short --branch` exited 0 and reported branch `fix/entitlements-review-remediation...origin/fix/entitlements-review-remediation` plus one pre-existing untracked file: `docs/superpowers/plans/2026-09-09-entitlements-remediation-execution.md`. No tracked changes were present before Task 1 evidence edits; the untracked execution plan was preserved.
+- `npm run verify` exited 0. Typecheck and lint completed successfully. The Node test run reported `Test Files 137 passed (137)` and `Tests 1157 passed (1157)`, followed by the DOM test run reporting `Test Files 3 passed (3)` and `Tests 9 passed (9)`. The run emitted repeated warnings for missing `SHOPIFY_API_SECRET`, `SHOP_CUSTOM_DOMAIN`, and `ATTACHMENT_TOKEN_SECRET`, an AI remote-resource usage warning, the Vite `envFile` deprecation warning, and dependency sourcemap warnings. This output is green but not warning-free.
+- The brief's expected `app/services/support.test.ts` rate-limit failure was not observed: `npx vitest run app/services/support.test.ts` exited 0 with `Test Files 1 passed (1)` and `Tests 31 passed (31)`. This is a baseline discrepancy, not evidence that the later remediation is unnecessary; preserve the existing assertion and re-check if it regresses.
+
+**Existing entitlement test inventory**
+
+The requested `rg` inventory found 96 test declarations across the named files: policy 18, entitlement models 26, subscription models 14, entitlement service 15, reconciliation service 4, cache 8, billing gates 3, reconciliation wiring 2, and tenant purge 6. These are pre-existing controls; none is counted as a newly observed RED reproduction in this task.
+
+**R1–R12 coverage and missing regression matrix**
+
+| Review risk | Existing observed controls | Missing or not newly reproduced in Task 1 |
+|---|---|---|
+| R1 cancellation history metadata | Subscription projection cancellation deadline and policy scheduled-cancellation boundary tests | HTTP-boundary history fixture proving date preservation and exact authoritative instant; live-store semantics |
+| R2 KV preview authorizes work | Service cache-failure/fallback and authoritative-write tests; cache round-trip/isolation tests | Explicit cached ACTIVE versus current D1 CANCELED/FROZEN/disabled-grant gate test |
+| R3 same-ID quota race | Model concurrent reservation/idempotent retry tests | Public service same-ID replay state contract across renewal/cancellation |
+| R4 capacity confirmation result ignored | Reconciliation and capacity lifecycle controls exist | Caller-side create/confirm attempt identity and lost-response regression |
+| R5 allocation crash leak | Held capacity listing/reconciliation controls | Ordinary caller crash window with explicit ownership decision and no age-only release |
+| R6 timestamp-only revision ties | Numeric revision and stale-write tests | Same-timestamp different external IDs through both active/history writers |
+| R7 fractional accounting | Service amount validation controls | Direct local-D1 fractional/unsafe insert rejection at schema boundary |
+| R8 negative remaining | Advisory remaining policy tests | Deterministic concurrent limit-change interleaving proving fresh and replayed results are bounded |
+| R9 terminal quota replay | Commit/release lifecycle and replay model controls | Public terminal replay state/replayed flag and no-side-effect consumer test |
+| R10 multiple current projections | Latest authoritative subscription projection test | Seeded legacy multi-row migration and unique-current invariant |
+| R11 stale active projection | Stale snapshot denial control in entitlement service | Refresh-on-stale integration with exact age boundaries, invalid/future verification, and failed refresh |
+| R12 edge/clean-code coverage | Broad policy, cache, wiring, and purge controls | Full lifecycle matrix, Shopify HTTP fixtures, migration checks, docs examples, and live-store verification |
+
+**Verified boundary facts and limitations**
+
+- Configured app and Partner lookup version: `2026-07` (`shopify.app.toml`, `shopify.app.dev.toml`, and `app/shopify.server.ts`). The Partner toolkit validated an `activeSubscription` query against the `2026-07` schema.
+- `SubscriptionStatus.cancelEffectiveOn` is a nullable `Date` (date-only), while `occurredAt` is `DateTime`; the status state enum includes `CANCELED`, `CANCELLATION_SCHEDULED`, `CREATED`, `FROZEN`, `UNFROZEN`, and `UPDATED`. Do not synthesize an exact instant from the date-only field.
+- `activeSubscription(appId, shopId)` returns `null` when no active managed-pricing contract exists, and requires Partner Manage apps permission for public apps. Its documented shape exposes `billingPeriod`, `cancelAtEndOfCycle`, `trialEndsAt`, `currentBillingCycle`, items, and `pendingUpdate`; object existence alone is not a sufficient authorization state.
+- `BillingCycle.startTime` and `endTime` are non-null `DateTime` fields; `endTime` is when the next charge occurs. `AppPricingInterval` documents `ANNUAL` and `EVERY_30_DAYS`, so a renewal boundary is not inherently a monthly quota boundary.
+- `CancelledSubscription` documents that `cancelledAt` is null for deferred cancellations, `currentBillingCycle` is null while still in trial, `trialEndsAt` is null without an active trial, and `pendingUpdate` is null when absent. These nulls must remain distinct from an observed inactive/free state.
+- `SubscriptionChargeFrozen` means a recurring app charge was suspended; `SubscriptionChargeUnfrozen` means it was unfrozen. The docs do not, by themselves, establish this app's exact authorization transition or refresh retry policy; local policy must fail closed for new work until authoritative state is verified.
+- Renewal, replacement, and pending-update application order were not established by the retrieved reference pages or a live store. Do not claim those semantics are verified; use `activeSubscription.currentBillingCycle` and `pendingUpdate` from an authoritative refresh.
+- Partner relationship events separately document installed, reactivated, and uninstalled events. The retrieved `Relationship` reference describes relationship state and reason fields, but does not establish this app's reinstall authorization fence or historical-job policy.
+- Cloudflare KV `expirationTtl` is relative seconds with a 60-second minimum; absolute `expiration` also cannot be scheduled less than 60 seconds ahead. Missing keys read as `null`, and expiry makes subsequent reads act absent. The local test accepting a subminimum TTL is not evidence that production KV accepts it.
+- Live Shopify cancellation, trial, freeze/unfreeze, renewal, replacement, uninstall/reinstall, and Partner outage behavior remain unverified by this local baseline. No live credentials or store calls were made.
+
+Task 1 is evidence-complete only; no production behavior or regression test was changed. The detailed command log and source URLs are recorded in `task-1-report.md` for the execution run.
 
 Sources already consulted in review, to recheck at execution:
 
