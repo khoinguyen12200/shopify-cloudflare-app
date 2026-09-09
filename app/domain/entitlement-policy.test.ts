@@ -124,6 +124,13 @@ describe("entitlement policy contract", () => {
     expect(policy.resolveEntitlement(quotaCatalogue, subscription, "exports", 20)).toEqual({ allowed: false, reason: "inactive_subscription" });
   });
 
+  it.each([Number.POSITIVE_INFINITY, Number.NaN, 20.5])("fails closed for malformed cancellation metadata %s", (cancellationEffectiveAt) => {
+    expect(policy.resolveEntitlement(quotaCatalogue, { status: "CANCELLATION_SCHEDULED", planHandle: "free", revision: 1, cancellationEffectiveAt }, "exports", 19)).toEqual({
+      allowed: false,
+      reason: "inactive_subscription",
+    });
+  });
+
   it("fails closed for unknown and prototype feature keys and unknown plans", () => {
     const subscription: policy.SubscriptionSnapshot = { status: "ACTIVE", planHandle: "free", revision: 1 };
     expect(policy.resolveEntitlement(quotaCatalogue, subscription, "missing", 0)).toEqual({ allowed: false, reason: "unknown_feature" });

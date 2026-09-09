@@ -235,4 +235,5 @@ it("selects the latest authoritative subscription projection for a shop", async 
     return repo.currentForShop("multi.myshopify.com");
   });
   expect(row?.planHandle).toBe("new");
+  expect(await inRequest(async () => env.DB.prepare("SELECT count(*) AS count FROM shop_subscriptions WHERE shop = ?").bind("multi.myshopify.com").first())).toEqual({ count: 1 });
 });

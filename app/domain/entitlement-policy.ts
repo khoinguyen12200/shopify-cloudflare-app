@@ -38,7 +38,9 @@ export function resolveUsageWindow(period: UsagePeriod, now: number, subscriptio
 
 function own<T>(record: Readonly<Record<string, T>>, key: string): T | undefined { return Object.prototype.hasOwnProperty.call(record, key) ? record[key] : undefined; }
 function active(subscription: SubscriptionSnapshot, now: number): boolean {
-  return subscription.status === "ACTIVE" || subscription.status === "NONE" || (subscription.status === "CANCELLATION_SCHEDULED" && subscription.cancellationEffectiveAt !== undefined && now < subscription.cancellationEffectiveAt);
+  const cancellationAt = subscription.cancellationEffectiveAt;
+  const validCancellation = cancellationAt !== undefined && Number.isSafeInteger(cancellationAt);
+  return subscription.status === "ACTIVE" || subscription.status === "NONE" || (subscription.status === "CANCELLATION_SCHEDULED" && validCancellation && now < cancellationAt);
 }
 function validMaximum(value: number): boolean { return Number.isSafeInteger(value) && value >= 0; }
 

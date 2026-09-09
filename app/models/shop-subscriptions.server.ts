@@ -165,12 +165,10 @@ export class ShopSubscriptionRepo {
     ] : [];
     const [applied] = await db.batch([parentProjection, ...itemReplacement]);
     if (applied.length === 0 && !duplicate) return "stale";
-    if (observation.type === "ACTIVE_SUBSCRIPTION" && observation.status === "NONE") {
-      await db.batch([
-        db.delete(shopSubscriptionItems).where(and(eq(shopSubscriptionItems.shop, shop), ne(shopSubscriptionItems.subscriptionId, observation.subscriptionId), matchingProjection)),
-        db.delete(shopSubscriptions).where(and(eq(shopSubscriptions.shop, shop), ne(shopSubscriptions.subscriptionId, observation.subscriptionId), matchingProjection)),
-      ]);
-    }
+    await db.batch([
+      db.delete(shopSubscriptionItems).where(and(eq(shopSubscriptionItems.shop, shop), ne(shopSubscriptionItems.subscriptionId, observation.subscriptionId))),
+      db.delete(shopSubscriptions).where(and(eq(shopSubscriptions.shop, shop), ne(shopSubscriptions.subscriptionId, observation.subscriptionId))),
+    ]);
     if (this.cache && (duplicate || applied.length > 0)) {
       try {
         await this.cache.invalidate(shop);

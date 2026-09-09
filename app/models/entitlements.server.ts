@@ -2,7 +2,7 @@ import { getDb, getEnv } from "~/request-context.server";
 import { and, count, desc, eq, inArray } from "drizzle-orm";
 import { entitlementAllocations, entitlementOperations, entitlementUsage, shopSubscriptions } from "~/db/schema";
 import type { AllocateResult, DeallocateResult, ReserveResult, EntitlementOperationFailure } from "~/ports/entitlements";
-import type { HeldItem, HeldDecision, ReconciliationResult } from "~/ports/entitlement-reconciliation";
+import type { HeldItem, ReconciliationResult } from "~/ports/entitlement-reconciliation";
 
 async function d1Count(shop: string, key: string): Promise<number> {
   const [row] = await getDb().select({ count: count() }).from(entitlementAllocations).where(and(
@@ -31,7 +31,12 @@ function isOperationState(value: string): value is OperationState {
 
 /** D1 adapter for quota reservations and reusable concurrent allocations. */
 export class EntitlementRepo {
-  async applyReconciliation(shop: string, item: HeldItem, decision: Exclude<HeldDecision, "ignore">): Promise<ReconciliationResult> {
+  async findOperation(shop: string, operationId: string) {
+    const [row] = await getDb().select({ key: entitlementOperations.key, requestedAmount: entitlementOperations.requestedAmount, period: entitlementOperations.period, subscriptionRevision: entitlementOperations.subscriptionRevision, state: entitlementOperations.state }).from(entitlementOperations).where(and(eq(entitlementOperations.shop, shop), eq(entitlementOperations.operationId, operationId))).limit(1);
+    return row && isOperationState(row.state) ? row : undefined;
+  }
+
+  async applyReconciliation(shop: string, item: HeldItem, decision: "commit" | "release" | "confirm", actualAmount?: number): Promise<ReconciliationResult> {
     if (shop !== item.shop) return { reason: "invalid_request" };
     if (item.kind === "capacity") {
       if (decision !== "confirm" && decision !== "release") return { reason: "invalid_decision" };
@@ -61,25 +66,25 @@ export class EntitlementRepo {
     const target = decision === "commit" ? "committed" : "released";
     if (row.state === target) return { state: target };
     if (row.state !== "held") return { reason: "invalid_state" };
-    const result = await this.reconcileHeld(shop, item.id, decision);
+    const result = await this.reconcileHeld(shop, item.id, decision, actualAmount);
     if ("reason" in result) return result;
     return result.state === target ? { state: target } : { reason: "invalid_state" };
   }
-  async listHeldAllocations(shop: string): Promise<readonly { key: string; allocationId: string; operationId: string }[]> {
+  async listHeldAllocations(shop: string): Promise<readonly { key: string; allocationId: string; operationId: string; createdAt: number }[]> {
     return getDb()
-      .select({ key: entitlementAllocations.key, allocationId: entitlementAllocations.allocationId, operationId: entitlementAllocations.operationId })
+      .select({ key: entitlementAllocations.key, allocationId: entitlementAllocations.allocationId, operationId: entitlementAllocations.operationId, createdAt: entitlementAllocations.createdAt })
       .from(entitlementAllocations)
       .where(and(eq(entitlementAllocations.shop, shop), eq(entitlementAllocations.state, "held")));
   }
 
-  async listHeld(shop: string): Promise<readonly { operationId: string; key: string; period: string; amount: number }[]> {
-    const rows = await getDb().select({ operationId: entitlementOperations.operationId, key: entitlementOperations.key, period: entitlementOperations.period, amount: entitlementOperations.reservedAmount }).from(entitlementOperations).where(and(eq(entitlementOperations.shop, shop), eq(entitlementOperations.state, "held")));
+  async listHeld(shop: string): Promise<readonly { operationId: string; key: string; period: string; amount: number; createdAt: number }[]> {
+    const rows = await getDb().select({ operationId: entitlementOperations.operationId, key: entitlementOperations.key, period: entitlementOperations.period, amount: entitlementOperations.reservedAmount, createdAt: entitlementOperations.createdAt }).from(entitlementOperations).where(and(eq(entitlementOperations.shop, shop), eq(entitlementOperations.state, "held")));
     return rows;
   }
 
-  async reconcileHeld(shop: string, operationId: string, action: "commit" | "release"): Promise<{ state: OperationState } | { reason: "not_found" | "invalid_state" }> {
+  async reconcileHeld(shop: string, operationId: string, action: "commit" | "release", actualAmount?: number): Promise<{ state: OperationState } | { reason: "not_found" | "invalid_state" }> {
     if (action === "commit") {
-      const result = await this.commit({ shop, operationId });
+      const result = await this.commit({ shop, operationId, actualAmount });
       if ("reason" in result && result.reason === "invalid_amount") return { reason: "invalid_state" };
       if ("reason" in result) {
         if (result.reason === "not_found") return { reason: "not_found" };
@@ -95,7 +100,7 @@ export class EntitlementRepo {
     if (existing) {
       if (existing.key !== input.key || existing.allocationId !== input.allocationId) return { allowed: false, reason: "operation_conflict" };
       if (existing.subscriptionRevision !== input.subscriptionRevision) return { allowed: false, reason: "conflict" };
-      if (existing.state !== "released") { const count = await d1Count(input.shop,input.key); return {allowed:true,allocationId:input.allocationId,operationId:input.operationId,subscriptionRevision:existing.subscriptionRevision,remaining:Math.max(0,input.maximum-count),state:"held"}; }
+      if (existing.state !== "released") { const count = await d1Count(input.shop,input.key); return {allowed:true,allocationId:input.allocationId,operationId:input.operationId,subscriptionRevision:existing.subscriptionRevision,remaining:Math.max(0,input.maximum-count),state: existing.state === "allocated" ? "allocated" : "held"}; }
       return { allowed:false, reason:"invalid_state" };
     }
     const [active] = await getDb().select({ allocationId: entitlementAllocations.allocationId }).from(entitlementAllocations).where(and(
@@ -172,12 +177,12 @@ export class EntitlementRepo {
     return { allowed: true, operationId: input.operationId, amount: input.amount, period: input.period, subscriptionRevision: input.subscriptionRevision, state: "held", replayed: false, remaining: Math.max(0, input.maximum - Number(aggregate?.committed ?? 0) - Number(aggregate?.held ?? 0)) };
   }
 
-  async commit(input: { shop: string; operationId: string; actualAmount?: number; now?: number }): Promise<{ state: OperationState } | { reason: "not_found" | "invalid_state" | "invalid_amount" }> {
+  async commit(input: { shop: string; operationId: string; actualAmount?: number; now?: number }): Promise<{ state: OperationState; replayed?: boolean } | { reason: "not_found" | "invalid_state" | "invalid_amount" }> {
     const [row] = await getDb().select().from(entitlementOperations).where(and(eq(entitlementOperations.shop, input.shop), eq(entitlementOperations.operationId, input.operationId))).limit(1);
     if (!row) return { reason: "not_found" };
     if (row.state === "committed") {
       const expected = row.actualAmount ?? row.reservedAmount;
-      return input.actualAmount !== undefined && input.actualAmount !== expected ? { reason: "invalid_amount" } : { state: "committed" };
+      return input.actualAmount !== undefined && input.actualAmount !== expected ? { reason: "invalid_amount" } : { state: "committed", replayed: true };
     }
     if (row.state === "released") return { reason: "invalid_state" };
     const actual = input.actualAmount ?? row.reservedAmount;
@@ -193,10 +198,10 @@ export class EntitlementRepo {
     return operationUpdate.meta.changes === 1 && usageUpdate.meta.changes === 1 ? { state: "committed" } : { reason: "invalid_state" };
   }
 
-  async release(input: { shop: string; operationId: string; now?: number }): Promise<{ state: OperationState } | { reason: "not_found" | "invalid_state" }> {
+  async release(input: { shop: string; operationId: string; now?: number }): Promise<{ state: OperationState; replayed?: boolean } | { reason: "not_found" | "invalid_state" }> {
     const [row] = await getDb().select().from(entitlementOperations).where(and(eq(entitlementOperations.shop, input.shop), eq(entitlementOperations.operationId, input.operationId))).limit(1);
     if (!row) return { reason: "not_found" };
-    if (row.state !== "held" && isOperationState(row.state)) return { state: row.state };
+    if (row.state !== "held" && isOperationState(row.state)) return { state: row.state, replayed: true };
     const now = input.now ?? Date.now();
     // Release uses the same atomic changes()-guarded batch as commit, ensuring
     // held usage is decremented at most once under retries.

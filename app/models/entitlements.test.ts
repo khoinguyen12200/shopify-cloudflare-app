@@ -122,7 +122,7 @@ describe("EntitlementRepo", () => {
       await env.DB.prepare("DELETE FROM entitlement_usage WHERE shop = ?").bind(input.shop).run();
       const result = action === "commit" ? await repo.commit(input) : await repo.release(input);
       expect(result).toEqual({ reason: "invalid_state" });
-      expect(await repo.listHeld(input.shop)).toEqual([{ operationId: "op", key: "exports", period: "lifetime", amount: 2 }]);
+      expect(await repo.listHeld(input.shop)).toMatchObject([{ operationId: "op", key: "exports", period: "lifetime", amount: 2 }]);
     });
   });
 
@@ -180,6 +180,7 @@ describe("EntitlementRepo", () => {
       expect(await repo.reserve({ ...input, shop: "two" })).toMatchObject({ allowed: true });
       expect(await repo.reserve({ ...input, operationId: "op-2", amount: 3 })).toEqual({ allowed: false, reason: "quota_exhausted" });
       expect(await repo.commit({ shop: "one", operationId: "op-1", actualAmount: 2 })).toEqual({ state: "committed" });
+      expect(await repo.commit({ shop: "one", operationId: "op-1", actualAmount: 2 })).toEqual({ state: "committed", replayed: true });
       const usage = await env.DB.prepare("SELECT committed, held FROM entitlement_usage WHERE shop = ?").bind("one").first<{ committed: number; held: number }>();
       expect(usage).toEqual({ committed: 2, held: 0 });
     });
@@ -250,7 +251,7 @@ describe("EntitlementRepo", () => {
       const repo = new EntitlementRepo();
       await repo.reserve({ shop: "one", key: "exports", operationId: "held", period: "month", amount: 1, maximum: 2, subscriptionRevision: 1 });
       expect(await repo.listHeld("two")).toEqual([]);
-      expect(await repo.listHeld("one")).toEqual([{ operationId: "held", key: "exports", period: "month", amount: 1 }]);
+      expect(await repo.listHeld("one")).toMatchObject([{ operationId: "held", key: "exports", period: "month", amount: 1 }]);
       expect(await repo.reconcileHeld("one", "held", "release")).toEqual({ state: "released" });
       expect(await repo.listHeld("one")).toEqual([]);
     });
@@ -262,8 +263,18 @@ describe("EntitlementRepo", () => {
       const repo = new EntitlementRepo();
       await repo.allocate({ shop: "capacity-held", key: "staff.max", allocationId: "staff-1", operationId: "op-staff-1", maximum: 1, subscriptionRevision: 1 });
       await env.DB.prepare("UPDATE entitlement_allocations SET state = 'held' WHERE shop = ?").bind("capacity-held").run();
-      expect(await repo.listHeldAllocations("capacity-held")).toEqual([{ key: "staff.max", allocationId: "staff-1", operationId: "op-staff-1" }]);
+      expect(await repo.listHeldAllocations("capacity-held")).toMatchObject([{ key: "staff.max", allocationId: "staff-1", operationId: "op-staff-1" }]);
       expect(await repo.listHeldAllocations("other-shop")).toEqual([]);
+    });
+  });
+
+  it("replays an allocated capacity attempt as allocated", async () => {
+    await runWithRequestContext(env, async () => {
+      const repo = new EntitlementRepo();
+      await seedProjection("capacity-replay-state");
+      await expect(repo.allocate({ shop: "capacity-replay-state", key: "staff.max", allocationId: "staff-1", operationId: "op-1", maximum: 1, subscriptionRevision: 1 })).resolves.toMatchObject({ allowed: true, state: "held" });
+      await expect(repo.confirmAllocation({ shop: "capacity-replay-state", key: "staff.max", allocationId: "staff-1", operationId: "op-1" })).resolves.toEqual({ allowed: true, allocationId: "staff-1", state: "allocated" });
+      await expect(repo.allocate({ shop: "capacity-replay-state", key: "staff.max", allocationId: "staff-1", operationId: "op-1", maximum: 1, subscriptionRevision: 1 })).resolves.toMatchObject({ allowed: true, state: "allocated" });
     });
   });
 
@@ -282,7 +293,7 @@ describe("EntitlementRepo", () => {
       await seedProjection("capacity-identity");
       const repo = new EntitlementRepo();
       await repo.allocate({ shop: "capacity-identity", key: "staff.max", allocationId: "staff-1", operationId: "real-op", maximum: 1, subscriptionRevision: 1 });
-      const result = await repo.applyReconciliation("capacity-identity", { kind: "capacity", shop: "capacity-identity", key: "staff.max", id: "staff-1", operationId: "wrong-op" }, "confirm");
+      const result = await repo.applyReconciliation("capacity-identity", { kind: "capacity", shop: "capacity-identity", key: "staff.max", id: "staff-1", operationId: "wrong-op", createdAt: 1 }, "confirm");
       expect(result).toEqual({ reason: "invalid_state" });
       expect(await env.DB.prepare("SELECT state FROM entitlement_allocations WHERE shop=? AND allocation_id=?").bind("capacity-identity", "staff-1").first()).toEqual({ state: "held" });
     });

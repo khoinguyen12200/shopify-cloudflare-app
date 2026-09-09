@@ -18,8 +18,25 @@ const invalidRequest: EntitlementOperationFailure = { allowed: false, reason: "i
 const valid = (value: string) => value.trim().length > 0;
 const capacityPort = (port: CapacityPort | undefined): CapacityPort => { if (!port) throw new Error("capacity port unavailable"); return port; };
 const usagePort = (port: UsagePort | undefined): UsagePort => { if (!port) throw new Error("usage port unavailable"); return port; };
+async function existingQuota(deps: Dependencies, input: ReserveInput) {
+  if (!deps.usage?.find) return undefined;
+  return deps.usage.find(input.shop, input.operationId);
+}
+
 async function authoritative(deps: Dependencies, shop: string) {
-  const snapshot = await deps.subscriptions.current(shop);
+  let snapshot = await deps.subscriptions.current(shop);
+  const now = deps.now ?? Date.now;
+  const maxAge = deps.maxSnapshotAgeMs ?? 300_000;
+  const stale = snapshot.verifiedAt !== undefined && (snapshot.verifiedAt > now() || now() - snapshot.verifiedAt > maxAge);
+  if (stale) {
+    if (!deps.subscriptions.refresh) return { status: "UNKNOWN" as const, planHandle: null, revision: snapshot.revision, verifiedAt: snapshot.verifiedAt };
+    try {
+      snapshot = await deps.subscriptions.refresh(shop);
+    } catch (error) {
+      console.error(JSON.stringify({ event: "entitlements.subscription_refresh_failed", shop, error: error instanceof Error ? error.message : "unknown" }));
+      return { status: "UNKNOWN" as const, planHandle: null, revision: snapshot.revision, verifiedAt: snapshot.verifiedAt };
+    }
+  }
   if (deps.cache) {
     try {
       await deps.cache.set(shop, snapshot, 60);
@@ -72,6 +89,11 @@ function makeReserve(deps: Dependencies, now: () => number) {
   return async (input: ReserveInput): Promise<ReserveResult> => {
     const port = usagePort(deps.usage);
     if (!valid(input.shop) || !valid(input.key) || !valid(input.operationId) || !Number.isSafeInteger(input.amount) || input.amount <= 0) return invalidRequest;
+    const existing = await existingQuota(deps, input);
+    if (existing) {
+      if (existing.key !== input.key || existing.amount !== input.amount) return { allowed: false, reason: "operation_conflict" };
+      return { allowed: true, operationId: input.operationId, amount: existing.amount, period: existing.period, subscriptionRevision: existing.subscriptionRevision, state: existing.state, replayed: true, remaining: 0 };
+    }
     const snapshot = await authoritative(deps, input.shop);
     const resolved = resolveEntitlement(deps.catalogue, snapshot, input.key, now());
     if (!resolved.allowed) return resolved;

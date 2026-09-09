@@ -34,19 +34,12 @@ wired to the behavior at all.
 
 ## Before writing implementation code
 
-**Invoke the `test-driven-development` skill.** It ships with this repo — `npm run
-install:skill` installs it from `skills-lock.json` — and it carries the full
-cycle, good and bad test examples, and the rebuttal to every rationalisation.
-This file is the repo-specific layer on top; where they differ, **the stricter
-reading wins**.
+This file carries the complete cycle, good and bad test examples, and the
+rebuttal to every rationalisation. Read and follow it before writing production
+code or changing a test.
 
-Two companions from the same set are worth naming, because they encode rules this
-repo already has:
-
-- **`verification-before-completion`** — "evidence before assertions always". Use
-  it before claiming anything is done, fixed, or passing. It is the No-Cheating
-  rule as a procedure.
-- **`systematic-debugging`** — before proposing a fix for any bug or test failure.
+Use evidence before claiming anything is done, fixed, or passing, and isolate the
+root cause before changing code for a bug or test failure.
 
 ## The loop — every behavior change, no exceptions
 

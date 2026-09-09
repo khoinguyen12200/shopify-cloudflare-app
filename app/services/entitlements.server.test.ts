@@ -95,6 +95,20 @@ describe("entitlements service", () => {
     expect(allocated).toBe(false);
   });
 
+  it("replays an existing quota operation before requiring current authorization", async () => {
+    const service = createEntitlements({
+      subscriptions: { current: async () => { throw new Error("authorization unavailable"); } },
+      usage: {
+        find: async () => ({ key: "exports", amount: 1, period: "lifetime", subscriptionRevision: 2, state: "committed" as const }),
+        reserve: async () => { throw new Error("must not admit again"); },
+        commit: async () => ({ allowed: true as const, operationId: "op", state: "committed" as const, replayed: true }),
+        release: async () => ({ allowed: true as const, operationId: "op", state: "committed" as const, replayed: true }),
+      },
+      catalogue: { version: 1, freePlan: "free", features: { exports: { kind: "quota", period: "lifetime" } }, plans: { free: { exports: { kind: "limit", maximum: 1 } } } },
+    });
+    await expect(service.reserve({ shop: "shop", key: "exports", operationId: "op", amount: 1 })).resolves.toMatchObject({ allowed: true, state: "committed", replayed: true, period: "lifetime", subscriptionRevision: 2 });
+  });
+
   it("reserves quota with the resolved maximum and period", async () => {
     const service = createEntitlements({
       subscriptions: { current: async () => ({ status: "ACTIVE", planHandle: "free", revision: 3 }) },
@@ -140,6 +154,19 @@ describe("entitlements service", () => {
     expect(called).toBe(false);
   });
 
+  it("preserves a committed replay marker from the usage port", async () => {
+    const service = createEntitlements({
+      subscriptions: { current: async () => ({ status: "ACTIVE", planHandle: "free", revision: 1 }) },
+      usage: {
+        reserve: async (input) => ({ allowed: true as const, operationId: input.operationId, amount: input.amount, period: input.period, subscriptionRevision: input.subscriptionRevision, remaining: 0 }),
+        commit: async (input) => ({ allowed: true as const, operationId: input.operationId, state: "committed" as const, replayed: true }),
+        release: async (input) => ({ allowed: true as const, operationId: input.operationId, state: "released" as const }),
+      },
+      catalogue: { version: 1, freePlan: "free", features: {}, plans: { free: {} } },
+    });
+    await expect(service.commit({ shop: "shop", operationId: "op" })).resolves.toEqual({ allowed: true, operationId: "op", state: "committed", replayed: true });
+  });
+
   it("rejects an invalid actual amount before committing", async () => {
     let called = false;
     const service = createEntitlements({
@@ -161,7 +188,22 @@ describe("entitlements service", () => {
   });
 });
 
-it('denies stale snapshots as subscription unavailable', async () => {
- const service=createEntitlements({subscriptions:{current:async()=>({status:'ACTIVE',planHandle:'free',revision:1,verifiedAt:0})},catalogue:{version:1,freePlan:'free',features:{x:{kind:'capability'}},plans:{free:{x:{kind:'enabled'}}}},now:()=>300001,maxSnapshotAgeMs:300000});
+it('refreshes a stale snapshot before authorizing new work', async () => {
+ let refreshes = 0;
+ const service=createEntitlements({subscriptions:{
+   current:async()=>({status:'ACTIVE',planHandle:'free',revision:1,verifiedAt:0}),
+   refresh:async()=>{ refreshes += 1; return {status:'ACTIVE',planHandle:'free',revision:2,verifiedAt:300001}; },
+ },catalogue:{version:1,freePlan:'free',features:{x:{kind:'capability'}},plans:{free:{x:{kind:'enabled'}}}},now:()=>300001,maxSnapshotAgeMs:300000});
+ await expect(service.check('shop','x')).resolves.toMatchObject({allowed:true});
+ expect(refreshes).toBe(1);
+});
+
+it('denies when refreshing a stale snapshot fails', async () => {
+ let writes = 0;
+ const service=createEntitlements({subscriptions:{
+   current:async()=>({status:'ACTIVE',planHandle:'free',revision:1,verifiedAt:0}),
+   refresh:async()=>{ throw new Error('unavailable'); },
+ },cache:{get:async()=>null,set:async()=>{ writes += 1; },invalidate:async()=>undefined},catalogue:{version:1,freePlan:'free',features:{x:{kind:'capability'}},plans:{free:{x:{kind:'enabled'}}}},now:()=>300001,maxSnapshotAgeMs:300000});
  await expect(service.check('shop','x')).resolves.toEqual({allowed:false,reason:'subscription_unavailable'});
+ expect(writes).toBe(0);
 });

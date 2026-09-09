@@ -207,6 +207,7 @@ const sources = [
   ),
 ].sort();
 
+
 if (sources.length === 0) {
   console.error("skills-lock.json lists no github sources — nothing to install.");
   process.exit(1);
