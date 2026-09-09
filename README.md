@@ -1,4 +1,4 @@
-# shopify-cloudflare-app
+# Shopify Cloudflare App Template
 
 Scaffold for Shopify apps on Cloudflare Workers. Start a repo from it, run two
 commands, and start building — nothing app-specific is in here.
@@ -27,7 +27,9 @@ link.)
 Dev runs in workerd with real D1/KV bindings under Miniflare, so local
 behaviour matches production.
 
-## Starting a new project from it
+## Start a new app
+
+For the short, canonical onboarding path, see [docs/SETUP.md](docs/SETUP.md).
 
 ```bash
 gh repo create my-new-app --template khoinguyen12200/shopify-cloudflare-app --private --clone

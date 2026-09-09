@@ -1,4 +1,26 @@
-# Adopting this template
+# App Adoption Checklist
+
+> Start with [SETUP.md](SETUP.md). This document is the detailed release and
+> compliance checklist for teams that need the full audit trail.
+
+## Refactor plan (short version)
+
+1. **Identity:** edit `app/identity.ts` once; keep public pages, legal pages,
+   translations, and email branding derived from it.
+2. **Shopify:** keep client IDs, app GIDs, app handles, plan handles, and shop
+   domains separate; validate each against the API/configuration that owns it.
+3. **Database:** use Drizzle for ordinary model queries; retain raw SQL only
+   for documented atomic SQLite operations and preserve shop isolation.
+4. **Tests:** assert rendered output and persisted state, especially billing,
+   quotas, retries, tenant isolation, and launch placeholder checks.
+
+Finish these four areas in that order, running `npm run verify` after each area.
+Live Shopify billing and production deployment remain manual release checks.
+
+Current template implementation status: identity consumers, Shopify app identity
+adapter, pricing-handle navigation, Drizzle model access, entitlement atomicity,
+and behavior-focused tests are implemented. Remaining checklist items require
+merchant-specific values or authenticated Shopify/Cloudflare environments.
 
 Use this checklist after creating a new repository from the template and before
 deploying an app. It deliberately names decisions that no template can make
