@@ -12,6 +12,14 @@ async function seedProjection(shop: string, revision = 1) {
 }
 
 describe("EntitlementRepo", () => {
+  it("admits the configured free plan when subscription status is NONE", async () => {
+    await runWithRequestContext(env, async () => {
+      await env.DB.prepare("INSERT INTO shop_subscriptions (shop,subscription_id,status,applied_occurred_at,applied_external_id,revision) VALUES (?,?,?,?,?,?)")
+        .bind("free-none", "subscription", "NONE", 1, "event", 1).run();
+      const result = await new EntitlementRepo().allocate({ shop: "free-none", key: "staff.max", allocationId: "staff-1", operationId: "op-1", maximum: 1, subscriptionRevision: 1 });
+      expect(result).toMatchObject({ allowed: true });
+    });
+  });
   it("classifies quota exhaustion using numeric revision rather than event time", async () => {
     await runWithRequestContext(env, async () => {
       await seedProjection("exhaustion", 3);

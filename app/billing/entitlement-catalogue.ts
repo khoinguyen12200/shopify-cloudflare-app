@@ -5,20 +5,16 @@ export const ENTITLEMENT_CATALOGUE: EntitlementCatalogue = {
   version: 1,
   freePlan: "free",
   features: {
-    "reports.export": { kind: "capability" },
-    "staff.max": { kind: "capacity" },
-    "documents.monthly": { kind: "quota", period: "calendar_month" },
+    "ai.reply_draft": { kind: "capability" },
+    "ai.monthly_tokens": { kind: "quota", period: "calendar_month" },
+    "projects.max": { kind: "capacity" },
   },
   plans: {
     free: {
-      "reports.export": { kind: "enabled" },
-      "staff.max": { kind: "limit", maximum: 1 },
-      "documents.monthly": { kind: "limit", maximum: 10 },
+      ...PLANS.free.entitlements,
     },
     pro: {
-      "reports.export": { kind: "enabled" },
-      "staff.max": { kind: "limit", maximum: 10 },
-      "documents.monthly": { kind: "limit", maximum: 1000 },
+      ...PLANS.pro.entitlements,
     },
   },
 };
