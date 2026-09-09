@@ -7,6 +7,11 @@ and evidence; a checked box is not a substitute for a tested implementation.
 
 ## 1. Establish app identity and Shopify configuration
 
+- Set the canonical product, company, support/privacy contacts, legal address,
+  effective date, and localized tagline/sender disclosure in `app/identity.ts`.
+  Public resources and email branding derive from this file; do not reintroduce
+  identity literals in route, legal, or email components.
+
 - Create separate Shopify applications for development and production. Link
   `shopify.app.dev.toml` only to the development application and
   `shopify.app.toml` only to production.
@@ -18,6 +23,22 @@ and evidence; a checked box is not a substitute for a tested implementation.
   customer-data access before adding topics that need it.
 - Treat the Shopify client ID as public configuration. Keep the Shopify API
   secret out of source control and set it as a Cloudflare secret.
+- Obtain each environment's app resource ID from an authenticated Admin
+  `currentAppInstallation { app { id apiKey handle } }` query. Copy `app.id`
+  verbatim as the `gid://shopify/App/...` value for
+  `SHOPIFY_PARTNER_APP_ID`; never derive it from the client ID, installation ID,
+  or the legacy `gid://partners/App/...` namespace. Compare `app.apiKey` with
+  that environment's `SHOPIFY_API_KEY` before using the ID for billing/history.
+- Link environments deliberately with `npm run config:link:dev` and
+  `npm run config:link:prod`, reviewing the TOML diff. The template uses a
+  shared development app by default; if your team uses developer-local apps,
+  keep separate named configs and set each app's GID in its ignored `.dev.vars`.
+- Configure Partner access separately: create a Partner API client with
+  **Manage apps**, store its token as `SHOPIFY_PARTNER_API_TOKEN`, and set the
+  owning organization ID in `SHOPIFY_PARTNER_ORGANIZATION_ID`. Verify access
+  with `activeSubscription(appId: $appId, shopId: $shopId)` using the Shopify App
+  GID and a real Shop GID; a `null` subscription means no active contract, not
+  that an app mismatch is safe to ignore.
 
 ## 2. Replace product, legal, and translated copy
 

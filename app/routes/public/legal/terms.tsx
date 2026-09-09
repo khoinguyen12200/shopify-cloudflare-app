@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { i18nServer } from "~/i18n/i18n.server";
 import { useLocale } from "~/i18n/useLocale";
 import { formatDate } from "~/i18n/format";
-import { COMPANY_NAME, CONTACT_EMAIL, LAST_UPDATED } from "~/legal/content";
+import { identity } from "~/identity";
 
 export const handle = { i18n: ["common", "public"] };
 
@@ -35,9 +35,9 @@ export default function TermsOfService() {
   const { t: common } = useTranslation("common");
   const locale = useLocale();
 
-  const updated = Number.isNaN(Date.parse(LAST_UPDATED))
-    ? LAST_UPDATED
-    : formatDate(locale, new Date(LAST_UPDATED), { dateStyle: "long" });
+  const updated = Number.isNaN(Date.parse(identity.legal.effectiveDate))
+    ? identity.legal.effectiveDate
+    : formatDate(locale, new Date(identity.legal.effectiveDate), { dateStyle: "long" });
 
   return (
     <section className="section">
@@ -50,7 +50,7 @@ export default function TermsOfService() {
         <p>
           {t("legal.terms.intro", {
             appName: common("appName"),
-            company: COMPANY_NAME,
+            company: identity.companyName,
           })}
         </p>
 
@@ -64,7 +64,7 @@ export default function TermsOfService() {
         <div className="card stack">
           <p>
             {t("legal.terms.questions")}{" "}
-            <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
+            <a href={`mailto:${identity.contacts.privacyEmail}`}>{identity.contacts.privacyEmail}</a>
           </p>
         </div>
       </div>

@@ -7,7 +7,11 @@ import {
   type RouteObject,
 } from "react-router";
 import { createInstance } from "i18next";
-import { I18nextProvider, initReactI18next, useTranslation } from "react-i18next";
+import {
+  I18nextProvider,
+  initReactI18next,
+  useTranslation,
+} from "react-i18next";
 import { i18nOptions } from "./options";
 import { SUPPORTED_LOCALES, type Locale } from "./config";
 import Pricing from "~/routes/public/pricing";
@@ -41,7 +45,9 @@ async function renderAt(locale: Locale, Component: () => React.ReactNode) {
   const handler = createStaticHandler(routes);
   const context = await handler.query(new Request("https://example.test/"));
   if (context instanceof Response) {
-    throw new Error(`Expected render context, got a ${context.status} response`);
+    throw new Error(
+      `Expected render context, got a ${context.status} response`,
+    );
   }
   const router = createStaticRouter(routes, context);
 
@@ -53,7 +59,10 @@ async function renderAt(locale: Locale, Component: () => React.ReactNode) {
 
   // GUARD: an empty render must fail loudly, not quietly satisfy every
   // `.not.toContain()` below.
-  expect(html.length, "rendered nothing — the assertions would be vacuous").toBeGreaterThan(200);
+  expect(
+    html.length,
+    "rendered nothing — the assertions would be vacuous",
+  ).toBeGreaterThan(200);
   return html;
 }
 
@@ -94,22 +103,28 @@ describe("pages render in the locale they are given", () => {
 });
 
 describe("no page leaks untranslated output", () => {
-  it.each(PAGES)("%s never renders a raw key path", async (_name, Component) => {
-    // A missing key renders as "pricing.getStarted" — visible nonsense.
-    for (const locale of SUPPORTED_LOCALES) {
-      const html = await renderAt(locale, Component);
-      expect(html, locale).not.toMatch(
-        /\b(pricing|legal|landing|support|home|login)\.[a-zA-Z]+\.[a-zA-Z.]+/,
-      );
-    }
-  });
+  it.each(PAGES)(
+    "%s never renders a raw key path",
+    async (_name, Component) => {
+      // A missing key renders as "pricing.getStarted" — visible nonsense.
+      for (const locale of SUPPORTED_LOCALES) {
+        const html = await renderAt(locale, Component);
+        expect(html, locale).not.toMatch(
+          /\b(pricing|legal|landing|support|home|login)\.[a-zA-Z]+\.[a-zA-Z.]+/,
+        );
+      }
+    },
+  );
 
-  it.each(PAGES)("%s interpolates rather than printing braces", async (_n, Component) => {
-    for (const locale of SUPPORTED_LOCALES) {
-      const html = await renderAt(locale, Component);
-      expect(html, locale).not.toContain("{{");
-    }
-  });
+  it.each(PAGES)(
+    "%s interpolates rather than printing braces",
+    async (_n, Component) => {
+      for (const locale of SUPPORTED_LOCALES) {
+        const html = await renderAt(locale, Component);
+        expect(html, locale).not.toContain("{{");
+      }
+    },
+  );
 });
 
 describe("admin namespace resolves too", () => {
@@ -129,4 +144,22 @@ describe("admin namespace resolves too", () => {
     );
     expect(html).toContain("Iniciar sesión");
   });
+});
+
+describe("product identity resources", () => {
+  it.each([
+    ["en", "TODO: Your App Name", "TODO: Your localized product tagline"],
+    ["es", "TODO: Your App Name", "TODO: El eslogan localizado de tu producto"],
+  ] as const)(
+    "provides the canonical name and %s tagline",
+    async (locale, name, tagline) => {
+      const instance = createInstance();
+      await instance
+        .use(initReactI18next)
+        .init({ ...i18nOptions, lng: locale });
+
+      expect(instance.t("appName", { ns: "common" })).toBe(name);
+      expect(instance.t("tagline", { ns: "common" })).toBe(tagline);
+    },
+  );
 });

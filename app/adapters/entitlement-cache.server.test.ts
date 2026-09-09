@@ -17,6 +17,11 @@ function memoryKv(values = new Map<string, string>(), failures: Partial<Record<"
 const snapshot = { status: "ACTIVE" as const, planHandle: "free", revision: 4, periodStart: 10, periodEnd: 20 };
 
 describe("entitlement cache", () => {
+  it("accepts a subminimum configured TTL using real local KV", async () => {
+    const cache = createEntitlementCache(env.SESSION, { ttlSeconds: 1 });
+    await cache.put("minimum-ttl", { catalogueVersion: 1, snapshot });
+    await expect(cache.get("minimum-ttl")).resolves.toEqual({ catalogueVersion: 1, snapshot });
+  });
   it("rejects zero-length billing windows from local KV", async () => {
     await env.SESSION.put("entitlements:v1:empty-window", JSON.stringify({
       catalogueVersion: 1, snapshot: { ...snapshot, periodStart: 20, periodEnd: 20 }, cachedAt: 100_000,

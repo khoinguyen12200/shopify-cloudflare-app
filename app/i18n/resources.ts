@@ -16,15 +16,34 @@ import esAdmin from "./locales/es/admin.json";
 import esEmail from "./locales/es/email.json";
 
 import type { Locale, Namespace } from "./config";
+import { identity } from "~/identity";
 
 export const resources: Record<Locale, Record<Namespace, object>> = {
-  en: { common: enCommon, public: enPublic, admin: enAdmin, email: enEmail },
-  es: { common: esCommon, public: esPublic, admin: esAdmin, email: esEmail },
+  en: {
+    common: {
+      ...enCommon,
+      appName: identity.name,
+      tagline: identity.copy.tagline.en,
+    },
+    public: enPublic,
+    admin: enAdmin,
+    email: enEmail,
+  },
+  es: {
+    common: {
+      ...esCommon,
+      appName: identity.name,
+      tagline: identity.copy.tagline.es,
+    },
+    public: esPublic,
+    admin: esAdmin,
+    email: esEmail,
+  },
 };
 
 /** `en` is the key source: every other locale is type-checked against it. */
 export type Resources = {
-  common: typeof enCommon;
+  common: typeof enCommon & { tagline: string };
   public: typeof enPublic;
   admin: typeof enAdmin;
   email: typeof enEmail;

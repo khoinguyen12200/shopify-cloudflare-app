@@ -1,5 +1,5 @@
 {
-  "appName": "TODO: Nombre de tu aplicación",
+  "appName": "TODO: Your App Name",
   "actions": {
     "install": "Instalar",
     "save": "Guardar",
@@ -47,5 +47,6 @@
         "2": "TODO: tercera ventaja del plan de pago"
       }
     }
-  }
+  },
+  "tagline": "TODO: El eslogan localizado de tu producto"
 }

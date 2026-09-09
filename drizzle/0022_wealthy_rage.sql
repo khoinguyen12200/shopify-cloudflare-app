@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `entitlement_allocations_active_resource_unique` ON `entitlement_allocations` (`shop`,`key`,`allocation_id`) WHERE "entitlement_allocations"."state" IN ('held', 'allocated');

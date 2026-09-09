@@ -1,4 +1,4 @@
-import { and, eq, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, ne, or, sql } from "drizzle-orm";
 import type { SubscriptionStatus, SubscriptionObservation } from "~/domain/subscription-lifecycle";
 import { shopSubscriptionItems, shopSubscriptions } from "~/db/schema";
 import { getDb } from "~/request-context.server";
@@ -13,6 +13,7 @@ export type SubscriptionObservationInput = SubscriptionObservation & {
   readonly currentPeriodStartsAt?: number | null;
   readonly currentPeriodEndsAt?: number | null;
   readonly cancellationEffectiveAt?: number | null;
+  readonly cancelEffectiveOn?: string | null;
   readonly pendingPlanHandle?: string | null;
   readonly pendingBillingInterval?: string | null;
   readonly pendingLegacySubscriptionId?: string | null;
@@ -61,11 +62,11 @@ export class ShopSubscriptionRepo {
       currentPeriodEndsAt: shopSubscriptions.currentPeriodEndsAt,
       currentPeriodStartsAt: shopSubscriptions.currentPeriodStartsAt,
       cancellationEffectiveAt: shopSubscriptions.cancellationEffectiveAt,
-      revision: shopSubscriptions.appliedOccurredAt,
+      revision: shopSubscriptions.revision,
     }).from(shopSubscriptions).leftJoin(shopSubscriptionItems, and(
       eq(shopSubscriptionItems.shop, shopSubscriptions.shop),
       eq(shopSubscriptionItems.subscriptionId, shopSubscriptions.subscriptionId),
-    )).where(eq(shopSubscriptions.shop, shop)).orderBy(shopSubscriptionItems.position);
+    )).where(eq(shopSubscriptions.shop, shop)).orderBy(desc(shopSubscriptions.appliedOccurredAt), desc(shopSubscriptions.appliedExternalId), shopSubscriptionItems.position);
     return rows[0];
   }
 
@@ -81,7 +82,7 @@ export class ShopSubscriptionRepo {
       currentPeriodEndsAt: shopSubscriptions.currentPeriodEndsAt,
       currentPeriodStartsAt: shopSubscriptions.currentPeriodStartsAt,
       cancellationEffectiveAt: shopSubscriptions.cancellationEffectiveAt,
-      revision: shopSubscriptions.appliedOccurredAt,
+      revision: shopSubscriptions.revision,
     }).from(shopSubscriptions).leftJoin(shopSubscriptionItems, and(
       eq(shopSubscriptionItems.shop, shopSubscriptions.shop),
       eq(shopSubscriptionItems.subscriptionId, shopSubscriptions.subscriptionId),
@@ -106,6 +107,13 @@ export class ShopSubscriptionRepo {
     if (stale) return "stale";
     const { applySubscriptionObservation } = await import("~/domain/subscription-lifecycle");
     const state = applySubscriptionObservation(current ? { kind: kindByStatus[current.status], occurredAt: current.appliedOccurredAt, externalId: current.appliedExternalId } : null, observation);
+    const changed = !current || statusByKind[state.kind] !== current.status ||
+      (observation.planHandle !== undefined && observation.planHandle !== current.planHandle) ||
+      (observation.billingInterval !== undefined && observation.billingInterval !== current.billingInterval) ||
+      (observation.currentPeriodEndsAt !== undefined && observation.currentPeriodEndsAt !== current.currentPeriodEndsAt) ||
+      (observation.cancellationEffectiveAt !== undefined && observation.cancellationEffectiveAt !== current.cancellationEffectiveAt) ||
+      (observation.cancelEffectiveOn !== undefined && observation.cancelEffectiveOn !== current.cancelEffectiveOn);
+    const nextRevision = changed ? (current?.revision ?? 0) + 1 : (current?.revision ?? 1);
     const parentProjection = db.insert(shopSubscriptions).values({
       shop, subscriptionId: observation.subscriptionId, status: statusByKind[state.kind],
       planHandle: observation.planHandle === undefined ? current?.planHandle ?? null : observation.planHandle,
@@ -113,11 +121,13 @@ export class ShopSubscriptionRepo {
       trialEndsAt: observation.trialEndsAt === undefined ? current?.trialEndsAt ?? null : observation.trialEndsAt,
       currentPeriodStartsAt: observation.currentPeriodStartsAt === undefined ? current?.currentPeriodStartsAt ?? null : observation.currentPeriodStartsAt,
       currentPeriodEndsAt: observation.currentPeriodEndsAt === undefined ? current?.currentPeriodEndsAt ?? null : observation.currentPeriodEndsAt,
+      cancelEffectiveOn: observation.cancelEffectiveOn === undefined ? current?.cancelEffectiveOn ?? null : observation.cancelEffectiveOn,
       cancellationEffectiveAt: observation.cancellationEffectiveAt === undefined ? current?.cancellationEffectiveAt ?? null : observation.cancellationEffectiveAt,
       pendingPlanHandle: observation.pendingPlanHandle === undefined ? current?.pendingPlanHandle ?? null : observation.pendingPlanHandle,
       pendingBillingInterval: observation.pendingBillingInterval === undefined ? current?.pendingBillingInterval ?? null : observation.pendingBillingInterval,
       pendingLegacySubscriptionId: observation.pendingLegacySubscriptionId === undefined ? current?.pendingLegacySubscriptionId ?? null : observation.pendingLegacySubscriptionId,
       appliedOccurredAt: observation.occurredAt, appliedExternalId: observation.externalId,
+      revision: nextRevision,
     }).onConflictDoUpdate({ target: [shopSubscriptions.shop, shopSubscriptions.subscriptionId], set: {
       status: statusByKind[state.kind],
       planHandle: observation.planHandle === undefined ? current?.planHandle ?? null : observation.planHandle,
@@ -125,11 +135,13 @@ export class ShopSubscriptionRepo {
       trialEndsAt: observation.trialEndsAt === undefined ? current?.trialEndsAt ?? null : observation.trialEndsAt,
       currentPeriodStartsAt: observation.currentPeriodStartsAt === undefined ? current?.currentPeriodStartsAt ?? null : observation.currentPeriodStartsAt,
       currentPeriodEndsAt: observation.currentPeriodEndsAt === undefined ? current?.currentPeriodEndsAt ?? null : observation.currentPeriodEndsAt,
+      cancelEffectiveOn: observation.cancelEffectiveOn === undefined ? current?.cancelEffectiveOn ?? null : observation.cancelEffectiveOn,
       cancellationEffectiveAt: observation.cancellationEffectiveAt === undefined ? current?.cancellationEffectiveAt ?? null : observation.cancellationEffectiveAt,
       pendingPlanHandle: observation.pendingPlanHandle === undefined ? current?.pendingPlanHandle ?? null : observation.pendingPlanHandle,
       pendingBillingInterval: observation.pendingBillingInterval === undefined ? current?.pendingBillingInterval ?? null : observation.pendingBillingInterval,
       pendingLegacySubscriptionId: observation.pendingLegacySubscriptionId === undefined ? current?.pendingLegacySubscriptionId ?? null : observation.pendingLegacySubscriptionId,
       appliedOccurredAt: observation.occurredAt, appliedExternalId: observation.externalId,
+      revision: changed ? sql`${shopSubscriptions.revision} + 1` : shopSubscriptions.revision,
     }, where: or(sql`${shopSubscriptions.appliedOccurredAt} < ${observation.occurredAt}`, and(eq(shopSubscriptions.appliedOccurredAt, observation.occurredAt), sql`${shopSubscriptions.appliedExternalId} < ${observation.externalId}`)) }).returning({ subscriptionId: shopSubscriptions.subscriptionId });
     const matchingProjection = sql`exists (select 1 from ${shopSubscriptions} where ${shopSubscriptions.shop} = ${shop} and ${shopSubscriptions.subscriptionId} = ${observation.subscriptionId} and ${shopSubscriptions.appliedOccurredAt} = ${observation.occurredAt} and ${shopSubscriptions.appliedExternalId} = ${observation.externalId})`;
     const itemReplacement = observation.items ? [
@@ -153,12 +165,10 @@ export class ShopSubscriptionRepo {
     ] : [];
     const [applied] = await db.batch([parentProjection, ...itemReplacement]);
     if (applied.length === 0 && !duplicate) return "stale";
-    if (observation.type === "ACTIVE_SUBSCRIPTION" && observation.status === "NONE") {
-      await db.batch([
-        db.delete(shopSubscriptionItems).where(and(eq(shopSubscriptionItems.shop, shop), ne(shopSubscriptionItems.subscriptionId, observation.subscriptionId), matchingProjection)),
-        db.delete(shopSubscriptions).where(and(eq(shopSubscriptions.shop, shop), ne(shopSubscriptions.subscriptionId, observation.subscriptionId), matchingProjection)),
-      ]);
-    }
+    await db.batch([
+      db.delete(shopSubscriptionItems).where(and(eq(shopSubscriptionItems.shop, shop), ne(shopSubscriptionItems.subscriptionId, observation.subscriptionId))),
+      db.delete(shopSubscriptions).where(and(eq(shopSubscriptions.shop, shop), ne(shopSubscriptions.subscriptionId, observation.subscriptionId))),
+    ]);
     if (this.cache && (duplicate || applied.length > 0)) {
       try {
         await this.cache.invalidate(shop);

@@ -32,23 +32,62 @@ import { reconcileAfterUninstall } from "~/services/reconcile-after-uninstall";
 import type { AuthAttemptLimiter } from "~/ports/auth-rate-limit";
 import { EntitlementRepo } from "~/models/entitlements.server";
 import { createEntitlements, type EntitlementService } from "~/services/entitlements.server";
-import type { EntitlementCachePort, SubscriptionPort } from "~/ports/entitlements";
+import type { EntitlementCachePort, ExistingQuotaOperation, SubscriptionPort } from "~/ports/entitlements";
 import { ENTITLEMENT_CATALOGUE } from "~/billing/entitlement-catalogue";
 import { createEntitlementCache, type EntitlementCacheAdapterPort } from "~/adapters/entitlement-cache.server";
-import type { HeldReconciliationPort } from "~/ports/entitlement-reconciliation";
+import type { HeldItem, HeldReconciliationPort } from "~/ports/entitlement-reconciliation";
+
+type HeldPosition = Pick<HeldItem, "createdAt" | "kind" | "key" | "id">;
+
+function compareHeldPosition(left: HeldPosition, right: HeldPosition): number {
+  if (left.createdAt !== right.createdAt) return left.createdAt - right.createdAt;
+  if (left.kind !== right.kind) return left.kind === "quota" ? -1 : 1;
+  const keyOrder = left.key.localeCompare(right.key);
+  if (keyOrder !== 0) return keyOrder;
+  return left.id.localeCompare(right.id);
+}
+
+function encodeHeldCursor(item: HeldPosition): string {
+  return encodeURIComponent(JSON.stringify(item));
+}
+
+function decodeHeldCursor(cursor: string | undefined): HeldPosition | undefined {
+  if (cursor === undefined) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(decodeURIComponent(cursor));
+    if (parsed === null || typeof parsed !== "object") return undefined;
+    if (!("createdAt" in parsed) || !("kind" in parsed) || !("key" in parsed) || !("id" in parsed)) return undefined;
+    return typeof parsed.createdAt === "number" && (parsed.kind === "quota" || parsed.kind === "capacity")
+      && typeof parsed.key === "string" && typeof parsed.id === "string"
+      ? { createdAt: parsed.createdAt, kind: parsed.kind, key: parsed.key, id: parsed.id }
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export function entitlementReconciliationPort(): HeldReconciliationPort {
   const repo = new EntitlementRepo();
   return {
-    async listHeld(shop) {
+    async listHeld(shop, cursor, limit) {
       const quota = await repo.listHeld(shop);
       const capacity = await repo.listHeldAllocations(shop);
-      return [
-        ...quota.map((row): import("~/ports/entitlement-reconciliation").HeldItem => ({ kind: "quota", shop, key: row.key, id: row.operationId, period: row.period, amount: row.amount })),
-        ...capacity.map((row): import("~/ports/entitlement-reconciliation").HeldItem => ({ kind: "capacity", shop, key: row.key, id: row.allocationId })),
-      ];
+      const items: HeldItem[] = [
+        ...quota.map((row): HeldItem => ({ kind: "quota", shop, key: row.key, id: row.operationId, period: row.period, amount: row.amount, createdAt: row.createdAt })),
+        ...capacity.map((row): HeldItem => ({ kind: "capacity", shop, key: row.key, id: row.allocationId, operationId: row.operationId, createdAt: row.createdAt })),
+      ].sort(compareHeldPosition);
+      const position = decodeHeldCursor(cursor);
+      if (cursor !== undefined && position === undefined) return { items: [], nextCursor: undefined };
+      const afterCursor = position === undefined ? items : items.filter((item) => compareHeldPosition(item, position) > 0);
+      const pageSize = limit === undefined ? afterCursor.length : Math.max(0, limit);
+      const page = afterCursor.slice(0, pageSize);
+      const last = page.at(-1);
+      return {
+        items: page,
+        nextCursor: last !== undefined && afterCursor.length > page.length ? encodeHeldCursor(last) : undefined,
+      };
     },
-    apply: (shop, item, decision) => repo.applyReconciliation(shop, item, decision),
+    apply: (shop, item, decision, actualAmount) => repo.applyReconciliation(shop, item, decision, actualAmount),
   };
 }
 
@@ -135,12 +174,20 @@ async function invalidateEntitlements(shop: string): Promise<void> {
 }
 
 export function subscriptionsPort(): SubscriptionPort {
-  return { async current(shop) {
+  const current = async (shop: string) => {
+    const relationship = await shops().get(shop);
+    if (!relationship || relationship.relationshipStatus !== "INSTALLED") return { status: "UNKNOWN" as const, planHandle: null, revision: 0 };
     const projection = await shopSubscriptions().currentForShop(shop);
-    return { status: projection?.status ?? "NONE", planHandle: projection?.planHandle ?? null,
+    return { status: projection?.status ?? "UNKNOWN" as const, planHandle: projection?.planHandle ?? null,
       revision: projection?.revision ?? 0, periodStart: projection?.currentPeriodStartsAt ?? undefined,
       periodEnd: projection?.currentPeriodEndsAt ?? undefined,
       cancellationEffectiveAt: projection?.cancellationEffectiveAt ?? undefined };
+  };
+  return { current, async refresh(shop) {
+    const env = getEnv();
+    const result = await refreshShopSubscription(env, shop);
+    if (result.status === "failed") throw new Error(result.detail);
+    return current(shop);
   } };
 }
 
@@ -149,21 +196,30 @@ export function entitlements(): EntitlementService {
   return createEntitlements({
     subscriptions: subscriptionsPort(),
     usage: {
+      find: async (shop, operationId) => {
+        const row = await repo.findOperation(shop, operationId);
+        const state = row?.state;
+        const validState = state === "held" || state === "committed" || state === "released";
+        const operation: ExistingQuotaOperation | undefined = row && validState
+          ? { key: row.key, amount: row.requestedAmount, period: row.period, subscriptionRevision: row.subscriptionRevision, state }
+          : undefined;
+        return operation;
+      },
       reserve: (input) => repo.reserve(input),
       commit: async (input) => {
         const result = await repo.commit(input);
         return "reason" in result
           ? { allowed: false, reason: result.reason }
-          : { allowed: true, operationId: input.operationId, state: "committed" };
+          : { allowed: true, operationId: input.operationId, state: "committed", ...(result.replayed ? { replayed: true } : {}) };
       },
       release: async (input) => {
         const result = await repo.release(input);
         return "reason" in result
           ? { allowed: false, reason: result.reason }
-          : { allowed: true, operationId: input.operationId, state: result.state === "committed" ? "committed" : "released" };
+          : { allowed: true, operationId: input.operationId, state: result.state === "committed" ? "committed" : "released", ...(result.replayed ? { replayed: true } : {}) };
       },
     },
-    capacity: { allocate: (input) => repo.allocate(input), deallocate: (input) => repo.deallocate(input) },
+    capacity: { allocate: (input) => repo.allocate(input), confirmAllocation: (input) => repo.confirmAllocation(input), deallocate: (input) => repo.deallocate(input) },
     cache: entitlementCachePort(),
     catalogue: ENTITLEMENT_CATALOGUE,
   });

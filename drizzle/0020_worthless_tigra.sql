@@ -1,0 +1,1 @@
+ALTER TABLE `entitlement_allocations` ADD `operation_id` text DEFAULT 'legacy' NOT NULL;

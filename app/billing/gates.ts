@@ -4,8 +4,8 @@ import type { EntitlementOperationResult, ReserveResult, AllocateResult } from "
 type Entitlements = {
   check(shop: string, key: EntitlementKey): Promise<ResolvedEntitlement | EntitlementOperationResult>;
   reserve(input: { shop: string; key: EntitlementKey; operationId: string; amount: number }): Promise<ReserveResult>;
-  allocate(input: { shop: string; key: EntitlementKey; allocationId: string }): Promise<AllocateResult>;
+  allocate(input: { shop: string; key: EntitlementKey; allocationId: string; operationId: string }): Promise<AllocateResult>;
 };
 export function createPlanGate(input: { entitlements: Entitlements; key: EntitlementKey }) { return { check: (shop: string) => input.entitlements.check(shop, input.key) }; }
 export function createQuotaGate(input: { entitlements: Entitlements; key: EntitlementKey; amount: number }) { return { reserve: (shop: string, operationId: string) => input.entitlements.reserve({ shop, key: input.key, operationId, amount: input.amount }) }; }
-export function createCapacityGate(input: { entitlements: Entitlements; key: EntitlementKey; allocationId: string }) { return { allocate: (shop: string) => input.entitlements.allocate({ shop, key: input.key, allocationId: input.allocationId }) }; }
+export function createCapacityGate(input: { entitlements: Entitlements; key: EntitlementKey; allocationId: string }) { return { allocate: (shop: string, operationId: string) => input.entitlements.allocate({ shop, key: input.key, allocationId: input.allocationId, operationId }) }; }

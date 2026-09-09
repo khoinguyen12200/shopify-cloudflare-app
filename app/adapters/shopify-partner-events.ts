@@ -20,6 +20,19 @@ function stringField(value: Record<string, unknown>, key: string): string | null
   return typeof field === "string" && field.length > 0 ? field : null;
 }
 
+function cancellationDate(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new Error("Partner event has invalid cancellation date");
+  }
+  const parsed = new Date(value);
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
+    throw new Error("Partner event has invalid cancellation date");
+  }
+  // Parsing validates the calendar date only; no instant is exposed or stored.
+  return value;
+}
+
 export function parsePartnerEvent(value: unknown): PartnerHistoryEvent {
   const event = record(value);
   if (!event) throw new Error("Partner event must be an object");
@@ -48,7 +61,7 @@ export function parsePartnerEvent(value: unknown): PartnerHistoryEvent {
       shop: shopDomain,
       shopId,
       type: state,
-      cancelEffectiveOn: stringField(event, "cancelEffectiveOn"),
+      cancelEffectiveOn: cancellationDate(event.cancelEffectiveOn),
       planHandle: plan && stringField(plan, "handle"),
       billingPeriod: plan && stringField(plan, "billingPeriod"),
     };

@@ -127,6 +127,41 @@
       "when": 1788783054017,
       "tag": "0017_bitter_anthem",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1788833624370,
+      "tag": "0018_brave_tyrannus",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1788837041400,
+      "tag": "0019_fearless_adam_destine",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1788860515532,
+      "tag": "0020_worthless_tigra",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1788861867634,
+      "tag": "0021_brief_the_captain",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1788927484690,
+      "tag": "0022_wealthy_rage",
+      "breakpoints": true
     }
   ]
 }

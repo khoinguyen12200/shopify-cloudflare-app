@@ -100,13 +100,11 @@ lockfile from the upstream skill repositories.
 | Source | What it gives an agent |
 | ------ | ---------------------- |
 | `Shopify/shopify-ai-toolkit` (21) | Look up Admin GraphQL, Polaris, Functions, CLI, App Store review — the lookups `@rules/shopify-and-ui.md` requires |
-| `obra/superpowers` (14) | `test-driven-development`, `verification-before-completion`, `systematic-debugging`, code review, planning |
 | `remotion-dev/skills` (12) | React video, if a project needs it |
 | `pbakaus/impeccable` (1) | Required design workflow and UI quality hooks |
 
-`test-driven-development` and `verification-before-completion` are named directly
-by `.claude/rules/testing.md`, so they are not optional extras — the rules assume
-they are present, and `install:skill` is what makes that true.
+Testing and verification rules are maintained in the repository itself, so the
+installer has no dependency on a separate workflow plugin.
 
 The installed skills are **not** committed — they are ~90 MB and fully
 reproducible from that lockfile, which is exactly why this command exists.

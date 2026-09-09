@@ -226,3 +226,14 @@ describe("ShopSubscriptionRepo", () => {
     ]);
   });
 });
+
+it("selects the latest authoritative subscription projection for a shop", async () => {
+  const row = await inRequest(async () => {
+    const repo = new ShopSubscriptionRepo();
+    await repo.upsertObservation("multi.myshopify.com", { type: "CREATED", status: "ACTIVE", subscriptionId: "old", occurredAt: 1, externalId: "a", planHandle: "old" });
+    await repo.upsertObservation("multi.myshopify.com", { type: "CREATED", status: "ACTIVE", subscriptionId: "new", occurredAt: 2, externalId: "b", planHandle: "new" });
+    return repo.currentForShop("multi.myshopify.com");
+  });
+  expect(row?.planHandle).toBe("new");
+  expect(await inRequest(async () => env.DB.prepare("SELECT count(*) AS count FROM shop_subscriptions WHERE shop = ?").bind("multi.myshopify.com").first())).toEqual({ count: 1 });
+});

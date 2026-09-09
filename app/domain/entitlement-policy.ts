@@ -9,7 +9,7 @@ export type UsageWindow =
 export type FeatureDefinition = { readonly kind: "capability" } | { readonly kind: "capacity" } | { readonly kind: "quota"; readonly period: UsagePeriod };
 export type EntitlementGrant = { readonly kind: "disabled" } | { readonly kind: "enabled" } | { readonly kind: "unlimited" } | { readonly kind: "limit"; readonly maximum: number };
 export interface EntitlementCatalogue { readonly version: number; readonly freePlan: string; readonly features: Readonly<Record<string, FeatureDefinition>>; readonly plans: Readonly<Record<string, Readonly<Record<string, EntitlementGrant>>>>; }
-export interface SubscriptionSnapshot { readonly status: SubscriptionStatus; readonly planHandle: string | null; readonly revision: number; readonly cancellationEffectiveAt?: number; readonly periodStart?: number; readonly periodEnd?: number; }
+export interface SubscriptionSnapshot { readonly status: SubscriptionStatus; readonly planHandle: string | null; readonly revision: number; readonly verifiedAt?: number; readonly cancellationEffectiveAt?: number; readonly periodStart?: number; readonly periodEnd?: number; }
 export type EntitlementDenialReason = "inactive_subscription" | "unknown_feature" | "unknown_plan" | "invalid_grant" | "invalid_usage_window" | "disabled" | "invalid_catalogue";
 export type ResolvedEntitlement =
   | { readonly allowed: true; readonly kind: "capability" }
@@ -18,13 +18,18 @@ export type ResolvedEntitlement =
   | { readonly allowed: false; readonly reason: EntitlementDenialReason };
 
 export function resolveUsageWindow(period: UsagePeriod, now: number, subscription: SubscriptionSnapshot): UsageWindow | null {
+  if (!Number.isSafeInteger(now)) return null;
   if (period === "lifetime") return { kind: "lifetime", key: "lifetime" };
   if (period === "calendar_month") {
     const date = new Date(now);
     const year = date.getUTCFullYear();
     const month = date.getUTCMonth();
+    if (!Number.isSafeInteger(year) || !Number.isSafeInteger(month)) return null;
+    const start = Date.UTC(year, month, 1);
+    const end = Date.UTC(year, month + 1, 1);
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end)) return null;
     const key = `${year}-${String(month + 1).padStart(2, "0")}`;
-    return { kind: period, key, start: Date.UTC(year, month, 1), end: Date.UTC(year, month + 1, 1) };
+    return { kind: period, key, start, end };
   }
   const { periodStart: start, periodEnd: end } = subscription;
   if (start === undefined || end === undefined || !Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start >= end || now < start || now >= end) return null;
@@ -33,11 +38,19 @@ export function resolveUsageWindow(period: UsagePeriod, now: number, subscriptio
 
 function own<T>(record: Readonly<Record<string, T>>, key: string): T | undefined { return Object.prototype.hasOwnProperty.call(record, key) ? record[key] : undefined; }
 function active(subscription: SubscriptionSnapshot, now: number): boolean {
-  return subscription.status === "ACTIVE" || subscription.status === "NONE" || (subscription.status === "CANCELLATION_SCHEDULED" && subscription.cancellationEffectiveAt !== undefined && now < subscription.cancellationEffectiveAt);
+  const cancellationAt = subscription.cancellationEffectiveAt;
+  const validCancellation = cancellationAt !== undefined && Number.isSafeInteger(cancellationAt);
+  return subscription.status === "ACTIVE" || subscription.status === "NONE" || (subscription.status === "CANCELLATION_SCHEDULED" && validCancellation && now < cancellationAt);
 }
 function validMaximum(value: number): boolean { return Number.isSafeInteger(value) && value >= 0; }
 
+export function calculateRemaining(maximum: number, used: number): number | null {
+  if (!validMaximum(maximum) || !validMaximum(used)) return null;
+  return used >= maximum ? 0 : maximum - used;
+}
+
 export function resolveEntitlement(catalogue: EntitlementCatalogue, subscription: SubscriptionSnapshot, key: EntitlementKey, now: number): ResolvedEntitlement {
+  if (!Number.isSafeInteger(now)) return { allowed: false, reason: "invalid_usage_window" };
   if (catalogue.version !== 1) return { allowed: false, reason: "invalid_catalogue" };
   const definition = own(catalogue.features, key);
   if (!definition) return { allowed: false, reason: "unknown_feature" };

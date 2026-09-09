@@ -20,15 +20,21 @@ if (!decision.allowed) return denied(decision.reason);
 ## Reusable capacity
 
 ```ts
-const allocated = await entitlements().allocate({
+const operationId = crypto.randomUUID();
+const held = await entitlements().allocate({
   shop,
   key: "staff.max",
   allocationId: staffUserId,
+  operationId,
 });
+if (!held.allowed) return held;
+
+// Create or activate the resource, then confirm the held attempt.
+const allocated = await entitlements().confirmAllocation({ shop, key: "staff.max", allocationId: staffUserId, operationId });
 if (!allocated.allowed) return allocated;
 
-// If creation fails, or when the staff user is deactivated/deleted:
-await entitlements().deallocate({ shop, key: "staff.max", allocationId: staffUserId });
+// If creation fails, release the held attempt; after activation, deallocate it when removed.
+await entitlements().deallocate({ shop, key: "staff.max", allocationId: staffUserId, operationId });
 ```
 
 Always use a stable resource ID. Duplicate allocation/deallocation is idempotent. A released allocation no longer counts, so a one-staff Free limit works indefinitely rather than being consumed forever.
