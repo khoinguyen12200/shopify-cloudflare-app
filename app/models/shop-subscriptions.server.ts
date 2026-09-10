@@ -1,4 +1,4 @@
-import { and, desc, eq, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, ne, or, sql, exists } from "drizzle-orm";
 import type { SubscriptionStatus, SubscriptionObservation } from "~/domain/subscription-lifecycle";
 import { shopSubscriptionItems, shopSubscriptions } from "~/db/schema";
 import { getDb } from "~/request-context.server";
@@ -143,25 +143,16 @@ export class ShopSubscriptionRepo {
       appliedOccurredAt: observation.occurredAt, appliedExternalId: observation.externalId,
       revision: changed ? sql`${shopSubscriptions.revision} + 1` : shopSubscriptions.revision,
     }, where: or(sql`${shopSubscriptions.appliedOccurredAt} < ${observation.occurredAt}`, and(eq(shopSubscriptions.appliedOccurredAt, observation.occurredAt), sql`${shopSubscriptions.appliedExternalId} < ${observation.externalId}`)) }).returning({ subscriptionId: shopSubscriptions.subscriptionId });
-    const matchingProjection = sql`exists (select 1 from ${shopSubscriptions} where ${shopSubscriptions.shop} = ${shop} and ${shopSubscriptions.subscriptionId} = ${observation.subscriptionId} and ${shopSubscriptions.appliedOccurredAt} = ${observation.occurredAt} and ${shopSubscriptions.appliedExternalId} = ${observation.externalId})`;
+    const matchingProjection = exists(db.select({ shop: shopSubscriptions.shop }).from(shopSubscriptions).where(and(eq(shopSubscriptions.shop, shop), eq(shopSubscriptions.subscriptionId, observation.subscriptionId), eq(shopSubscriptions.appliedOccurredAt, observation.occurredAt), eq(shopSubscriptions.appliedExternalId, observation.externalId))));
+    const projectionScope = and(eq(shopSubscriptions.shop, shop), eq(shopSubscriptions.subscriptionId, observation.subscriptionId), eq(shopSubscriptions.appliedOccurredAt, observation.occurredAt), eq(shopSubscriptions.appliedExternalId, observation.externalId));
     const itemReplacement = observation.items ? [
-      db.delete(shopSubscriptionItems).where(and(
-        eq(shopSubscriptionItems.shop, shop),
-        eq(shopSubscriptionItems.subscriptionId, observation.subscriptionId),
-        matchingProjection,
-      )),
-      ...observation.items.map((item, position) => db.insert(shopSubscriptionItems).select(
-        db.select({
-          shop: sql<string>`${shop}`.as("shop"),
-          subscriptionId: sql<string>`${observation.subscriptionId}`.as("subscription_id"),
-          position: sql<number>`${position}`.as("position"),
-          itemType: sql<string>`${item.itemType}`.as("item_type"),
-          priceAmount: sql<number | null>`${item.priceAmount ?? null}`.as("price_amount"),
-          priceCurrency: sql<string | null>`${item.priceCurrency ?? null}`.as("price_currency"),
-          cappedAmountAmount: sql<number | null>`${item.cappedAmountAmount ?? null}`.as("capped_amount_amount"),
-          cappedAmountCurrency: sql<string | null>`${item.cappedAmountCurrency ?? null}`.as("capped_amount_currency"),
-        }).from(shopSubscriptions).where(matchingProjection),
-      )),
+      db.delete(shopSubscriptionItems).where(and(eq(shopSubscriptionItems.shop, shop), eq(shopSubscriptionItems.subscriptionId, observation.subscriptionId), matchingProjection)),
+      ...observation.items.map((item, position) => db.insert(shopSubscriptionItems).select(db.select({
+        shop: shopSubscriptions.shop, subscriptionId: shopSubscriptions.subscriptionId,
+        position: sql<number>`${position}`.as("position"), itemType: sql<string>`${item.itemType}`.as("item_type"),
+        priceAmount: sql<number | null>`${item.priceAmount ?? null}`.as("price_amount"), priceCurrency: sql<string | null>`${item.priceCurrency ?? null}`.as("price_currency"),
+        cappedAmountAmount: sql<number | null>`${item.cappedAmountAmount ?? null}`.as("capped_amount_amount"), cappedAmountCurrency: sql<string | null>`${item.cappedAmountCurrency ?? null}`.as("capped_amount_currency"),
+      }).from(shopSubscriptions).where(projectionScope))),
     ] : [];
     const [applied] = await db.batch([parentProjection, ...itemReplacement]);
     if (applied.length === 0 && !duplicate) return "stale";

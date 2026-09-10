@@ -20,6 +20,7 @@
 //
 // Production accounts are created with `npm run admin:create`, which asks for a
 // real password and enforces the policy.
+import { adminInsertStatement } from "./admin-query.mjs";
 import { spawnSync } from "node:child_process";
 import { webcrypto } from "node:crypto";
 import { fileURLToPath } from "node:url";
@@ -75,22 +76,13 @@ async function hashPassword(password) {
   return ["pbkdf2", "sha256", ITERATIONS, toBase64(salt), toBase64(bits)].join("$");
 }
 
-/** Single-quote escaping for SQL string literals. */
-const q = (value) => `'${String(value).replace(/'/g, "''")}'`;
-
 const passwordHash = await hashPassword(SEED_PASSWORD);
 const now = Date.now();
-
-// ON CONFLICT DO NOTHING: idempotent, and it never overwrites a password the
-// developer has since changed.
-const sql = `
-INSERT INTO admin_users
-  (id, email, name, password_hash, role, status, created_at, updated_at, last_login_at)
-VALUES
-  (${q("seed-local-admin")}, ${q(SEED_EMAIL)}, ${q(SEED_NAME)}, ${q(passwordHash)},
-   'owner', 'active', ${now}, ${now}, NULL)
-ON CONFLICT(email) DO NOTHING;
-`.trim();
+const sql = adminInsertStatement({
+  id: "seed-local-admin", email: SEED_EMAIL, name: SEED_NAME,
+  passwordHash, role: "owner", status: "active", createdAt: now,
+  updatedAt: now, lastLoginAt: null,
+}, true);
 
 const wrangler = join(
   repoRoot,

@@ -1,3 +1,6 @@
+import { eq } from "drizzle-orm";
+import { makeDb } from "~/db/client";
+import * as schema from "~/db/schema";
 import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:test";
 import { getTableConfig } from "drizzle-orm/sqlite-core";
@@ -29,50 +32,36 @@ describe("entitlement schema", () => {
 
   it("rejects amounts above Number.MAX_SAFE_INTEGER at the database boundary", async () => {
     const amount = Number.MAX_SAFE_INTEGER + 1;
-    await expect(env.DB.prepare("INSERT INTO entitlement_operations (shop, operation_id, key, period, requested_amount, reserved_amount, actual_amount, subscription_revision, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .bind("limits.myshopify.com", "op-requested", "quota", "lifetime", amount, 0, null, 0, "held", 0, 0).run()).rejects.toThrow();
-    await expect(env.DB.prepare("INSERT INTO entitlement_operations (shop, operation_id, key, period, requested_amount, reserved_amount, actual_amount, subscription_revision, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .bind("limits.myshopify.com", "op-reserved", "quota", "lifetime", 0, amount, null, 0, "held", 0, 0).run()).rejects.toThrow();
-    await expect(env.DB.prepare("INSERT INTO entitlement_operations (shop, operation_id, key, period, requested_amount, reserved_amount, actual_amount, subscription_revision, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .bind("limits.myshopify.com", "op-actual", "quota", "lifetime", 0, 0, amount, 0, "held", 0, 0).run()).rejects.toThrow();
-    await expect(env.DB.prepare("INSERT INTO entitlement_usage (shop, key, period, committed, held, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
-      .bind("limits.myshopify.com", "quota", "committed", amount, 0, 0).run()).rejects.toThrow();
-    await expect(env.DB.prepare("INSERT INTO entitlement_usage (shop, key, period, committed, held, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
-      .bind("limits.myshopify.com", "quota", "held", 0, amount, 0).run()).rejects.toThrow();
+    await expect(makeDb(env.DB).insert(schema.entitlementOperations).values({ shop: "limits.myshopify.com", operationId: "op-requested", key: "quota", period: "lifetime", requestedAmount: amount, reservedAmount: 0, actualAmount: null, subscriptionRevision: 0, state: "held", createdAt: 0, updatedAt: 0 }).run()).rejects.toThrow();
+    await expect(makeDb(env.DB).insert(schema.entitlementOperations).values({ shop: "limits.myshopify.com", operationId: "op-reserved", key: "quota", period: "lifetime", requestedAmount: 0, reservedAmount: amount, actualAmount: null, subscriptionRevision: 0, state: "held", createdAt: 0, updatedAt: 0 }).run()).rejects.toThrow();
+    await expect(makeDb(env.DB).insert(schema.entitlementOperations).values({ shop: "limits.myshopify.com", operationId: "op-actual", key: "quota", period: "lifetime", requestedAmount: 0, reservedAmount: 0, actualAmount: amount, subscriptionRevision: 0, state: "held", createdAt: 0, updatedAt: 0 }).run()).rejects.toThrow();
+    await expect(makeDb(env.DB).insert(schema.entitlementUsage).values({ shop: "limits.myshopify.com", key: "quota", period: "committed", committed: amount, held: 0, updatedAt: 0 }).run()).rejects.toThrow();
+    await expect(makeDb(env.DB).insert(schema.entitlementUsage).values({ shop: "limits.myshopify.com", key: "quota", period: "held", committed: 0, held: amount, updatedAt: 0 }).run()).rejects.toThrow();
   });
 
   it("rejects fractional and inconsistent accounting values", async () => {
-    await expect(env.DB.prepare("INSERT INTO entitlement_usage (shop,key,period,committed,held,updated_at) VALUES (?,?,?,?,?,?)")
-      .bind("limits.myshopify.com", "quota", "fraction", 1.5, 0, 0).run()).rejects.toThrow();
-    await expect(env.DB.prepare("INSERT INTO entitlement_operations (shop, operation_id, key, period, requested_amount, reserved_amount, actual_amount, subscription_revision, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .bind("limits.myshopify.com", "fraction", "quota", "lifetime", 1, 1, 0.5, 0, "held", 0, 0).run()).rejects.toThrow();
-    await expect(env.DB.prepare("INSERT INTO entitlement_operations (shop, operation_id, key, period, requested_amount, reserved_amount, actual_amount, subscription_revision, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .bind("limits.myshopify.com", "inconsistent", "quota", "lifetime", 2, 1, 2, 0, "held", 0, 0).run()).rejects.toThrow();
+    await expect(makeDb(env.DB).insert(schema.entitlementUsage).values({ shop: "limits.myshopify.com", key: "quota", period: "fraction", committed: 1.5, held: 0, updatedAt: 0 }).run()).rejects.toThrow();
+    await expect(makeDb(env.DB).insert(schema.entitlementOperations).values({ shop: "limits.myshopify.com", operationId: "fraction", key: "quota", period: "lifetime", requestedAmount: 1, reservedAmount: 1, actualAmount: 0.5, subscriptionRevision: 0, state: "held", createdAt: 0, updatedAt: 0 }).run()).rejects.toThrow();
+    await expect(makeDb(env.DB).insert(schema.entitlementOperations).values({ shop: "limits.myshopify.com", operationId: "inconsistent", key: "quota", period: "lifetime", requestedAmount: 2, reservedAmount: 1, actualAmount: 2, subscriptionRevision: 0, state: "held", createdAt: 0, updatedAt: 0 }).run()).rejects.toThrow();
   });
 
   it.each([
     [1.5, 2, null], [2, 1.5, null], [2, 2, 1.5],
     [-1, 0, null], [0, -1, null], [1, 1, -1], [2, 1, 2],
   ])("rejects invalid operation amounts %s/%s/%s", async (requested, reserved, actual) => {
-    await expect(env.DB.prepare("INSERT INTO entitlement_operations (shop,operation_id,key,period,requested_amount,reserved_amount,actual_amount,subscription_revision,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
-      .bind("limits.myshopify.com", "invalid", "quota", "lifetime", requested, reserved, actual, 1, "held", 0, 0).run()).rejects.toThrow("entitlement_operations_amounts_check");
+    await expect(makeDb(env.DB).insert(schema.entitlementOperations).values({ shop: "limits.myshopify.com", operationId: "invalid", key: "quota", period: "lifetime", requestedAmount: requested, reservedAmount: reserved, actualAmount: actual, subscriptionRevision: 1, state: "held", createdAt: 0, updatedAt: 0 }).run()).rejects.toMatchObject({ cause: expect.objectContaining({ message: expect.stringContaining("entitlement_operations_amounts_check") }) });
   });
 
   it.each([[0, 1.5], [1.5, 0], [-1, 0], [0, -1], [Number.MAX_SAFE_INTEGER, 1]])(
     "rejects invalid aggregate %s/%s without changing persisted accounting", async (committed, held) => {
-      await env.DB.prepare("INSERT INTO entitlement_usage (shop,key,period,committed,held,updated_at) VALUES (?,?,?,?,?,?)")
-        .bind("limits.myshopify.com", "quota", "lifetime", 1, 2, 0).run();
-      await expect(env.DB.prepare("UPDATE entitlement_usage SET committed=?,held=? WHERE shop=?")
-        .bind(committed, held, "limits.myshopify.com").run()).rejects.toThrow("entitlement_usage_amounts_check");
-      expect(await env.DB.prepare("SELECT committed,held FROM entitlement_usage WHERE shop=?")
-        .bind("limits.myshopify.com").first()).toEqual({ committed: 1, held: 2 });
+      await makeDb(env.DB).insert(schema.entitlementUsage).values({ shop: "limits.myshopify.com", key: "quota", period: "lifetime", committed: 1, held: 2, updatedAt: 0 }).run();
+      await expect(makeDb(env.DB).update(schema.entitlementUsage).set({ committed, held }).where(eq(schema.entitlementUsage.shop, "limits.myshopify.com")).run()).rejects.toMatchObject({ cause: expect.objectContaining({ message: expect.stringContaining("entitlement_usage_amounts_check") }) });
+      expect(await makeDb(env.DB).select({ committed: schema.entitlementUsage.committed, held: schema.entitlementUsage.held }).from(schema.entitlementUsage).where(eq(schema.entitlementUsage.shop, "limits.myshopify.com")).get()).toEqual({ committed: 1, held: 2 });
     },
   );
 
   it.each([0, Number.MAX_SAFE_INTEGER])("preserves valid integer boundary %s", async (amount) => {
-    await env.DB.prepare("INSERT INTO entitlement_usage (shop,key,period,committed,held,updated_at) VALUES (?,?,?,?,?,?)")
-      .bind("limits.myshopify.com", "quota", "lifetime", amount, 0, 0).run();
-    expect(await env.DB.prepare("SELECT committed FROM entitlement_usage WHERE shop=?")
-      .bind("limits.myshopify.com").first()).toEqual({ committed: amount });
+    await makeDb(env.DB).insert(schema.entitlementUsage).values({ shop: "limits.myshopify.com", key: "quota", period: "lifetime", committed: amount, held: 0, updatedAt: 0 }).run();
+    expect(await makeDb(env.DB).select({ committed: schema.entitlementUsage.committed }).from(schema.entitlementUsage).where(eq(schema.entitlementUsage.shop, "limits.myshopify.com")).get()).toEqual({ committed: amount });
   });
 });

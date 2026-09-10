@@ -29,6 +29,7 @@ function validFiles() {
     productionToml: 'client_id = "client-key"\napplication_url = "https://app.example.org"\n[webhooks]\napi_version = "2026-07"\n[access_scopes]\nscopes = ""\n[auth]\nredirect_urls = [ "https://app.example.org/auth/callback" ]',
     developmentToml: 'client_id = "dev-key"\napplication_url = "https://dev.example.org"\n[webhooks]\napi_version = "2026-07"\n[access_scopes]\nscopes = ""\n[auth]\nredirect_urls = [ "https://dev.example.org/auth/callback" ]',
     legal: 'export const APP_NAME = "Useful App";\nexport const COMPANY_NAME = "Example LLC";\nexport const CONTACT_EMAIL = "privacy@example.org";\nexport const COMPANY_ADDRESS = "1 Main Street";\nexport const LAST_UPDATED = "2026-09-01";',
+    identity: 'name: "Useful App", companyName: "Example LLC", supportEmail: "support@example.org", privacyEmail: "privacy@example.org", address: "1 Main Street", effectiveDate: "2026-09-01"',
     plans: 'handle: "free"\nhandle: "pro"',
     publicCopy: '{"pricing":"Clear pricing","support":"Email support@example.org","privacy":"We process merchant data."}',
   };
@@ -124,4 +125,18 @@ test("rejects placeholders in the dedicated identity source", () => {
   files.identity = 'effectiveDate: "2026-09-01"\nname: "TODO: replace"';
   const issues = validateLaunchContract(files).join("\n");
   assert.match(issues, /legal identity\/contact\/date/);
+});
+
+for (const field of ["name", "companyName", "supportEmail", "privacyEmail", "address"]) {
+  test(`rejects missing identity ${field}`, () => {
+    const files = validFiles();
+    files.identity = files.identity.replace(new RegExp(`${field}: "[^"]*"`), `${field}: ""`);
+    assert.match(validateLaunchContract(files).join("\n"), /legal identity\/contact\/date/);
+  });
+}
+
+test("rejects an impossible policy date", () => {
+  const files = validFiles();
+  files.identity = files.identity.replace("2026-09-01", "2026-02-30");
+  assert.match(validateLaunchContract(files).join("\n"), /legal identity\/contact\/date/);
 });

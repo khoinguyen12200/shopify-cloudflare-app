@@ -1,3 +1,5 @@
+import { generateSQLiteDrizzleJson, generateSQLiteMigration } from "drizzle-kit/api";
+import { fkParent, fkChild } from "./app/test/cleanup-schema";
 import {
   cloudflareTest,
   readD1Migrations,
@@ -30,6 +32,17 @@ const migrations = await readD1Migrations(
 // Read here, in Node, rather than with a `?raw` import: Vite's SCSS plugin
 // handles `.scss` before `?raw` can take effect, and the import resolves to an
 // empty string — which would make every assertion in that test vacuously pass.
+const emptyCleanupSchema = await generateSQLiteDrizzleJson({});
+const parentCleanupSchema = await generateSQLiteDrizzleJson({ fkParent });
+const fullCleanupSchema = await generateSQLiteDrizzleJson({ fkParent, fkChild });
+const cleanupMigrations = {
+  create: [{ name: "cleanup-fixture-create", queries: await generateSQLiteMigration(emptyCleanupSchema, fullCleanupSchema) }],
+  drop: [{ name: "cleanup-fixture-drop", queries: [
+    ...await generateSQLiteMigration(fullCleanupSchema, parentCleanupSchema),
+    ...await generateSQLiteMigration(parentCleanupSchema, emptyCleanupSchema),
+  ] }],
+};
+
 const publicTokensScss = await readFile(
   path.join(import.meta.dirname, "app/styles/public/_tokens.scss"),
   "utf8",
@@ -60,6 +73,7 @@ export default defineConfig({
           ),
         bindings: {
           TEST_MIGRATIONS: JSON.stringify(migrations),
+          TEST_CLEANUP_MIGRATIONS: JSON.stringify(cleanupMigrations),
           TEST_PUBLIC_TOKENS_SCSS: publicTokensScss,
           // Keep the suite self-contained: locally these come from .dev.vars,
           // which is gitignored and absent on a CI runner.

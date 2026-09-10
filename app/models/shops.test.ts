@@ -1,3 +1,6 @@
+import { drizzle } from "drizzle-orm/d1";
+import { count, eq } from "drizzle-orm";
+import { shopGrantedScopes, shopScopeChangeItems, shopScopeChanges, shopSubscriptionItems, shopSubscriptions, shopifyEvents, shopifyRelationshipEvents, shopifySubscriptionEvents, shops, webhookDeliveries } from "~/db/schema";
 import { describe, it, expect } from "vitest";
 import { runWithRequestContext } from "~/request-context.server";
 import { env } from "cloudflare:test";
@@ -7,6 +10,8 @@ import type { RelationshipState } from "~/domain/shop-lifecycle";
 
 setupTestDatabase();
 
+const db = drizzle(env.DB);
+
 /** Model code reads its DB handle from the request context, so tests provide one. */
 function inRequest<T>(fn: () => Promise<T>): Promise<T> {
   return runWithRequestContext(env, fn);
@@ -14,81 +19,39 @@ function inRequest<T>(fn: () => Promise<T>): Promise<T> {
 
 async function lifecycleRows(shop: string, key: string): Promise<number[]> {
   const rows = await Promise.all([
-    env.DB.prepare("SELECT count(*) AS count FROM shops WHERE shop = ?").bind(shop),
-    env.DB.prepare("SELECT count(*) AS count FROM webhook_deliveries WHERE shop = ?").bind(shop),
-    env.DB.prepare("SELECT count(*) AS count FROM shopify_events WHERE shop = ?").bind(shop),
-    env.DB
-      .prepare("SELECT count(*) AS count FROM shopify_relationship_events WHERE event_id = ?")
-      .bind(`${key}-relationship-event`),
-    env.DB
-      .prepare("SELECT count(*) AS count FROM shopify_subscription_events WHERE event_id = ?")
-      .bind(`${key}-subscription-event`),
-    env.DB.prepare("SELECT count(*) AS count FROM shop_subscriptions WHERE shop = ?").bind(shop),
-    env.DB
-      .prepare("SELECT count(*) AS count FROM shop_subscription_items WHERE shop = ?")
-      .bind(shop),
-    env.DB.prepare("SELECT count(*) AS count FROM shop_granted_scopes WHERE shop = ?").bind(shop),
-    env.DB.prepare("SELECT count(*) AS count FROM shop_scope_changes WHERE shop = ?").bind(shop),
-    env.DB
-      .prepare("SELECT count(*) AS count FROM shop_scope_change_items WHERE scope_change_id = ?")
-      .bind(`${key}-scope-change`),
-  ].map((statement) => statement.first<{ count: number }>()));
+    db.select({ count: count() }).from(shops).where(eq(shops.shop, shop)).get(),
+    db.select({ count: count() }).from(webhookDeliveries).where(eq(webhookDeliveries.shop, shop)).get(),
+    db.select({ count: count() }).from(shopifyEvents).where(eq(shopifyEvents.shop, shop)).get(),
+    db.select({ count: count() }).from(shopifyRelationshipEvents).where(eq(shopifyRelationshipEvents.eventId, `${key}-relationship-event`)).get(),
+    db.select({ count: count() }).from(shopifySubscriptionEvents).where(eq(shopifySubscriptionEvents.eventId, `${key}-subscription-event`)).get(),
+    db.select({ count: count() }).from(shopSubscriptions).where(eq(shopSubscriptions.shop, shop)).get(),
+    db.select({ count: count() }).from(shopSubscriptionItems).where(eq(shopSubscriptionItems.shop, shop)).get(),
+    db.select({ count: count() }).from(shopGrantedScopes).where(eq(shopGrantedScopes.shop, shop)).get(),
+    db.select({ count: count() }).from(shopScopeChanges).where(eq(shopScopeChanges.shop, shop)).get(),
+    db.select({ count: count() }).from(shopScopeChangeItems).where(eq(shopScopeChangeItems.scopeChangeId, `${key}-scope-change`)).get(),
+  ]);
   return rows.map((row) => Number(row?.count ?? 0));
 }
 
-function seedLifecycleRows(shop: string, key: string): Promise<D1Result<unknown>[]> {
+function seedLifecycleRows(shop: string, key: string) {
   const shopifyShopId = `gid://shopify/Shop/${key}`;
   const relationshipEventId = `${key}-relationship-event`;
   const subscriptionEventId = `${key}-subscription-event`;
   const subscriptionId = `gid://shopify/AppSubscription/${key}`;
   const scopeChangeId = `${key}-scope-change`;
 
-  return env.DB.batch([
-    env.DB.prepare("INSERT INTO shops (shop, installed_at) VALUES (?, ?)").bind(shop, 1),
-    env.DB
-      .prepare(
-        "INSERT INTO webhook_deliveries (id, event_id, topic, api_version, shop, triggered_at, received_at, payload_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-      )
-      .bind(`${key}-delivery`, `${key}-delivery-event`, "app/uninstalled", "2026-10", shop, 1, 1, "a".repeat(64)),
-    env.DB
-      .prepare(
-        "INSERT INTO shopify_events (source, event_id, event_type, shop, shopify_shop_id, occurred_at, synchronized_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      )
-      .bind("partner_history", relationshipEventId, "INSTALLED", shop, shopifyShopId, 1, 1),
-    env.DB
-      .prepare(
-        "INSERT INTO shopify_relationship_events (event_source, event_id, reason, reason_description) VALUES (?, ?, ?, ?)",
-      )
-      .bind("partner_history", relationshipEventId, "MERCHANT_INSTALL", "The merchant installed the app."),
-    env.DB
-      .prepare(
-        "INSERT INTO shopify_events (source, event_id, event_type, shop, shopify_shop_id, occurred_at, synchronized_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      )
-      .bind("partner_history", subscriptionEventId, "CREATED", shop, shopifyShopId, 2, 2),
-    env.DB
-      .prepare(
-        "INSERT INTO shopify_subscription_events (event_source, event_id, subscription_id, status) VALUES (?, ?, ?, ?)",
-      )
-      .bind("partner_history", subscriptionEventId, subscriptionId, "ACTIVE"),
-    env.DB
-      .prepare(
-        "INSERT INTO shop_subscriptions (shop, subscription_id, status, applied_occurred_at, applied_external_id) VALUES (?, ?, ?, ?, ?)",
-      )
-      .bind(shop, subscriptionId, "ACTIVE", 2, subscriptionEventId),
-    env.DB
-      .prepare(
-        "INSERT INTO shop_subscription_items (shop, subscription_id, position, item_type) VALUES (?, ?, ?, ?)",
-      )
-      .bind(shop, subscriptionId, 0, "recurring"),
-    env.DB
-      .prepare("INSERT INTO shop_granted_scopes (shop, scope, granted_at) VALUES (?, ?, ?)")
-      .bind(shop, "read_products", 3),
-    env.DB
-      .prepare("INSERT INTO shop_scope_changes (id, shop, source, occurred_at) VALUES (?, ?, ?, ?)")
-      .bind(scopeChangeId, shop, "webhook", 3),
-    env.DB
-      .prepare("INSERT INTO shop_scope_change_items (scope_change_id, scope, change) VALUES (?, ?, ?)")
-      .bind(scopeChangeId, "read_products", "granted"),
+  return db.batch([
+    db.insert(shops).values({ shop: shop, installedAt: 1 }),
+    db.insert(webhookDeliveries).values({ id: `${key}-delivery`, eventId: `${key}-delivery-event`, topic: "app/uninstalled", apiVersion: "2026-10", shop: shop, triggeredAt: 1, receivedAt: 1, payloadHash: "a".repeat(64) }),
+    db.insert(shopifyEvents).values({ source: "partner_history", eventId: relationshipEventId, eventType: "INSTALLED", shop: shop, shopifyShopId: shopifyShopId, occurredAt: 1, synchronizedAt: 1 }),
+    db.insert(shopifyRelationshipEvents).values({ eventSource: "partner_history", eventId: relationshipEventId, reason: "MERCHANT_INSTALL", reasonDescription: "The merchant installed the app." }),
+    db.insert(shopifyEvents).values({ source: "partner_history", eventId: subscriptionEventId, eventType: "CREATED", shop: shop, shopifyShopId: shopifyShopId, occurredAt: 2, synchronizedAt: 2 }),
+    db.insert(shopifySubscriptionEvents).values({ eventSource: "partner_history", eventId: subscriptionEventId, subscriptionId: subscriptionId, status: "ACTIVE" }),
+    db.insert(shopSubscriptions).values({ shop: shop, subscriptionId: subscriptionId, status: "ACTIVE", appliedOccurredAt: 2, appliedExternalId: subscriptionEventId }),
+    db.insert(shopSubscriptionItems).values({ shop: shop, subscriptionId: subscriptionId, position: 0, itemType: "recurring" }),
+    db.insert(shopGrantedScopes).values({ shop: shop, scope: "read_products", grantedAt: 3 }),
+    db.insert(shopScopeChanges).values({ id: scopeChangeId, shop: shop, source: "webhook", occurredAt: 3 }),
+    db.insert(shopScopeChangeItems).values({ scopeChangeId: scopeChangeId, scope: "read_products", change: "granted" }),
   ]);
 }
 

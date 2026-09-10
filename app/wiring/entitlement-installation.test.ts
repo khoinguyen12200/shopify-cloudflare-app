@@ -1,3 +1,5 @@
+import { makeDb } from "~/db/client";
+import * as schema from "~/db/schema";
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { runWithRequestContext } from "~/request-context.server";
@@ -15,18 +17,15 @@ describe("entitlement installation eligibility", () => {
 
   it("does not manufacture free authorization before billing initialization", async () => {
     await runWithRequestContext(env, async () => {
-      await env.DB.prepare("INSERT INTO shops (shop, installed_at, relationship_status) VALUES (?, ?, ?)")
-        .bind("new-shop", 1, "INSTALLED").run();
+      await makeDb(env.DB).insert(schema.shops).values({ shop: "new-shop", installedAt: 1, relationshipStatus: "INSTALLED" }).run();
       expect((await subscriptionsPort().current("new-shop")).status).toBe("UNKNOWN");
     });
   });
 
   it("denies a locally uninstalled shop despite an active subscription projection", async () => {
     await runWithRequestContext(env, async () => {
-      await env.DB.prepare("INSERT INTO shops (shop, installed_at, uninstalled_at, relationship_status) VALUES (?, ?, ?, ?)")
-        .bind("removed", 1, 2, "UNINSTALLED").run();
-      await env.DB.prepare("INSERT INTO shop_subscriptions (shop,subscription_id,status,applied_occurred_at,applied_external_id,revision) VALUES (?,?,?,?,?,?)")
-        .bind("removed", "sub", "ACTIVE", 1, "event", 1).run();
+      await makeDb(env.DB).insert(schema.shops).values({ shop: "removed", installedAt: 1, uninstalledAt: 2, relationshipStatus: "UNINSTALLED" }).run();
+      await makeDb(env.DB).insert(schema.shopSubscriptions).values({ shop: "removed", subscriptionId: "sub", status: "ACTIVE", appliedOccurredAt: 1, appliedExternalId: "event", revision: 1 }).run();
       expect((await subscriptionsPort().current("removed")).status).toBe("UNKNOWN");
     });
   });

@@ -1,3 +1,7 @@
+import { drizzle } from "drizzle-orm/d1";
+import { count, eq, inArray, and, isTable, getTableName } from "drizzle-orm";
+import * as schema from "~/db/schema";
+import { aiRuns, entitlementAllocations, entitlementOperations, entitlementUsage, notificationLogs, notificationOptOuts, notificationPreferences, pendingUploads, shopGrantedScopes, shopScopeChanges, shopSubscriptionItems, shopSubscriptions, shopifyEvents, shopifySyncCheckpoints, shops, supportAttachments, supportMessages, supportTickets, webhookDeliveries, webhookScopeObservations } from "~/db/schema";
 import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:test";
 import { runWithRequestContext } from "~/request-context.server";
@@ -5,6 +9,7 @@ import { setupTestDatabase } from "~/test/db";
 import { assertTenantPurgeCoverage, schemaShopColumns, TenantPurgeRepo } from "./tenant-purge.server";
 
 setupTestDatabase();
+const db = drizzle(env.DB);
 
 describe("TenantPurgeRepo", () => {
   it("inventory covers every table with a shop column", async () => {
@@ -27,16 +32,16 @@ describe("TenantPurgeRepo", () => {
   it("lists attachment keys and deletes every shop-scoped row", async () => {
     const shop = "purge-all.myshopify.com";
     const remaining = await runWithRequestContext(env, async () => {
-      await env.DB.prepare("INSERT INTO shops (shop, installed_at) VALUES (?, ?)").bind(shop, 1).run();
-      await env.DB.prepare("INSERT INTO notification_logs (id,event,channel,recipient,status,shop,created_at) VALUES (?,?,?,?,?,?,?)").bind("log-1", "x", "email", "x@y.com", "sent", shop, 1).run();
+      await db.insert(shops).values({ shop: shop, installedAt: 1 }).run();
+      await db.insert(notificationLogs).values({ id: "log-1", event: "x", channel: "email", recipient: "x@y.com", status: "sent", shop: shop, createdAt: 1 }).run();
       const repo = new TenantPurgeRepo();
-      await env.DB.prepare("INSERT INTO support_tickets (id,shop,shop_name,category,subject,last_author,last_message_at,created_at) VALUES (?,?,?,?,?,?,?,?)").bind("ticket-1", shop, "Shop", "other", "Subject", "merchant", 1, 1).run();
-      await env.DB.prepare("INSERT INTO support_messages (id,ticket_id,shop,author,author_name,body,created_at) VALUES (?,?,?,?,?,?,?)").bind("msg-1", "ticket-1", shop, "merchant", "M", "Body", 1).run();
-      await env.DB.prepare("INSERT INTO support_attachments (id,message_id,shop,r2_key,filename,content_type,size_bytes,created_at) VALUES (?,?,?,?,?,?,?,?)").bind("att-1", "msg-1", shop, "uploads/purge", "a.txt", "text/plain", 1, 1).run();
+      await db.insert(supportTickets).values({ id: "ticket-1", shop: shop, shopName: "Shop", category: "question", subject: "Subject", lastAuthor: "merchant", lastMessageAt: 1, createdAt: 1 }).run();
+      await db.insert(supportMessages).values({ id: "msg-1", ticketId: "ticket-1", shop: shop, author: "merchant", authorName: "M", body: "Body", createdAt: 1 }).run();
+      await db.insert(supportAttachments).values({ id: "att-1", messageId: "msg-1", shop: shop, r2Key: "uploads/purge", filename: "a.txt", contentType: "text/plain", sizeBytes: 1, createdAt: 1 }).run();
       const prepared = await repo.prepareTenantPurge(shop);
       await repo.deleteTenantRows(shop);
-      const count = await env.DB.prepare("SELECT count(*) AS count FROM shops WHERE shop = ? OR shop = ?").bind(shop, "other.myshopify.com").first<{ count: number }>();
-      return { prepared, count: Number(count?.count ?? 0) };
+      const total = await db.select({ count: count() }).from(shops).where(inArray(shops.shop, [shop, "other.myshopify.com"])).get();
+      return { prepared, count: Number(total?.count ?? 0) };
     });
     expect(remaining.prepared.attachmentKeys).toEqual(["uploads/purge"]);
     expect(remaining.count).toBe(0);
@@ -45,20 +50,32 @@ describe("TenantPurgeRepo", () => {
   it("counts every directly deleted shop row", async () => {
     const affected = await runWithRequestContext(env, async () => {
       const shop = "count-all.myshopify.com";
-      await env.DB.prepare("INSERT INTO shops (shop, installed_at) VALUES (?, ?)").bind(shop, 1).run();
-      await env.DB.prepare("INSERT INTO notification_logs (id,event,channel,recipient,status,shop,created_at) VALUES (?,?,?,?,?,?,?)").bind("count-log", "x", "email", "x@y.com", "sent", shop, 1).run();
+      await db.insert(shops).values({ shop: shop, installedAt: 1 }).run();
+      await db.insert(notificationLogs).values({ id: "count-log", event: "x", channel: "email", recipient: "x@y.com", status: "sent", shop: shop, createdAt: 1 }).run();
       return new TenantPurgeRepo().deleteTenantRows(shop);
     });
     expect(affected).toBe(2);
   });
 
+  it("counts pending uploads and scope observations exactly once", async () => {
+    await runWithRequestContext(env, async () => {
+      const shop = "count-observations.myshopify.com";
+      await db.insert(shops).values({ shop, installedAt: 1 });
+      await db.insert(webhookDeliveries).values({ id: "count-delivery", eventId: "event", topic: "app/uninstalled", apiVersion: "2025-01", shop, triggeredAt: 1, receivedAt: 1, payloadHash: "hash" });
+      await db.insert(webhookScopeObservations).values({ deliveryId: "count-delivery", shop, scope: "read_products" });
+      expect(await new TenantPurgeRepo().deleteTenantRows(shop)).toBe(3);
+      await db.insert(pendingUploads).values({ id: "count-pending", shop, r2Key: "pending", filename: "a.txt", contentType: "text/plain", sizeBytes: 1, createdAt: 1, expiresAt: 2 });
+      expect(await new TenantPurgeRepo().deleteTenantRows(shop)).toBe(1);
+    });
+  });
+
   it("counts entitlement rows exactly once", async () => {
     const affected = await runWithRequestContext(env, async () => {
       const shop = "count-entitlements.myshopify.com";
-      await env.DB.prepare("INSERT INTO shops (shop, installed_at) VALUES (?, ?)").bind(shop, 1).run();
-      await env.DB.prepare("INSERT INTO entitlement_usage (shop,key,period,committed,held,updated_at) VALUES (?,?,?,?,?,?)").bind(shop, "quota", "lifetime", 1, 0, 1).run();
-      await env.DB.prepare("INSERT INTO entitlement_operations (shop,operation_id,key,period,requested_amount,reserved_amount,subscription_revision,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)").bind(shop, "op-count", "quota", "lifetime", 1, 1, 1, "held", 1, 1).run();
-      await env.DB.prepare("INSERT INTO entitlement_allocations (shop,key,allocation_id,operation_id,subscription_revision,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)").bind(shop, "quota", "alloc-count", "op-alloc-count", 1, "allocated", 1, 1).run();
+      await db.insert(shops).values({ shop: shop, installedAt: 1 }).run();
+      await db.insert(entitlementUsage).values({ shop: shop, key: "quota", period: "lifetime", committed: 1, held: 0, updatedAt: 1 }).run();
+      await db.insert(entitlementOperations).values({ shop: shop, operationId: "op-count", key: "quota", period: "lifetime", requestedAmount: 1, reservedAmount: 1, subscriptionRevision: 1, state: "held", createdAt: 1, updatedAt: 1 }).run();
+      await db.insert(entitlementAllocations).values({ shop: shop, key: "quota", allocationId: "alloc-count", operationId: "op-alloc-count", subscriptionRevision: 1, state: "allocated", createdAt: 1, updatedAt: 1 }).run();
       return new TenantPurgeRepo().deleteTenantRows(shop);
     });
     expect(affected).toBe(4);
@@ -69,42 +86,44 @@ describe("TenantPurgeRepo", () => {
     const other = "other.myshopify.com";
     await runWithRequestContext(env, async () => {
       for (const shop of [target, other]) {
-        await env.DB.prepare("INSERT INTO shops (shop, installed_at) VALUES (?, ?)").bind(shop, 1).run();
-        await env.DB.prepare("INSERT INTO webhook_deliveries (id,event_id,topic,api_version,shop,triggered_at,received_at,payload_hash) VALUES (?,?,?,?,?,?,?,?)").bind(`delivery-${shop}`, "event", "app/uninstalled", "2025-01", shop, 1, 1, "hash").run();
-        await env.DB.prepare("INSERT INTO webhook_scope_observations (delivery_id,shop,scope) VALUES (?,?,?)").bind(`delivery-${shop}`, shop, "read_products").run();
-        await env.DB.prepare("INSERT INTO shopify_events (source,event_id,event_type,shop,shopify_shop_id,occurred_at,synchronized_at) VALUES (?,?,?,?,?,?,?)").bind("webhook_observation", `event-${shop}`, "installed", shop, "gid", 1, 1).run();
-        await env.DB.prepare("INSERT INTO shop_subscriptions (shop,subscription_id,status,applied_occurred_at,applied_external_id) VALUES (?,?,?,?,?)").bind(shop, "sub", "ACTIVE", 1, "event").run();
-        await env.DB.prepare("INSERT INTO shop_subscription_items (shop,subscription_id,position,item_type) VALUES (?,?,?,?)").bind(shop, "sub", 0, "flat").run();
-        await env.DB.prepare("INSERT INTO shop_granted_scopes (shop,scope,granted_at) VALUES (?,?,?)").bind(shop, "read_products", 1).run();
-        await env.DB.prepare("INSERT INTO shop_scope_changes (id,shop,source,occurred_at) VALUES (?,?,?,?)").bind(`change-${shop}`, shop, "webhook", 1).run();
-        await env.DB.prepare("INSERT INTO ai_runs (id,role,model_id,feature,shop,status,created_at) VALUES (?,?,?,?,?,?,?)").bind(`run-${shop}`, "support_draft", "model", "test", shop, "ok", 1).run();
-        await env.DB.prepare("INSERT INTO notification_logs (id,event,channel,recipient,status,shop,created_at) VALUES (?,?,?,?,?,?,?)").bind(`log-${shop}`, "test", "email", "x@y.com", "sent", shop, 1).run();
-        await env.DB.prepare("INSERT INTO notification_preferences (scope,event,channel,enabled,updated_at) VALUES (?,?,?,?,?)").bind(shop, "test", "email", 1, 1).run();
-        await env.DB.prepare("INSERT INTO notification_opt_outs (scope,channel,address,opted_out_at,source) VALUES (?,?,?,?,?)").bind(shop, "email", `${shop}@example.com`, 1, "test").run();
-        await env.DB.prepare("INSERT INTO support_tickets (id,shop,shop_name,category,subject,last_author,last_message_at,created_at) VALUES (?,?,?,?,?,?,?,?)").bind(`ticket-${shop}`, shop, "Shop", "other", "Subject", "merchant", 1, 1).run();
-        await env.DB.prepare("INSERT INTO support_messages (id,ticket_id,shop,author,author_name,body,created_at) VALUES (?,?,?,?,?,?,?)").bind(`message-${shop}`, `ticket-${shop}`, shop, "merchant", "M", "Body", 1).run();
-        await env.DB.prepare("INSERT INTO support_attachments (id,message_id,shop,r2_key,filename,content_type,size_bytes,created_at) VALUES (?,?,?,?,?,?,?,?)").bind(`attachment-${shop}`, `message-${shop}`, shop, `uploads/${shop}`, "a.txt", "text/plain", 1, 1).run();
-        await env.DB.prepare("INSERT INTO pending_uploads (id,shop,r2_key,filename,content_type,size_bytes,created_at,expires_at) VALUES (?,?,?,?,?,?,?,?)").bind(`pending-${shop}`, shop, `uploads/pending-${shop}`, "draft.txt", "text/plain", 1, 1, 2).run();
-        await env.DB.prepare("INSERT INTO entitlement_usage (shop,key,period,committed,held,updated_at) VALUES (?,?,?,?,?,?)").bind(shop, "test", "lifetime", 1, 0, 1).run();
-        await env.DB.prepare("INSERT INTO entitlement_operations (shop,operation_id,key,period,requested_amount,reserved_amount,subscription_revision,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)").bind(shop, `op-${shop}`, "test", "lifetime", 1, 1, 1, "held", 1, 1).run();
-        await env.DB.prepare("INSERT INTO entitlement_allocations (shop,key,allocation_id,operation_id,subscription_revision,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)").bind(shop, "staff.max", `alloc-${shop}`, `op-alloc-${shop}`, 1, "allocated", 1, 1).run();
+        await db.insert(shops).values({ shop: shop, installedAt: 1 }).run();
+        await db.insert(webhookDeliveries).values({ id: `delivery-${shop}`, eventId: "event", topic: "app/uninstalled", apiVersion: "2025-01", shop: shop, triggeredAt: 1, receivedAt: 1, payloadHash: "hash" }).run();
+        await db.insert(webhookScopeObservations).values({ deliveryId: `delivery-${shop}`, shop: shop, scope: "read_products" }).run();
+        await db.insert(shopifyEvents).values({ source: "webhook_observation", eventId: `event-${shop}`, eventType: "installed", shop: shop, shopifyShopId: "gid", occurredAt: 1, synchronizedAt: 1 }).run();
+        await db.insert(shopSubscriptions).values({ shop: shop, subscriptionId: "sub", status: "ACTIVE", appliedOccurredAt: 1, appliedExternalId: "event" }).run();
+        await db.insert(shopSubscriptionItems).values({ shop: shop, subscriptionId: "sub", position: 0, itemType: "flat" }).run();
+        await db.insert(shopGrantedScopes).values({ shop: shop, scope: "read_products", grantedAt: 1 }).run();
+        await db.insert(shopScopeChanges).values({ id: `change-${shop}`, shop: shop, source: "webhook", occurredAt: 1 }).run();
+        await db.insert(aiRuns).values({ id: `run-${shop}`, role: "writing", modelId: "model", feature: "test", shop: shop, status: "ok", createdAt: 1 }).run();
+        await db.insert(notificationLogs).values({ id: `log-${shop}`, event: "test", channel: "email", recipient: "x@y.com", status: "sent", shop: shop, createdAt: 1 }).run();
+        await db.insert(notificationPreferences).values({ scope: shop, event: "test", channel: "email", enabled: true, updatedAt: 1 }).run();
+        await db.insert(notificationOptOuts).values({ scope: shop, channel: "email", address: `${shop}@example.com`, optedOutAt: 1, source: "test" }).run();
+        await db.insert(supportTickets).values({ id: `ticket-${shop}`, shop: shop, shopName: "Shop", category: "question", subject: "Subject", lastAuthor: "merchant", lastMessageAt: 1, createdAt: 1 }).run();
+        await db.insert(supportMessages).values({ id: `message-${shop}`, ticketId: `ticket-${shop}`, shop: shop, author: "merchant", authorName: "M", body: "Body", createdAt: 1 }).run();
+        await db.insert(supportAttachments).values({ id: `attachment-${shop}`, messageId: `message-${shop}`, shop: shop, r2Key: `uploads/${shop}`, filename: "a.txt", contentType: "text/plain", sizeBytes: 1, createdAt: 1 }).run();
+        await db.insert(pendingUploads).values({ id: `pending-${shop}`, shop: shop, r2Key: `uploads/pending-${shop}`, filename: "draft.txt", contentType: "text/plain", sizeBytes: 1, createdAt: 1, expiresAt: 2 }).run();
+        await db.insert(entitlementUsage).values({ shop: shop, key: "test", period: "lifetime", committed: 1, held: 0, updatedAt: 1 }).run();
+        await db.insert(entitlementOperations).values({ shop: shop, operationId: `op-${shop}`, key: "test", period: "lifetime", requestedAmount: 1, reservedAmount: 1, subscriptionRevision: 1, state: "held", createdAt: 1, updatedAt: 1 }).run();
+        await db.insert(entitlementAllocations).values({ shop: shop, key: "staff.max", allocationId: `alloc-${shop}`, operationId: `op-alloc-${shop}`, subscriptionRevision: 1, state: "allocated", createdAt: 1, updatedAt: 1 }).run();
       }
-      await env.DB.prepare("INSERT INTO notification_preferences (scope,event,channel,enabled,updated_at) VALUES (?,?,?,?,?)").bind("global", "test", "email", 1, 1).run();
-      await env.DB.prepare("INSERT INTO notification_opt_outs (scope,channel,address,opted_out_at,source) VALUES (?,?,?,?,?)").bind("global", "email", "global@example.com", 1, "test").run();
-      await env.DB.prepare("INSERT INTO shopify_sync_checkpoints (name, last_succeeded_at) VALUES (?, ?)").bind("tenant-purge-proof", 1).run();
+      await db.insert(notificationPreferences).values({ scope: "global", event: "test", channel: "email", enabled: true, updatedAt: 1 }).run();
+      await db.insert(notificationOptOuts).values({ scope: "global", channel: "email", address: "global@example.com", optedOutAt: 1, source: "test" }).run();
+      await db.insert(shopifySyncCheckpoints).values({ name: "tenant-purge-proof", lastSucceededAt: 1 }).run();
       await new TenantPurgeRepo().deleteTenantRows(target);
-      for (const table of await schemaShopColumns()) {
-        const targetRows = await env.DB.prepare(`SELECT count(*) AS count FROM ${table} WHERE shop = ?`).bind(target).first<{ count: number }>();
-        const otherRows = await env.DB.prepare(`SELECT count(*) AS count FROM ${table} WHERE shop = ?`).bind(other).first<{ count: number }>();
+      for (const tableName of await schemaShopColumns()) {
+        const table = Object.values(schema).find((value) => isTable(value) && getTableName(value) === tableName);
+        if (!table || !("shop" in table)) throw new Error(`Missing tenant table ${tableName}`);
+        const targetRows = await db.select({ count: count() }).from(table).where(eq(table.shop, target)).get();
+        const otherRows = await db.select({ count: count() }).from(table).where(eq(table.shop, other)).get();
         expect(Number(targetRows?.count)).toBe(0);
         expect(Number(otherRows?.count)).toBeGreaterThan(0);
       }
-      const checkpoint = await env.DB.prepare("SELECT count(*) AS count FROM shopify_sync_checkpoints WHERE name = ?").bind("tenant-purge-proof").first<{ count: number }>();
+      const checkpoint = await db.select({ count: count() }).from(shopifySyncCheckpoints).where(eq(shopifySyncCheckpoints.name, "tenant-purge-proof")).get();
       expect(Number(checkpoint?.count)).toBe(1);
-      const preferences = await env.DB.prepare("SELECT scope FROM notification_preferences WHERE event = ? AND channel = ? ORDER BY scope").bind("test", "email").all<{ scope: string }>();
-      expect(preferences.results.map(({ scope }) => scope)).toEqual(["global", other]);
-      const optOuts = await env.DB.prepare("SELECT scope FROM notification_opt_outs WHERE channel = ? ORDER BY scope").bind("email").all<{ scope: string }>();
-      expect(optOuts.results.map(({ scope }) => scope)).toEqual(["global", other]);
+      const preferences = await db.select({ scope: notificationPreferences.scope }).from(notificationPreferences).where(and(eq(notificationPreferences.event, "test"), eq(notificationPreferences.channel, "email"))).orderBy(notificationPreferences.scope).all();
+      expect(preferences.map(({ scope }) => scope)).toEqual(["global", other]);
+      const optOuts = await db.select({ scope: notificationOptOuts.scope }).from(notificationOptOuts).where(eq(notificationOptOuts.channel, "email")).orderBy(notificationOptOuts.scope).all();
+      expect(optOuts.map(({ scope }) => scope)).toEqual(["global", other]);
     });
   });
 });

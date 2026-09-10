@@ -244,7 +244,11 @@ export function validateLaunchContract(files) {
     issues.push(`SHOPIFY_PARTNER_API_VERSION must be ${supportedShopifyVersion}`);
   }
   const identitySource = files.identity ?? "";
-  if (PLACEHOLDER.test(files.legal) || PLACEHOLDER.test(identitySource) || !/effectiveDate\s*:\s*"\d{4}-\d{2}-\d{2}"/.test(identitySource) && !/LAST_UPDATED\s*=\s*"\d{4}-\d{2}-\d{2}"/.test(files.legal)) {
+  const requiredIdentity = ["name", "companyName", "supportEmail", "privacyEmail", "address"];
+  const missingIdentity = requiredIdentity.some((field) => new RegExp(`${field}\\s*:\\s*"[^"\\n]+"`).test(identitySource) === false);
+  const effectiveDate = identitySource.match(/effectiveDate\s*:\s*"(\d{4}-\d{2}-\d{2})"/)?.[1];
+  const validDate = effectiveDate && !Number.isNaN(Date.parse(`${effectiveDate}T00:00:00Z`)) && new Date(`${effectiveDate}T00:00:00Z`).toISOString().startsWith(effectiveDate);
+  if (PLACEHOLDER.test(files.legal) || PLACEHOLDER.test(identitySource) || missingIdentity || !validDate) {
     issues.push("legal identity/contact/date contains TODO or invalid effective date");
   }
   if (PLACEHOLDER.test(files.plans)) issues.push("Managed Pricing plan handle contains placeholder");

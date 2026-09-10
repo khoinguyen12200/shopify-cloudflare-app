@@ -1,3 +1,6 @@
+import { and, eq, ne, notLike } from "drizzle-orm";
+import { sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { makeDb } from "~/db/client";
 import { env, applyD1Migrations } from "cloudflare:test";
 import { beforeEach } from "vitest";
 
@@ -8,25 +11,23 @@ import { beforeEach } from "vitest";
  * is covered automatically.
  */
 export async function clearAllTables(db: D1Database): Promise<void> {
-  const { results } = await db
-    .prepare(
-      `SELECT name FROM sqlite_master
-       WHERE type = 'table'
-         AND name NOT LIKE 'sqlite_%'
-         AND name NOT LIKE '_cf_%'
-         AND name <> 'd1_migrations'`,
-    )
-    .all<{ name: string }>();
+  const catalog = sqliteTable("sqlite_master", {
+    name: text().notNull(),
+    type: text().notNull(),
+  });
+  const client = makeDb(db);
+  const tables = await client.select({ name: catalog.name }).from(catalog).where(and(
+    eq(catalog.type, "table"),
+    notLike(catalog.name, "sqlite_%"),
+    notLike(catalog.name, "_cf_%"),
+    ne(catalog.name, "d1_migrations"),
+  ));
 
-  // REVERSE creation order, and deliberately sequential. A foreign key can
-  // only point at a table that already existed, so `sqlite_master`'s creation
-  // order always lists a child after its parent — deleting backwards clears the
-  // child before the row it references. Forward order trips
-  // SQLITE_CONSTRAINT_FOREIGNKEY on any relation that is not ON DELETE cascade.
-  for (const { name } of results.reverse()) {
-    // The name comes from sqlite_master, not from user input.
-    await db.prepare(`DELETE FROM "${name}"`).run();
+  // Reverse catalog creation order keeps fixture children ahead of parents.
+  for (const { name } of tables.reverse()) {
+    await client.delete(sqliteTable(name, {}));
   }
+
 }
 
 /**

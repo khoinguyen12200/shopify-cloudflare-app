@@ -1,3 +1,6 @@
+import { count, eq } from "drizzle-orm";
+import { makeDb } from "~/db/client";
+import * as schema from "~/db/schema";
 import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:test";
 import { runWithRequestContext } from "~/request-context.server";
@@ -8,6 +11,14 @@ setupTestDatabase();
 const inRequest = <T>(fn: () => Promise<T>) => runWithRequestContext(env, fn);
 
 describe("ShopSubscriptionRepo", () => {
+  it("inserts one item even when another tenant has a subscription", async () => {
+    await inRequest(async () => {
+      const repo = new ShopSubscriptionRepo();
+      await repo.upsertObservation("other.myshopify.com", { type: "CREATED", status: "ACTIVE", subscriptionId: "other", occurredAt: 1, externalId: "other" });
+      await repo.upsertObservation("target.myshopify.com", { type: "CREATED", status: "ACTIVE", subscriptionId: "target", occurredAt: 1, externalId: "target", items: [{ itemType: "recurring" }] });
+      expect(await makeDb(env.DB).select({ type: schema.shopSubscriptionItems.itemType }).from(schema.shopSubscriptionItems).where(eq(schema.shopSubscriptionItems.shop, "target.myshopify.com"))).toEqual([{ type: "recurring" }]);
+    });
+  });
   it("replaces items and preserves minor-unit money", async () => {
     const row = await inRequest(async () => {
       const repo = new ShopSubscriptionRepo();
@@ -15,7 +26,7 @@ describe("ShopSubscriptionRepo", () => {
         type: "CREATED", status: "ACTIVE", subscriptionId: "sub-1", occurredAt: 1, externalId: "evt-1",
         items: [{ itemType: "recurring", priceAmount: 1999, priceCurrency: "USD" }],
       });
-      return env.DB.prepare("SELECT price_amount AS amount, price_currency AS currency FROM shop_subscription_items WHERE shop = ?").bind("ledger.myshopify.com").first<{ amount: number; currency: string }>();
+      return makeDb(env.DB).select({ amount: schema.shopSubscriptionItems.priceAmount, currency: schema.shopSubscriptionItems.priceCurrency }).from(schema.shopSubscriptionItems).where(eq(schema.shopSubscriptionItems.shop, "ledger.myshopify.com")).get();
     });
     expect(row).toEqual({ amount: 1999, currency: "USD" });
   });
@@ -34,9 +45,9 @@ describe("ShopSubscriptionRepo", () => {
       const repo = new ShopSubscriptionRepo();
       const input = { type: "CREATED" as const, status: "ACTIVE" as const, subscriptionId: "sub-1", occurredAt: 1, externalId: "evt-1", items: [{ itemType: "base", priceAmount: 100, priceCurrency: "USD" }] };
       await repo.upsertObservation("repair.myshopify.com", input);
-      await env.DB.prepare("DELETE FROM shop_subscription_items WHERE shop = ?").bind("repair.myshopify.com").run();
+      await makeDb(env.DB).delete(schema.shopSubscriptionItems).where(eq(schema.shopSubscriptionItems.shop, "repair.myshopify.com")).run();
       await repo.upsertObservation("repair.myshopify.com", { ...input, items: [{ itemType: "base", priceAmount: 200, priceCurrency: "USD" }] });
-      return env.DB.prepare("SELECT price_amount AS amount FROM shop_subscription_items WHERE shop = ?").bind("repair.myshopify.com").first<{ amount: number }>();
+      return makeDb(env.DB).select({ amount: schema.shopSubscriptionItems.priceAmount }).from(schema.shopSubscriptionItems).where(eq(schema.shopSubscriptionItems.shop, "repair.myshopify.com")).get();
     });
     expect(result?.amount).toBe(200);
   });
@@ -53,8 +64,7 @@ describe("ShopSubscriptionRepo", () => {
         externalId: "evt-1",
         items: Array.from({ length: 50 }, (_, position) => ({ itemType: `item-${position}`, priceAmount: position, priceCurrency: "USD" })),
       });
-      return env.DB.prepare("SELECT item_type AS itemType, price_amount AS amount FROM shop_subscription_items WHERE shop = ? ORDER BY position")
-        .bind(shop).all<{ itemType: string; amount: number }>();
+      return makeDb(env.DB).select({ itemType: schema.shopSubscriptionItems.itemType, amount: schema.shopSubscriptionItems.priceAmount }).from(schema.shopSubscriptionItems).where(eq(schema.shopSubscriptionItems.shop, shop)).orderBy(schema.shopSubscriptionItems.position).all().then((results) => ({ results }));
     });
     expect(rows.results).toHaveLength(50);
     expect(rows.results[49]).toEqual({ itemType: "item-49", amount: 49 });
@@ -89,8 +99,7 @@ describe("ShopSubscriptionRepo", () => {
       `).run();
       await repo.upsertObservation(shop, old);
       await env.DB.prepare("DROP TRIGGER project_newer_subscription_before_item_replacement").run();
-      return env.DB.prepare("SELECT item_type AS itemType, price_amount AS amount FROM shop_subscription_items WHERE shop = ?")
-        .bind(shop).first<{ itemType: string; amount: number }>();
+      return makeDb(env.DB).select({ itemType: schema.shopSubscriptionItems.itemType, amount: schema.shopSubscriptionItems.priceAmount }).from(schema.shopSubscriptionItems).where(eq(schema.shopSubscriptionItems.shop, shop)).get();
     });
     expect(row).toEqual({ itemType: "new", amount: 200 });
   });
@@ -122,8 +131,7 @@ describe("ShopSubscriptionRepo", () => {
         pendingLegacySubscriptionId: "gid://shopify/AppSubscription/2",
       };
       await repo.upsertObservation("pending.myshopify.com", input);
-      return env.DB.prepare("SELECT current_period_starts_at AS currentPeriodStartsAt, pending_plan_handle AS pendingPlanHandle, pending_billing_interval AS pendingBillingInterval, pending_legacy_subscription_id AS pendingLegacySubscriptionId FROM shop_subscriptions WHERE shop = ?")
-        .bind("pending.myshopify.com").first();
+      return makeDb(env.DB).select({ currentPeriodStartsAt: schema.shopSubscriptions.currentPeriodStartsAt, pendingPlanHandle: schema.shopSubscriptions.pendingPlanHandle, pendingBillingInterval: schema.shopSubscriptions.pendingBillingInterval, pendingLegacySubscriptionId: schema.shopSubscriptions.pendingLegacySubscriptionId }).from(schema.shopSubscriptions).where(eq(schema.shopSubscriptions.shop, "pending.myshopify.com")).get();
     });
     expect(row).toEqual({
       currentPeriodStartsAt: 100,
@@ -235,5 +243,5 @@ it("selects the latest authoritative subscription projection for a shop", async 
     return repo.currentForShop("multi.myshopify.com");
   });
   expect(row?.planHandle).toBe("new");
-  expect(await inRequest(async () => env.DB.prepare("SELECT count(*) AS count FROM shop_subscriptions WHERE shop = ?").bind("multi.myshopify.com").first())).toEqual({ count: 1 });
+  expect(await inRequest(async () => makeDb(env.DB).select({ count: count() }).from(schema.shopSubscriptions).where(eq(schema.shopSubscriptions.shop, "multi.myshopify.com")).get())).toEqual({ count: 1 });
 });

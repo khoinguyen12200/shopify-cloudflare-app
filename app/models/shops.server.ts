@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, lt, or, sql, exists, count } from "drizzle-orm";
 import { getDb } from "~/request-context.server";
 import {
   shops,
@@ -148,7 +148,7 @@ export class ShopRepo {
   /** Shops with the app still installed — for the internal dashboard. */
   async countInstalled(): Promise<number> {
     const [row] = await getDb()
-      .select({ count: sql<number>`count(*)` })
+      .select({ count: count() })
       .from(shops)
       .where(isNull(shops.uninstalledAt));
     return Number(row?.count ?? 0);
@@ -167,11 +167,7 @@ export class ShopRepo {
     const deleted = await db.batch([
       db
         .delete(shopScopeChangeItems)
-        .where(sql`exists (
-          select 1 from ${shopScopeChanges}
-          where ${shopScopeChanges.id} = ${shopScopeChangeItems.scopeChangeId}
-            and ${shopScopeChanges.shop} = ${shop}
-        )`)
+        .where(exists(db.select({ id: shopScopeChanges.id }).from(shopScopeChanges).where(and(eq(shopScopeChanges.id, shopScopeChangeItems.scopeChangeId), eq(shopScopeChanges.shop, shop)))))
         .returning({ id: shopScopeChangeItems.scopeChangeId }),
       db
         .delete(shopScopeChanges)
@@ -187,21 +183,11 @@ export class ShopRepo {
         .returning({ subscriptionId: shopSubscriptions.subscriptionId }),
       db
         .delete(shopifyRelationshipEvents)
-        .where(sql`exists (
-          select 1 from ${shopifyEvents}
-          where ${shopifyEvents.source} = ${shopifyRelationshipEvents.eventSource}
-            and ${shopifyEvents.eventId} = ${shopifyRelationshipEvents.eventId}
-            and ${shopifyEvents.shop} = ${shop}
-        )`)
+        .where(exists(db.select({ id: shopifyEvents.eventId }).from(shopifyEvents).where(and(eq(shopifyEvents.source, shopifyRelationshipEvents.eventSource), eq(shopifyEvents.eventId, shopifyRelationshipEvents.eventId), eq(shopifyEvents.shop, shop)))))
         .returning({ eventId: shopifyRelationshipEvents.eventId }),
       db
         .delete(shopifySubscriptionEvents)
-        .where(sql`exists (
-          select 1 from ${shopifyEvents}
-          where ${shopifyEvents.source} = ${shopifySubscriptionEvents.eventSource}
-            and ${shopifyEvents.eventId} = ${shopifySubscriptionEvents.eventId}
-            and ${shopifyEvents.shop} = ${shop}
-        )`)
+        .where(exists(db.select({ id: shopifyEvents.eventId }).from(shopifyEvents).where(and(eq(shopifyEvents.source, shopifySubscriptionEvents.eventSource), eq(shopifyEvents.eventId, shopifySubscriptionEvents.eventId), eq(shopifyEvents.shop, shop)))))
         .returning({ eventId: shopifySubscriptionEvents.eventId }),
       db
         .delete(shopifyEvents)

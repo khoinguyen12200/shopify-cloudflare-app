@@ -1,5 +1,5 @@
-import { getDb, getEnv } from "~/request-context.server";
-import { and, count, desc, eq, inArray } from "drizzle-orm";
+import { getDb } from "~/request-context.server";
+import { and, count, desc, eq, inArray, exists, lt, lte, gte, sql } from "drizzle-orm";
 import { entitlementAllocations, entitlementOperations, entitlementUsage, shopSubscriptions } from "~/db/schema";
 import type { AllocateResult, DeallocateResult, ReserveResult, EntitlementOperationFailure } from "~/ports/entitlements";
 import type { HeldItem, ReconciliationResult } from "~/ports/entitlement-reconciliation";
@@ -110,11 +110,21 @@ export class EntitlementRepo {
       inArray(entitlementAllocations.state, ["held", "allocated"]),
     )).limit(1);
     if (active) return { allowed:false, reason:"operation_conflict" };
-    // Retain this guarded INSERT ... SELECT as a narrow SQL exception: Drizzle
-    // cannot express admission based on a subscription row plus an aggregate
-    // count while preserving single-statement capacity isolation.
-    const d1 = getEnv().DB;
-    const [held] = await d1.batch([d1.prepare("INSERT OR IGNORE INTO entitlement_allocations (shop,key,allocation_id,operation_id,subscription_revision,state,created_at,updated_at) SELECT ?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM shop_subscriptions WHERE shop=? AND revision=? AND status IN ('NONE','ACTIVE','CANCELLATION_SCHEDULED')) AND (SELECT count(*) FROM entitlement_allocations WHERE shop=? AND key=? AND state IN ('held','allocated')) < ?").bind(input.shop, input.key, input.allocationId, input.operationId, input.subscriptionRevision, "held", now, now, input.shop, input.subscriptionRevision, input.shop, input.key, input.maximum)]);
+    const db = getDb();
+    const capacity = db.select({ value: count() }).from(entitlementAllocations).where(and(
+      eq(entitlementAllocations.shop, input.shop), eq(entitlementAllocations.key, input.key),
+      inArray(entitlementAllocations.state, ["held", "allocated"]),
+    ));
+    const held = await db.insert(entitlementAllocations).select(db.select({
+      shop: sql<string>`${input.shop}`.as("shop"), key: sql<string>`${input.key}`.as("key"),
+      allocationId: sql<string>`${input.allocationId}`.as("allocation_id"),
+      operationId: sql<string>`${input.operationId}`.as("operation_id"),
+      subscriptionRevision: sql<number>`${input.subscriptionRevision}`.as("subscription_revision"),
+      state: sql<string>`${"held"}`.as("state"), createdAt: sql<number>`${now}`.as("created_at"), updatedAt: sql<number>`${now}`.as("updated_at"),
+    }).from(shopSubscriptions).where(and(
+      eq(shopSubscriptions.shop, input.shop), eq(shopSubscriptions.revision, input.subscriptionRevision),
+      inArray(shopSubscriptions.status, ["NONE", "ACTIVE", "CANCELLATION_SCHEDULED"]), lt(capacity, input.maximum),
+    )).limit(1)).onConflictDoNothing();
     if (held.meta.changes !== 1) {
       const [projection] = await getDb().select({ revision: shopSubscriptions.revision }).from(shopSubscriptions).where(eq(shopSubscriptions.shop, input.shop)).orderBy(desc(shopSubscriptions.appliedOccurredAt), desc(shopSubscriptions.appliedExternalId), desc(shopSubscriptions.subscriptionId)).limit(1);
       const [race] = await getDb().select({ key: entitlementAllocations.key, allocationId: entitlementAllocations.allocationId, subscriptionRevision: entitlementAllocations.subscriptionRevision, state: entitlementAllocations.state }).from(entitlementAllocations).where(and(eq(entitlementAllocations.shop, input.shop), eq(entitlementAllocations.operationId, input.operationId))).limit(1);
@@ -155,13 +165,21 @@ export class EntitlementRepo {
         ? { allowed: true, operationId: input.operationId, amount: row.reservedAmount, period: row.period, subscriptionRevision: row.subscriptionRevision, state: row.state, replayed: true, remaining: await usageRemaining(input.shop, input.key, row.period, input.maximum) }
         : { allowed: false, reason: "operation_conflict" };
     }
-    // The reservation batch intentionally uses SQLite's INSERT ... SELECT and
-    // changes() guard so the operation row and held counter admit atomically.
-    const d1 = getEnv().DB;
-    const [, inserted, updated] = await d1.batch([
-      d1.prepare("INSERT OR IGNORE INTO entitlement_usage (shop, key, period, committed, held, updated_at) VALUES (?, ?, ?, 0, 0, ?)").bind(input.shop, input.key, input.period, now),
-      d1.prepare("INSERT OR IGNORE INTO entitlement_operations (shop, operation_id, key, period, requested_amount, reserved_amount, actual_amount, subscription_revision, state, created_at, updated_at) SELECT ?, ?, ?, ?, ?, ?, NULL, ?, 'held', ?, ? WHERE EXISTS (SELECT 1 FROM shop_subscriptions WHERE shop=? AND revision=? AND status IN ('ACTIVE','CANCELLATION_SCHEDULED')) AND EXISTS (SELECT 1 FROM entitlement_usage WHERE shop = ? AND key = ? AND period = ? AND committed + held + ? <= ?)").bind(input.shop, input.operationId, input.key, input.period, input.amount, input.amount, input.subscriptionRevision, now, now, input.shop, input.subscriptionRevision, input.shop, input.key, input.period, input.amount, input.maximum),
-      d1.prepare("UPDATE entitlement_usage SET held = held + ?, updated_at = ? WHERE shop = ? AND key = ? AND period = ? AND changes() = 1").bind(input.amount, now, input.shop, input.key, input.period),
+    const usageScope = and(eq(entitlementUsage.shop, input.shop), eq(entitlementUsage.key, input.key), eq(entitlementUsage.period, input.period));
+    const [, inserted, updated] = await db.batch([
+      db.insert(entitlementUsage).values({ shop: input.shop, key: input.key, period: input.period, committed: 0, held: 0, updatedAt: now }).onConflictDoNothing(),
+      db.insert(entitlementOperations).select(db.select({
+        shop: sql<string>`${input.shop}`.as("shop"), operationId: sql<string>`${input.operationId}`.as("operation_id"),
+        key: sql<string>`${input.key}`.as("key"), period: sql<string>`${input.period}`.as("period"),
+        requestedAmount: sql<number>`${input.amount}`.as("requested_amount"), reservedAmount: sql<number>`${input.amount}`.as("reserved_amount"),
+        actualAmount: sql<null>`${null}`.as("actual_amount"), subscriptionRevision: sql<number>`${input.subscriptionRevision}`.as("subscription_revision"),
+        state: sql<string>`${"held"}`.as("state"), createdAt: sql<number>`${now}`.as("created_at"), updatedAt: sql<number>`${now}`.as("updated_at"),
+      }).from(entitlementUsage).where(and(usageScope,
+        lte(sql`${entitlementUsage.committed} + ${entitlementUsage.held} + ${input.amount}`, input.maximum),
+        exists(db.select({ shop: shopSubscriptions.shop }).from(shopSubscriptions).where(and(eq(shopSubscriptions.shop, input.shop), eq(shopSubscriptions.revision, input.subscriptionRevision), inArray(shopSubscriptions.status, ["ACTIVE", "CANCELLATION_SCHEDULED"])))),
+      ))).onConflictDoNothing(),
+      // The dependent update stays inside the atomic batch for replay safety.
+      db.update(entitlementUsage).set({ held: sql`${entitlementUsage.held} + ${input.amount}`, updatedAt: now }).where(and(usageScope, eq(sql<number>`changes()`, 1))),
     ]);
     if (inserted.meta.changes !== 1 || updated.meta.changes !== 1) {
       const [raced] = await db.select().from(entitlementOperations).where(and(eq(entitlementOperations.shop, input.shop), eq(entitlementOperations.operationId, input.operationId))).limit(1);
@@ -188,12 +206,14 @@ export class EntitlementRepo {
     const actual = input.actualAmount ?? row.reservedAmount;
     if (actual < 0 || actual > row.reservedAmount) return { reason: "invalid_amount" };
     const now = input.now ?? Date.now();
-    // Commit/release remain a guarded two-statement D1 batch. The second update
-    // is contingent on changes() from the first, preventing double transitions.
-    const d1 = getEnv().DB;
-    const [operationUpdate, usageUpdate] = await d1.batch([
-      d1.prepare("UPDATE entitlement_operations SET state = 'committed', actual_amount = ?, updated_at = ? WHERE shop = ? AND operation_id = ? AND state = 'held' AND EXISTS (SELECT 1 FROM entitlement_usage WHERE shop = ? AND key = ? AND period = ? AND held >= ?)").bind(actual, now, input.shop, input.operationId, input.shop, row.key, row.period, row.reservedAmount),
-      d1.prepare("UPDATE entitlement_usage SET held = held - ?, committed = committed + ?, updated_at = ? WHERE shop = ? AND key = ? AND period = ? AND held >= ? AND changes() = 1").bind(row.reservedAmount, actual, now, input.shop, row.key, row.period, row.reservedAmount),
+    const db = getDb();
+    const usageScope = and(eq(entitlementUsage.shop, input.shop), eq(entitlementUsage.key, row.key), eq(entitlementUsage.period, row.period), gte(entitlementUsage.held, row.reservedAmount));
+    const [operationUpdate, usageUpdate] = await db.batch([
+      db.update(entitlementOperations).set({ state: "committed", updatedAt: now, actualAmount: actual }).where(and(
+        eq(entitlementOperations.shop, input.shop), eq(entitlementOperations.operationId, input.operationId), eq(entitlementOperations.state, "held"),
+        exists(db.select({ shop: entitlementUsage.shop }).from(entitlementUsage).where(usageScope)),
+      )),
+      db.update(entitlementUsage).set({ held: sql`${entitlementUsage.held} - ${row.reservedAmount}`, committed: sql`${entitlementUsage.committed} + ${actual}`, updatedAt: now }).where(and(usageScope, eq(sql<number>`changes()`, 1))),
     ]);
     return operationUpdate.meta.changes === 1 && usageUpdate.meta.changes === 1 ? { state: "committed" } : { reason: "invalid_state" };
   }
@@ -203,12 +223,14 @@ export class EntitlementRepo {
     if (!row) return { reason: "not_found" };
     if (row.state !== "held" && isOperationState(row.state)) return { state: row.state, replayed: true };
     const now = input.now ?? Date.now();
-    // Release uses the same atomic changes()-guarded batch as commit, ensuring
-    // held usage is decremented at most once under retries.
-    const d1 = getEnv().DB;
-    const [operationUpdate, usageUpdate] = await d1.batch([
-      d1.prepare("UPDATE entitlement_operations SET state = 'released', updated_at = ? WHERE shop = ? AND operation_id = ? AND state = 'held' AND EXISTS (SELECT 1 FROM entitlement_usage WHERE shop = ? AND key = ? AND period = ? AND held >= ?)").bind(now, input.shop, input.operationId, input.shop, row.key, row.period, row.reservedAmount),
-      d1.prepare("UPDATE entitlement_usage SET held = held - ?, updated_at = ? WHERE shop = ? AND key = ? AND period = ? AND held >= ? AND changes() = 1").bind(row.reservedAmount, now, input.shop, row.key, row.period, row.reservedAmount),
+    const db = getDb();
+    const usageScope = and(eq(entitlementUsage.shop, input.shop), eq(entitlementUsage.key, row.key), eq(entitlementUsage.period, row.period), gte(entitlementUsage.held, row.reservedAmount));
+    const [operationUpdate, usageUpdate] = await db.batch([
+      db.update(entitlementOperations).set({ state: "released", updatedAt: now }).where(and(
+        eq(entitlementOperations.shop, input.shop), eq(entitlementOperations.operationId, input.operationId), eq(entitlementOperations.state, "held"),
+        exists(db.select({ shop: entitlementUsage.shop }).from(entitlementUsage).where(usageScope)),
+      )),
+      db.update(entitlementUsage).set({ held: sql`${entitlementUsage.held} - ${row.reservedAmount}`, updatedAt: now }).where(and(usageScope, eq(sql<number>`changes()`, 1))),
     ]);
     return operationUpdate.meta.changes === 1 && usageUpdate.meta.changes === 1 ? { state: "released" } : { reason: "invalid_state" };
   }

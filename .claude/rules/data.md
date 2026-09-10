@@ -57,14 +57,15 @@ secondary panel may fall back to an empty value. Anything the page cannot be
 correct without — an amount, a total, an entitlement, a status the merchant will
 act on — fails loudly instead of rendering a plausible wrong number.
 
-## Drizzle-first queries and narrow SQL exceptions
+## Drizzle-only queries
 
-Use schema-backed Drizzle builders (`select`, `insert`, `update`, `delete`, joins,
-predicates, aggregates, and conflict clauses) for ordinary CRUD and reads. Keep
-direct D1 statements or `sql.raw()` only inside the model adapter when a SQLite
-operation cannot be expressed without changing its semantics (for example, a
-guarded `INSERT ... SELECT` admission or a `changes() = 1` dependent counter
-update). Values must remain bound parameters, and any retained exception must
-document the invariant it protects and have integration coverage for isolation,
-replay, failure rollback, and concurrency. Never split a guard and its write into
-separate application-level queries.
+All application database reads and writes use schema-backed Drizzle builders
+(`select`, `insert`, `update`, `delete`, joins, predicates, aggregates, conflict
+clauses, and transactions). Raw SQL strings, `D1Database.prepare()`,
+`db.run(sql\`...\`)`, `sql.raw()`, and hand-written SQL are forbidden in
+`app/**/*.ts` production code. This rule applies to atomic guards and schema
+introspection too: model the operation with Drizzle transactions, conflict
+clauses, and typed schema metadata. Queries must remain bounded and indexed under
+heavy use: avoid per-row queries, select only required columns, constrain every
+query by tenant, and add/verify indexes for hot predicates. Never split a guard
+and its write into separate application-level queries.

@@ -1,4 +1,7 @@
-import { env } from "cloudflare:test";
+import { count } from "drizzle-orm";
+import { makeDb } from "~/db/client";
+import { fkParent, fkChild } from "./cleanup-schema";
+import { env, applyD1Migrations } from "cloudflare:test";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { clearAllTables } from "./db";
 
@@ -13,29 +16,22 @@ import { clearAllTables } from "./db";
  */
 describe("clearAllTables", () => {
   beforeEach(async () => {
-    await env.DB.exec("CREATE TABLE IF NOT EXISTS fk_parent (id TEXT PRIMARY KEY)");
-    await env.DB.exec(
-      "CREATE TABLE IF NOT EXISTS fk_child (id TEXT PRIMARY KEY, parent_id TEXT NOT NULL REFERENCES fk_parent(id))",
-    );
+    await applyD1Migrations(env.DB, JSON.parse(env.TEST_CLEANUP_MIGRATIONS).create);
   });
 
   afterEach(async () => {
-    await env.DB.exec("DROP TABLE IF EXISTS fk_child");
-    await env.DB.exec("DROP TABLE IF EXISTS fk_parent");
+    await applyD1Migrations(env.DB, JSON.parse(env.TEST_CLEANUP_MIGRATIONS).drop);
   });
 
   it("clears a child table before the parent row it references", async () => {
-    await env.DB.prepare("INSERT INTO fk_parent (id) VALUES ('p')").run();
-    await env.DB.prepare("INSERT INTO fk_child (id, parent_id) VALUES ('c', 'p')").run();
+    const db = makeDb(env.DB);
+    await db.insert(fkParent).values({ id: "p" });
+    await db.insert(fkChild).values({ id: "c", parentId: "p" });
 
     await clearAllTables(env.DB);
 
-    const parents = await env.DB.prepare("SELECT count(*) AS n FROM fk_parent").first<{
-      n: number;
-    }>();
-    const children = await env.DB.prepare("SELECT count(*) AS n FROM fk_child").first<{
-      n: number;
-    }>();
+    const parents = await db.select({ n: count() }).from(fkParent).get();
+    const children = await db.select({ n: count() }).from(fkChild).get();
     expect(children?.n).toBe(0);
     expect(parents?.n).toBe(0);
   });

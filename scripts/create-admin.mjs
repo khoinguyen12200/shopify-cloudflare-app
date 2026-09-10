@@ -9,6 +9,7 @@
 // console does, and hashes with the same PBKDF2 parameters as app/lib/password.ts.
 //
 // `--remote` targets the production database and is deliberately explicit.
+import { adminInsertStatement } from "./admin-query.mjs";
 import { spawnSync } from "node:child_process";
 import { webcrypto, randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
@@ -94,15 +95,11 @@ const bits = await webcrypto.subtle.deriveBits(
 );
 const passwordHash = ["pbkdf2", "sha256", ITERATIONS, toBase64(salt), toBase64(bits)].join("$");
 
-const q = (v) => `'${String(v).replace(/'/g, "''")}'`;
 const now = Date.now();
-const sql = `
-INSERT INTO admin_users
-  (id, email, name, password_hash, role, status, created_at, updated_at, last_login_at)
-VALUES
-  (${q(randomUUID())}, ${q(email)}, ${q(name)}, ${q(passwordHash)},
-   ${q(role)}, 'active', ${now}, ${now}, NULL);
-`.trim();
+const sql = adminInsertStatement({
+  id: randomUUID(), email, name, passwordHash, role, status: "active",
+  createdAt: now, updatedAt: now, lastLoginAt: null,
+});
 
 // Production has its own database name and env, declared in wrangler.jsonc.
 const database = remote ? "app-db-prod" : "app-db";

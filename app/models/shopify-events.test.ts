@@ -1,3 +1,6 @@
+import { eq } from "drizzle-orm";
+import { makeDb } from "~/db/client";
+import * as schema from "~/db/schema";
 import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:test";
 import { runWithRequestContext } from "~/request-context.server";
@@ -30,13 +33,23 @@ function relationshipEvent(
 }
 
 describe("ShopifyEventRepo", () => {
+  it("preserves newer subscription items when an older event arrives", async () => {
+    await inRequest(async () => {
+      const repo = new ShopifyEventRepo();
+      const base = { shop: "stale-items", shopifyShopId: "gid", subscriptionId: "sub", synchronizedAt: 1, status: "ACTIVE" as const, type: "UPDATED" as const };
+      await repo.recordPartnerSubscription({ ...base, id: "new", occurredAt: 2, items: [{ itemType: "new" }] });
+      await repo.recordPartnerSubscription({ ...base, id: "old", occurredAt: 1, items: [{ itemType: "old" }] });
+      const rows = await makeDb(env.DB).select({ item_type: schema.shopSubscriptionItems.itemType }).from(schema.shopSubscriptionItems).where(eq(schema.shopSubscriptionItems.shop, base.shop)).all().then((results) => ({ results }));
+      expect(rows.results).toEqual([{ item_type: "new" }]);
+    });
+  });
   it("updates subscription metadata on newer lifecycle events", async () => {
     const row = await inRequest(async () => {
       const repo = new ShopifyEventRepo();
       const base = { shop: "metadata-ledger.myshopify.com", shopifyShopId: "gid://shopify/Shop/9", subscriptionId: "sub-9", synchronizedAt: 1, status: "ACTIVE" as const };
       await repo.recordPartnerSubscription({ ...base, id: "evt-1", type: "CREATED", occurredAt: 1, planHandle: "basic", billingInterval: "MONTH", trialEndsAt: 10, cancellationEffectiveAt: null });
       await repo.recordPartnerSubscription({ ...base, id: "evt-2", type: "UPDATED", occurredAt: 2, planHandle: "pro", billingInterval: "YEAR", trialEndsAt: 20, cancellationEffectiveAt: 30 });
-      return env.DB.prepare("SELECT plan_handle AS plan, billing_interval AS interval, trial_ends_at AS trial, cancellation_effective_at AS cancel FROM shop_subscriptions WHERE shop = ?").bind(base.shop).first();
+      return makeDb(env.DB).select({ plan: schema.shopSubscriptions.planHandle, interval: schema.shopSubscriptions.billingInterval, trial: schema.shopSubscriptions.trialEndsAt, cancel: schema.shopSubscriptions.cancellationEffectiveAt }).from(schema.shopSubscriptions).where(eq(schema.shopSubscriptions.shop, base.shop)).get();
     });
     expect(row).toMatchObject({ plan: "pro", interval: "YEAR", trial: 20, cancel: 30 });
   });

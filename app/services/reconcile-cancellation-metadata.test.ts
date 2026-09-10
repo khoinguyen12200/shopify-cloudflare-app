@@ -1,3 +1,6 @@
+import { eq } from "drizzle-orm";
+import { makeDb } from "~/db/client";
+import * as schema from "~/db/schema";
 import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:test";
 import { ShopifyPartnerAdapter } from "~/adapters/shopify-partner.server";
@@ -15,10 +18,7 @@ describe("cancellation history metadata", () => {
     await runWithRequestContext(env, async () => {
       const shop = "resume.myshopify.com";
       const shopifyShopId = "gid://shopify/Shop/2";
-      await env.DB.prepare(`INSERT INTO shop_subscriptions
-        (shop,subscription_id,status,applied_occurred_at,applied_external_id,cancel_effective_on,cancellation_effective_at,pending_plan_handle)
-        VALUES (?,?,'CANCELLATION_SCHEDULED',1,'old','2026-10-01',100000,'basic')`)
-        .bind(shop, `active:${shopifyShopId}`).run();
+      await makeDb(env.DB).insert(schema.shopSubscriptions).values({ shop, subscriptionId: `active:${shopifyShopId}`, status: "CANCELLATION_SCHEDULED", appliedOccurredAt: 1, appliedExternalId: "old", cancelEffectiveOn: "2026-10-01", cancellationEffectiveAt: 100000, pendingPlanHandle: "basic" }).run();
       const partner = new ShopifyPartnerAdapter({ token: "test", organizationId: "1", apiVersion: "2026-07",
         fetch: async () => Response.json({ data: { activeSubscription: {
           shop: { id: shopifyShopId, myshopifyDomain: shop }, billingPeriod: "EVERY_30_DAYS",
@@ -29,8 +29,8 @@ describe("cancellation history metadata", () => {
       expect(await refreshSubscription({ partner, subscriptions: new ShopSubscriptionRepo(),
         clock: { now: () => 2 }, appId: "app",
       }, { shop, shopifyShopId }, 2)).toEqual({ status: "refreshed" });
-      expect(await env.DB.prepare("SELECT * FROM shop_subscriptions WHERE shop = ?").bind(shop).first())
-        .toMatchObject({ status: "ACTIVE", cancel_effective_on: null, cancellation_effective_at: null, pending_plan_handle: null });
+      expect(await makeDb(env.DB).select().from(schema.shopSubscriptions).where(eq(schema.shopSubscriptions.shop, shop)).get())
+        .toMatchObject({ status: "ACTIVE", cancelEffectiveOn: null, cancellationEffectiveAt: null, pendingPlanHandle: null });
     });
   });
   it("persists the date-only cancellation fact without inventing an effective instant", async () => {
@@ -52,10 +52,10 @@ describe("cancellation history metadata", () => {
       expect(await reconcileShopHistory({ partner, ledger: new ShopifyEventRepo(),
         clock: { now: () => now }, appId: "app",
       }, { shop, shopifyShopId }, now)).toMatchObject({ status: "succeeded" });
-      const current = await env.DB.prepare("SELECT * FROM shop_subscriptions WHERE shop = ?").bind(shop).first();
-      const event = await env.DB.prepare("SELECT * FROM shopify_subscription_events WHERE event_id = ?").bind("scheduled").first();
-      expect(current).toMatchObject({ cancel_effective_on: "2026-10-01", cancellation_effective_at: null });
-      expect(event).toMatchObject({ cancel_effective_on: "2026-10-01", cancellation_effective_at: null });
+      const current = await makeDb(env.DB).select().from(schema.shopSubscriptions).where(eq(schema.shopSubscriptions.shop, shop)).get();
+      const event = await makeDb(env.DB).select().from(schema.shopifySubscriptionEvents).where(eq(schema.shopifySubscriptionEvents.eventId, "scheduled")).get();
+      expect(current).toMatchObject({ cancelEffectiveOn: "2026-10-01", cancellationEffectiveAt: null });
+      expect(event).toMatchObject({ cancelEffectiveOn: "2026-10-01", cancellationEffectiveAt: null });
     });
   });
 });

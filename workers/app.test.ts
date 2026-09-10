@@ -1,3 +1,6 @@
+import { count, eq } from "drizzle-orm";
+import { makeDb } from "~/db/client";
+import * as schema from "~/db/schema";
 import { describe, expect, it } from "vitest";
 import worker from "./app";
 import { env } from "cloudflare:test";
@@ -17,9 +20,8 @@ describe("worker webhook queue", () => {
   });
 
   it("acks unsupported delivery after persisting dead-letter state", async () => {
-    await env.DB.prepare("INSERT INTO shops (shop, installed_at) VALUES (?, ?)").bind("worker.myshopify.com", 1).run();
-    await env.DB.prepare("INSERT INTO webhook_deliveries (id, event_id, topic, api_version, shop, triggered_at, received_at, payload_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-      .bind("worker-delivery", "worker-event", "unsupported/topic", "2026-10", "worker.myshopify.com", 1, 1, "hash").run();
+    await makeDb(env.DB).insert(schema.shops).values({ shop: "worker.myshopify.com", installedAt: 1 }).run();
+    await makeDb(env.DB).insert(schema.webhookDeliveries).values({ id: "worker-delivery", eventId: "worker-event", topic: "unsupported/topic", apiVersion: "2026-10", shop: "worker.myshopify.com", triggeredAt: 1, receivedAt: 1, payloadHash: "hash" }).run();
     const actions: string[] = [];
 
     await worker.queue({ messages: [{
@@ -27,15 +29,13 @@ describe("worker webhook queue", () => {
       ack: () => actions.push("ack"), retry: () => actions.push("retry"), attempts: 8,
     }] } as never, env);
 
-    const row = await env.DB.prepare("SELECT status, attempts FROM webhook_deliveries WHERE id = ?")
-      .bind("worker-delivery").first<{ status: string; attempts: number }>();
+    const row = await makeDb(env.DB).select({ status: schema.webhookDeliveries.status, attempts: schema.webhookDeliveries.attempts }).from(schema.webhookDeliveries).where(eq(schema.webhookDeliveries.id, "worker-delivery")).get();
     expect(actions).toEqual(["ack"]);
     expect(row).toEqual({ status: "dead_letter", attempts: 1 });
   });
 
   it("acks queued work for a redacted shop without writing a projection", async () => {
-    await env.DB.prepare("INSERT INTO webhook_deliveries (id, event_id, topic, api_version, shop, triggered_at, received_at, payload_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-      .bind("redacted-delivery", "redacted-event", "app/uninstalled", "2026-10", "redacted.myshopify.com", 1, 1, "hash").run();
+    await makeDb(env.DB).insert(schema.webhookDeliveries).values({ id: "redacted-delivery", eventId: "redacted-event", topic: "app/uninstalled", apiVersion: "2026-10", shop: "redacted.myshopify.com", triggeredAt: 1, receivedAt: 1, payloadHash: "hash" }).run();
     const actions: string[] = [];
 
     await worker.queue({ messages: [{
@@ -43,10 +43,8 @@ describe("worker webhook queue", () => {
       ack: () => actions.push("ack"), retry: () => actions.push("retry"), attempts: 1,
     }] } as never, env);
 
-    const rows = await env.DB.prepare("SELECT count(*) AS count FROM shops WHERE shop = ?")
-      .bind("redacted.myshopify.com").first<{ count: number }>();
-    const delivery = await env.DB.prepare("SELECT status FROM webhook_deliveries WHERE id = ?")
-      .bind("redacted-delivery").first<{ status: string }>();
+    const rows = await makeDb(env.DB).select({ count: count() }).from(schema.shops).where(eq(schema.shops.shop, "redacted.myshopify.com")).get();
+    const delivery = await makeDb(env.DB).select({ status: schema.webhookDeliveries.status }).from(schema.webhookDeliveries).where(eq(schema.webhookDeliveries.id, "redacted-delivery")).get();
     expect(actions).toEqual(["ack"]);
     expect(Number(rows?.count ?? 0)).toBe(0);
     expect(delivery?.status).toBe("received");

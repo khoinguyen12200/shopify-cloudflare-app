@@ -1,3 +1,6 @@
+import { count } from "drizzle-orm";
+import { makeDb } from "~/db/client";
+import { passwordResetTokens } from "~/db/schema";
 import { describe, it, expect } from "vitest";
 import { env } from "cloudflare:test";
 import { runWithRequestContext } from "~/request-context.server";
@@ -83,9 +86,7 @@ describe("requestPasswordReset never reveals whether an account exists", () => {
   it("issues no token at all for an unknown address", async () => {
     const rows = await inRequest(async () => {
       await requestFor("nobody@example.com");
-      const { results } = await env.DB.prepare(
-        "SELECT COUNT(*) AS c FROM password_reset_tokens",
-      ).all<{ c: number }>();
+      const results = await makeDb(env.DB).select({ c: count() }).from(passwordResetTokens);
       return Number(results[0]!.c);
     });
     expect(rows).toBe(0);
@@ -105,9 +106,7 @@ describe("the stored row never contains the token", () => {
     const outcome = await inRequest(async () => {
       await seedUser();
       const result = await requestFor("user@example.com");
-      const { results } = await env.DB.prepare(
-        "SELECT token_hash FROM password_reset_tokens",
-      ).all<{ token_hash: string }>();
+      const results = await makeDb(env.DB).select({ token_hash: passwordResetTokens.tokenHash }).from(passwordResetTokens);
       return { token: result.token!, stored: results[0]!.token_hash };
     });
 

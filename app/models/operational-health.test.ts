@@ -1,3 +1,5 @@
+import { makeDb } from "~/db/client";
+import * as schema from "~/db/schema";
 import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:test";
 import { runWithRequestContext } from "~/request-context.server";
@@ -9,12 +11,12 @@ setupTestDatabase();
 describe("OperationalHealthRepo", () => {
   it("reports checkpoint and webhook failure counts plus lifecycle history", async () => {
     const health = await runWithRequestContext(env, async () => {
-      await env.DB.prepare("INSERT INTO shopify_sync_checkpoints (name, last_succeeded_at, last_failed_at, failure_code, failure_detail) VALUES (?, ?, ?, ?, ?)")
-        .bind("partner_history", 100, 200, "TIMEOUT", "bounded").run();
-      await env.DB.prepare("INSERT INTO webhook_deliveries (id, event_id, topic, api_version, shop, triggered_at, received_at, payload_hash, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-        .bind("health-delivery", "event", "app/scopes_update", "2025-01", "health.myshopify.com", 1, 2, "hash", "dead_letter").run();
-      await env.DB.prepare("INSERT INTO shopify_events (source, event_id, event_type, shop, shopify_shop_id, occurred_at, synchronized_at) VALUES (?, ?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?, ?)")
-        .bind("partner_history", "life", "RELATIONSHIP_INSTALLED", "health.myshopify.com", "gid://shopify/Shop/1", 1, 1, "partner_history", "sub", "SUBSCRIPTION_UPDATED", "health.myshopify.com", "gid://shopify/Shop/1", 2, 2).run();
+      await makeDb(env.DB).insert(schema.shopifySyncCheckpoints).values({ name: "partner_history", lastSucceededAt: 100, lastFailedAt: 200, failureCode: "TIMEOUT", failureDetail: "bounded" }).run();
+      await makeDb(env.DB).insert(schema.webhookDeliveries).values({ id: "health-delivery", eventId: "event", topic: "app/scopes_update", apiVersion: "2025-01", shop: "health.myshopify.com", triggeredAt: 1, receivedAt: 2, payloadHash: "hash", status: "dead_letter" }).run();
+      await makeDb(env.DB).insert(schema.shopifyEvents).values([
+        { source: "partner_history", eventId: "life", eventType: "RELATIONSHIP_INSTALLED", shop: "health.myshopify.com", shopifyShopId: "gid://shopify/Shop/1", occurredAt: 1, synchronizedAt: 1 },
+        { source: "partner_history", eventId: "sub", eventType: "SUBSCRIPTION_UPDATED", shop: "health.myshopify.com", shopifyShopId: "gid://shopify/Shop/1", occurredAt: 2, synchronizedAt: 2 },
+      ]).run();
       return new OperationalHealthRepo().read();
     });
     expect(health).toMatchObject({ failedWebhooks: 0, deadLetterWebhooks: 1, lifecycleEvents: 1, subscriptionEvents: 1 });

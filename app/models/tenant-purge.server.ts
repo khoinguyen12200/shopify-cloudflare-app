@@ -1,4 +1,5 @@
-import { eq, inArray, or, sql } from "drizzle-orm";
+import { sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { eq, inArray, or, sql, and, notLike } from "drizzle-orm";
 import {
   aiRuns,
   notificationLogs,
@@ -55,31 +56,9 @@ export class TenantPurgeRepo {
   async deleteTenantRows(shop: string): Promise<number> {
     await assertTenantPurgeCoverage();
     const db = getDb();
-    const deliveries = await db.select({ id: webhookDeliveries.id }).from(webhookDeliveries).where(eq(webhookDeliveries.shop, shop));
-    const deliveryIds = deliveries.map(({ id }) => id);
-    const counts = await Promise.all([
-      db.select({ count: sql<number>`count(*)` }).from(webhookScopeObservations).where(deliveryIds.length ? inArray(webhookScopeObservations.deliveryId, deliveryIds) : sql`0`),
-      db.select({ count: sql<number>`count(*)` }).from(supportAttachments).where(eq(supportAttachments.shop, shop)),
-      db.select({ count: sql<number>`count(*)` }).from(supportMessages).where(eq(supportMessages.shop, shop)),
-      db.select({ count: sql<number>`count(*)` }).from(supportTickets).where(eq(supportTickets.shop, shop)),
-      db.select({ count: sql<number>`count(*)` }).from(shopSubscriptions).where(eq(shopSubscriptions.shop, shop)),
-      db.select({ count: sql<number>`count(*)` }).from(shopSubscriptionItems).where(eq(shopSubscriptionItems.shop, shop)),
-      db.select({ count: sql<number>`count(*)` }).from(shopGrantedScopes).where(eq(shopGrantedScopes.shop, shop)),
-      db.select({ count: sql<number>`count(*)` }).from(shopScopeChanges).where(eq(shopScopeChanges.shop, shop)),
-      db.select({ count: sql<number>`count(*)` }).from(shopifyEvents).where(eq(shopifyEvents.shop, shop)),
-      db.select({ count: sql<number>`count(*)` }).from(webhookDeliveries).where(eq(webhookDeliveries.shop, shop)),
-      db.select({ count: sql<number>`count(*)` }).from(webhookScopeObservations).where(eq(webhookScopeObservations.shop, shop)),
-      db.select({ count: sql<number>`count(*)` }).from(aiRuns).where(eq(aiRuns.shop, shop)),
-      db.select({ count: sql<number>`count(*)` }).from(entitlementOperations).where(eq(entitlementOperations.shop, shop)),
-      db.select({ count: sql<number>`count(*)` }).from(entitlementUsage).where(eq(entitlementUsage.shop, shop)),
-      db.select({ count: sql<number>`count(*)` }).from(entitlementAllocations).where(eq(entitlementAllocations.shop, shop)),
-      db.select({ count: sql<number>`count(*)` }).from(notificationLogs).where(eq(notificationLogs.shop, shop)),
-      db.select({ count: sql<number>`count(*)` }).from(notificationPreferences).where(eq(notificationPreferences.scope, shop)),
-      db.select({ count: sql<number>`count(*)` }).from(notificationOptOuts).where(eq(notificationOptOuts.scope, shop)),
-      db.select({ count: sql<number>`count(*)` }).from(shops).where(eq(shops.shop, shop)),
-    ]);
+    const deliveries = db.select({ id: webhookDeliveries.id }).from(webhookDeliveries).where(eq(webhookDeliveries.shop, shop));
     const deleted = await db.batch([
-      db.delete(webhookScopeObservations).where(deliveryIds.length ? or(eq(webhookScopeObservations.shop, shop), inArray(webhookScopeObservations.deliveryId, deliveryIds)) : eq(webhookScopeObservations.shop, shop)),
+      db.delete(webhookScopeObservations).where(or(eq(webhookScopeObservations.shop, shop), inArray(webhookScopeObservations.deliveryId, deliveries))),
       db.delete(supportAttachments).where(eq(supportAttachments.shop, shop)),
       db.delete(pendingUploads).where(eq(pendingUploads.shop, shop)),
       db.delete(supportMessages).where(eq(supportMessages.shop, shop)),
@@ -99,19 +78,20 @@ export class TenantPurgeRepo {
       db.delete(notificationOptOuts).where(eq(notificationOptOuts.scope, shop)),
       db.delete(shops).where(eq(shops.shop, shop)),
     ]);
-    void deleted;
-    return counts.reduce((total, rows) => total + Number(rows[0]?.count ?? 0), 0);
+    return deleted.reduce((total, result) => total + result.meta.changes, 0);
   }
 }
 
+const sqliteMaster = sqliteTable("sqlite_master", { name: text("name").notNull(), type: text("type").notNull() });
+const tableColumns = sqliteTable("table_columns", { name: text("name").notNull() });
+
 export async function schemaShopColumns(): Promise<string[]> {
-  const tables = await getDb().all<{ name: string }>(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name <> 'd1_migrations'`);
-  const scoped: string[] = [];
-  for (const table of tables) {
-    const columns = await getDb().all<{ name: string }>(sql.raw(`PRAGMA table_info("${table.name.replaceAll('"', '""')}")`));
-    if (columns.some(({ name }) => name === "shop")) scoped.push(table.name);
-  }
-  return scoped.sort();
+  const tables = await getDb().selectDistinct({ name: sqliteMaster.name })
+    .from(sqliteMaster)
+    .innerJoin(sql`pragma_table_info(${sqliteMaster.name}) AS table_columns`, eq(tableColumns.name, "shop"))
+    .where(and(eq(sqliteMaster.type, "table"), notLike(sqliteMaster.name, "sqlite_%"), notLike(sqliteMaster.name, "_cf_%")))
+    .orderBy(sqliteMaster.name);
+  return tables.map(({ name }) => name);
 }
 
 export async function assertTenantPurgeCoverage(): Promise<void> {

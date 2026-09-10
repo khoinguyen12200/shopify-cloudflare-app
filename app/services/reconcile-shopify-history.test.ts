@@ -1,3 +1,6 @@
+import { eq } from "drizzle-orm";
+import { makeDb } from "~/db/client";
+import * as schema from "~/db/schema";
 import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:test";
 import { reconcileHistory, reconcileShopHistory, type LifecycleLedgerPort, type SyncCheckpointPort } from "./reconcile-shopify-history";
@@ -83,9 +86,7 @@ describe("reconcileHistory", () => {
 
   it("projects CREATED and CANCELED history into one current row while keeping both ledger facts", async () => {
     await runWithRequestContext(env, async () => {
-      await env.DB.prepare("INSERT INTO shop_subscriptions (shop, subscription_id, status, applied_occurred_at, applied_external_id) VALUES (?, ?, ?, ?, ?)")
-        .bind("one.myshopify.com", "created-event", "PENDING", 1, "created-event")
-        .run();
+      await makeDb(env.DB).insert(schema.shopSubscriptions).values({ shop: "one.myshopify.com", subscriptionId: "created-event", status: "PENDING", appliedOccurredAt: 1, appliedExternalId: "created-event" }).run();
       const partner: ShopifyPartnerPort = {
         activeSubscription: async () => null,
         listHistoricalEvents: async () => ({
@@ -131,11 +132,8 @@ describe("reconcileHistory", () => {
         appId: "app",
       }, 2_000)).resolves.toMatchObject({ status: "succeeded", events: 2 });
 
-      const current = await env.DB.prepare("SELECT subscription_id, status FROM shop_subscriptions WHERE shop = ?")
-        .bind("one.myshopify.com")
-        .all();
-      const history = await env.DB.prepare("SELECT event_id, subscription_id FROM shopify_subscription_events ORDER BY event_id")
-        .all();
+      const current = await makeDb(env.DB).select({ subscription_id: schema.shopSubscriptions.subscriptionId, status: schema.shopSubscriptions.status }).from(schema.shopSubscriptions).where(eq(schema.shopSubscriptions.shop, "one.myshopify.com")).all().then((results) => ({ results }));
+      const history = await makeDb(env.DB).select({ event_id: schema.shopifySubscriptionEvents.eventId, subscription_id: schema.shopifySubscriptionEvents.subscriptionId }).from(schema.shopifySubscriptionEvents).orderBy(schema.shopifySubscriptionEvents.eventId).all().then((results) => ({ results }));
       expect(current.results).toEqual([{ subscription_id: "active:gid://shopify/Shop/1", status: "CANCELED" }]);
       expect(history.results).toEqual([
         { event_id: "canceled-event", subscription_id: "active:gid://shopify/Shop/1" },
@@ -148,9 +146,7 @@ describe("reconcileHistory", () => {
     await runWithRequestContext(env, async () => {
       const shop = "refresh.myshopify.com";
       const shopifyShopId = "gid://shopify/Shop/2";
-      await env.DB.prepare("INSERT INTO shop_subscriptions (shop, subscription_id, status, applied_occurred_at, applied_external_id) VALUES (?, ?, ?, ?, ?)")
-        .bind(shop, "gid://shopify/AppSubscription/old", "CANCELED", 1, "old")
-        .run();
+      await makeDb(env.DB).insert(schema.shopSubscriptions).values({ shop, subscriptionId: "gid://shopify/AppSubscription/old", status: "CANCELED", appliedOccurredAt: 1, appliedExternalId: "old" }).run();
       const partner: ShopifyPartnerPort = {
         listHistoricalEvents: async () => ({
           events: [{
@@ -188,9 +184,7 @@ describe("reconcileHistory", () => {
       await reconcileHistory({ partner, checkpoint, ledger: new ShopifyEventRepo(), clock: { now: () => refreshedAt - 1 }, appId: "app" }, refreshedAt - 1);
       await expect(refreshSubscription({ partner, subscriptions, clock: { now: () => refreshedAt }, appId: "app" }, { shop, shopifyShopId }, refreshedAt)).resolves.toEqual({ status: "refreshed" });
 
-      const current = await env.DB.prepare("SELECT subscription_id, status FROM shop_subscriptions WHERE shop = ?")
-        .bind(shop)
-        .all();
+      const current = await makeDb(env.DB).select({ subscription_id: schema.shopSubscriptions.subscriptionId, status: schema.shopSubscriptions.status }).from(schema.shopSubscriptions).where(eq(schema.shopSubscriptions.shop, shop)).all().then((results) => ({ results }));
       expect(current.results).toEqual([{ subscription_id: `active:${shopifyShopId}`, status: "ACTIVE" }]);
     });
   });

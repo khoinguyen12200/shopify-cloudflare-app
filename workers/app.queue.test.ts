@@ -1,3 +1,6 @@
+import { eq } from "drizzle-orm";
+import { makeDb } from "~/db/client";
+import * as schema from "~/db/schema";
 import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:test";
 import { handleWebhookQueueBatch } from "../app/services/webhook-queue";
@@ -67,8 +70,7 @@ describe("handleWebhookQueueBatch", () => {
     await runWithRequestContext(env, async () => {
       const shop = "worker-dead-letter.myshopify.com";
       const id = "worker-dead-letter-delivery";
-      await env.DB.prepare("INSERT INTO webhook_deliveries (id,event_id,topic,api_version,shop,triggered_at,received_at,payload_hash,status) VALUES (?,?,?,?,?,?,?,?,?)")
-        .bind(id, "event", "app/uninstalled", "2025-01", shop, 1, 1, "hash", "queued").run();
+      await makeDb(env.DB).insert(schema.webhookDeliveries).values({ id: id, eventId: "event", topic: "app/uninstalled", apiVersion: "2025-01", shop: shop, triggeredAt: 1, receivedAt: 1, payloadHash: "hash", status: "queued" }).run();
       const events: string[] = [];
       await handleWebhookQueueBatch({ messages: [{
         body: { shop, id }, attempts: 9,
@@ -80,7 +82,7 @@ describe("handleWebhookQueueBatch", () => {
         }, work),
         log: () => {},
       });
-      const row = await env.DB.prepare("SELECT status, failure_code FROM webhook_deliveries WHERE id = ?").bind(id).first<{ status: string; failure_code: string }>();
+      const row = await makeDb(env.DB).select({ status: schema.webhookDeliveries.status, failure_code: schema.webhookDeliveries.failureCode }).from(schema.webhookDeliveries).where(eq(schema.webhookDeliveries.id, id)).get();
       expect(row).toEqual({ status: "dead_letter", failure_code: "dead_letter" });
       expect(events).toEqual(["retry"]);
     });
@@ -90,8 +92,7 @@ describe("handleWebhookQueueBatch", () => {
     await runWithRequestContext(env, async () => {
       const shop = "worker-unsupported-topic.myshopify.com";
       const id = "worker-unsupported-topic-delivery";
-      await env.DB.prepare("INSERT INTO webhook_deliveries (id,event_id,topic,api_version,shop,triggered_at,received_at,payload_hash,status) VALUES (?,?,?,?,?,?,?,?,?)")
-        .bind(id, "event", "orders/created", "2025-01", shop, 1, 1, "hash", "queued").run();
+      await makeDb(env.DB).insert(schema.webhookDeliveries).values({ id: id, eventId: "event", topic: "orders/created", apiVersion: "2025-01", shop: shop, triggeredAt: 1, receivedAt: 1, payloadHash: "hash", status: "queued" }).run();
       const events: string[] = [];
       await handleWebhookQueueBatch({ messages: [{
         body: { shop, id }, attempts: 9,
@@ -103,7 +104,7 @@ describe("handleWebhookQueueBatch", () => {
         }, work),
         log: () => {},
       });
-      const row = await env.DB.prepare("SELECT status, failure_code FROM webhook_deliveries WHERE id = ?").bind(id).first<{ status: string; failure_code: string }>();
+      const row = await makeDb(env.DB).select({ status: schema.webhookDeliveries.status, failure_code: schema.webhookDeliveries.failureCode }).from(schema.webhookDeliveries).where(eq(schema.webhookDeliveries.id, id)).get();
       expect(row).toEqual({ status: "dead_letter", failure_code: "dead_letter" });
       expect(events).toEqual(["ack"]);
     });

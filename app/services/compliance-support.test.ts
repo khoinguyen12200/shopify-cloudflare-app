@@ -1,3 +1,6 @@
+import { count, eq } from "drizzle-orm";
+import { makeDb } from "~/db/client";
+import * as schema from "~/db/schema";
 import { describe, it, expect } from "vitest";
 import { env } from "cloudflare:test";
 import { runWithRequestContext } from "~/request-context.server";
@@ -61,7 +64,7 @@ describe("shop/redact and support data", () => {
       const otherSession = offlineSession(OTHER);
       await storage.storeSession(targetSession);
       await storage.storeSession(otherSession);
-      await env.DB.prepare("INSERT INTO shopify_sync_checkpoints (name, last_succeeded_at) VALUES (?, ?)").bind("global", 1).run();
+      await makeDb(env.DB).insert(schema.shopifySyncCheckpoints).values({ name: "global", lastSucceededAt: 1 }).run();
 
       await dispatch(SHOP);
 
@@ -71,7 +74,7 @@ describe("shop/redact and support data", () => {
       expect(await new SupportRepo().find(OTHER, otherTicket.id)).toBeDefined();
       expect(await env.UPLOADS.head(otherKey)).not.toBeNull();
       expect(await storage.loadSession(otherSession.id)).toBeDefined();
-      expect(await env.DB.prepare("SELECT count(*) AS count FROM shopify_sync_checkpoints WHERE name = ?").bind("global").first<{ count: number }>()).toMatchObject({ count: 1 });
+      expect(await makeDb(env.DB).select({ count: count() }).from(schema.shopifySyncCheckpoints).where(eq(schema.shopifySyncCheckpoints.name, "global")).get()).toMatchObject({ count: 1 });
     });
   });
 

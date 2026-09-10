@@ -1,4 +1,4 @@
-import { and, desc, eq, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, ne, or, sql, exists } from "drizzle-orm";
 import type { RelationshipEventType } from "~/domain/shop-lifecycle";
 import {
   shopifyEvents,
@@ -156,17 +156,19 @@ export class ShopifyEventRepo {
       db.delete(shopSubscriptionItems).where(and(eq(shopSubscriptionItems.shop, event.shop), ne(shopSubscriptionItems.subscriptionId, event.subscriptionId))),
       db.delete(shopSubscriptions).where(and(eq(shopSubscriptions.shop, event.shop), ne(shopSubscriptions.subscriptionId, event.subscriptionId))),
     ] : [];
+    const matches = and(eq(shopSubscriptions.shop, event.shop), eq(shopSubscriptions.subscriptionId, event.subscriptionId), eq(shopSubscriptions.appliedOccurredAt, event.occurredAt), eq(shopSubscriptions.appliedExternalId, event.id));
     const itemStatements = event.items ? [
       db.delete(shopSubscriptionItems).where(and(
         eq(shopSubscriptionItems.shop, event.shop),
         eq(shopSubscriptionItems.subscriptionId, event.subscriptionId),
-        sql`exists (select 1 from ${shopSubscriptions} where ${shopSubscriptions.shop} = ${event.shop} and ${shopSubscriptions.subscriptionId} = ${event.subscriptionId} and ${shopSubscriptions.appliedOccurredAt} = ${event.occurredAt} and ${shopSubscriptions.appliedExternalId} = ${event.id})`,
+        exists(db.select({ shop: shopSubscriptions.shop }).from(shopSubscriptions).where(matches)),
       )),
-      // Keep this guarded INSERT ... SELECT as a narrow SQL exception. Item
-      // replacement must only occur when this event won the subscription
-      // projection race; splitting the guard and insert would allow stale
-      // events to overwrite newer items.
-      ...event.items.map((item, position) => db.run(sql`insert into ${shopSubscriptionItems} (shop, subscription_id, position, item_type, price_amount, price_currency, capped_amount_amount, capped_amount_currency) select ${event.shop}, ${event.subscriptionId}, ${position}, ${item.itemType}, ${item.priceAmount ?? null}, ${item.priceCurrency ?? null}, ${item.cappedAmountAmount ?? null}, ${item.cappedAmountCurrency ?? null} where exists (select 1 from ${shopSubscriptions} where ${shopSubscriptions.shop} = ${event.shop} and ${shopSubscriptions.subscriptionId} = ${event.subscriptionId} and ${shopSubscriptions.appliedOccurredAt} = ${event.occurredAt} and ${shopSubscriptions.appliedExternalId} = ${event.id})`)),
+      ...event.items.map((item, position) => db.insert(shopSubscriptionItems).select(db.select({
+        shop: shopSubscriptions.shop, subscriptionId: shopSubscriptions.subscriptionId,
+        position: sql<number>`${position}`.as("position"), itemType: sql<string>`${item.itemType}`.as("item_type"),
+        priceAmount: sql<number | null>`${item.priceAmount ?? null}`.as("price_amount"), priceCurrency: sql<string | null>`${item.priceCurrency ?? null}`.as("price_currency"),
+        cappedAmountAmount: sql<number | null>`${item.cappedAmountAmount ?? null}`.as("capped_amount_amount"), cappedAmountCurrency: sql<string | null>`${item.cappedAmountCurrency ?? null}`.as("capped_amount_currency"),
+      }).from(shopSubscriptions).where(matches))),
     ] : [];
     const [inserted] = await db.batch([
       db.insert(shopifyEvents).values({ source: "partner_history", eventId: event.id, eventType: event.type, shop: event.shop, shopifyShopId: event.shopifyShopId, occurredAt: event.occurredAt, synchronizedAt: event.synchronizedAt }).onConflictDoNothing().returning({ eventId: shopifyEvents.eventId }),
