@@ -56,7 +56,9 @@ export default function SupportIndex() {
         {t("support.newTicket")}
       </s-button>
 
-      {tickets.length === 0 ? <EmptyState /> : (
+      {tickets.length === 0 ? (
+        <EmptyState />
+      ) : (
         /*
          * `padding="none"` so the table meets the card's edges. A table is a
          * grid of its own, with its own header rule and row separators, and
@@ -87,10 +89,20 @@ export default function SupportIndex() {
               {tickets.map((ticket) => (
                 // The whole row is clickable, delegated to the subject link so
                 // there is still one real anchor for keyboard and middle-click.
-                <s-table-row key={ticket.id} clickDelegate={`ticket-${ticket.id}`}>
+                <s-table-row
+                  key={ticket.id}
+                  clickDelegate={`ticket-${ticket.id}`}
+                >
                   <s-table-cell>
-                    <s-stack direction="inline" gap="small-300" alignItems="center">
-                      <s-link id={`ticket-${ticket.id}`} href={`/app/support/${ticket.id}`}>
+                    <s-stack
+                      direction="inline"
+                      gap="small-300"
+                      alignItems="center"
+                    >
+                      <s-link
+                        id={`ticket-${ticket.id}`}
+                        href={`/app/support/${ticket.id}`}
+                      >
                         {ticket.subject}
                       </s-link>
                       {ticket.unread && (
@@ -98,7 +110,9 @@ export default function SupportIndex() {
                       )}
                     </s-stack>
                   </s-table-cell>
-                  <s-table-cell>{t(CATEGORY_LABEL_KEY[ticket.category])}</s-table-cell>
+                  <s-table-cell>
+                    {t(CATEGORY_LABEL_KEY[ticket.category])}
+                  </s-table-cell>
                   <s-table-cell>
                     <s-badge tone={STATUS_TONE[ticket.status]}>
                       {t(`support.status.${ticket.status}`)}
@@ -122,9 +136,8 @@ export default function SupportIndex() {
  * apology. Centred on the empty-state composition: one mark, one heading, one
  * sentence saying what will appear here, one action.
  *
- * The mark is a real drawn icon in a tinted tile rather than an illustration,
- * because the alternative is a stock graphic hosted somewhere else that says
- * nothing about support.
+ * The illustration is local and bounded so it adds context without taking over
+ * the empty state or pushing the call to action below the fold.
  */
 function EmptyState() {
   const { t } = useTranslation(["admin", "common"]);
@@ -132,8 +145,14 @@ function EmptyState() {
   return (
     <s-section accessibilityLabel={t("support.empty.heading")}>
       <s-grid gap="base" justifyItems="center" paddingBlock="large-400">
-        <s-box background="subdued" borderRadius="large" padding="base">
-          <s-icon type="chat" size="base" tone="info"></s-icon>
+        <s-box maxInlineSize="180px" maxBlockSize="140px">
+          <s-image
+            src="/illustrations/support-empty.svg"
+            alt={t("support.empty.illustrationAlt")}
+            aspectRatio="1/0.77"
+            objectFit="contain"
+            loading="lazy"
+          ></s-image>
         </s-box>
 
         <s-grid justifyItems="center" maxInlineSize="420px" gap="base">
@@ -157,4 +176,5 @@ function EmptyState() {
   );
 }
 
-export const headers: HeadersFunction = (headersArgs) => boundary.headers(headersArgs);
+export const headers: HeadersFunction = (headersArgs) =>
+  boundary.headers(headersArgs);

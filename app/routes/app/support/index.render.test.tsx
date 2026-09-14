@@ -42,10 +42,16 @@ async function render(tickets: Ticket[], locale: "en" | "es" = "en") {
   await instance.use(initReactI18next).init({ ...i18nOptions, lng: locale });
 
   const routes: RouteObject[] = [
-    { path: "/app/support", Component: SupportIndex, loader: () => ({ tickets }) },
+    {
+      path: "/app/support",
+      Component: SupportIndex,
+      loader: () => ({ tickets }),
+    },
   ];
   const handler = createStaticHandler(routes);
-  const context = await handler.query(new Request("https://example.test/app/support"));
+  const context = await handler.query(
+    new Request("https://example.test/app/support"),
+  );
   if (context instanceof Response) {
     throw new Error(`Expected a render context, got ${context.status}`);
   }
@@ -59,7 +65,10 @@ async function render(tickets: Ticket[], locale: "en" | "es" = "en") {
     </I18nextProvider>,
   );
 
-  expect(html.length, "rendered nothing — assertions would be vacuous").toBeGreaterThan(200);
+  expect(
+    html.length,
+    "rendered nothing — assertions would be vacuous",
+  ).toBeGreaterThan(200);
   return html;
 }
 
@@ -71,11 +80,11 @@ describe("the merchant's ticket list", () => {
     expect(html).not.toContain("<s-table");
   });
 
-  it("gives the empty state a mark and a way forward", async () => {
+  it("gives the empty state an illustration and a way forward", async () => {
     // An empty state that only apologises leaves the merchant nowhere to go.
     const html = await render([]);
 
-    expect(html).toContain("s-icon");
+    expect(html).toContain("/illustrations/support-empty.svg");
     expect(html).toContain("New ticket");
     expect(html).toContain("/app/support/new");
   });
@@ -109,7 +118,9 @@ describe("the merchant's ticket list", () => {
   it("marks an unread ticket, and leaves a read one unmarked", async () => {
     expect(await render([ticket({ unread: true })])).toContain("New");
 
-    const read = await render([ticket({ unread: false, subject: "Quiet one" })]);
+    const read = await render([
+      ticket({ unread: false, subject: "Quiet one" }),
+    ]);
     expect(read).toContain("Quiet one");
     expect(read).not.toContain(">New<");
   });

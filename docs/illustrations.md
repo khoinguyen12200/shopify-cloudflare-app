@@ -44,8 +44,9 @@ These local assets support the three sample onboarding steps in the embedded
 dashboard. They were selected from unDraw search results and downloaded from the
 listed CDN URLs.
 
-| File                                  | Source page                        | Download URL                                                  | License                                     |
-| ------------------------------------- | ---------------------------------- | ------------------------------------------------------------- | ------------------------------------------- |
-| `public/illustrations/onboarding.svg` | https://undraw.co/search/setup     | https://cdn.undraw.co/illustration/onboarding_dcq2.svg        | [unDraw license](https://undraw.co/license) |
-| `public/illustrations/catalog.svg`    | https://undraw.co/search/product   | https://cdn.undraw.co/illustration/product-explainer_b7ft.svg | [unDraw license](https://undraw.co/license) |
-| `public/illustrations/analytics.svg`  | https://undraw.co/search/analytics | https://cdn.undraw.co/illustration/analytics-setup_ptrz.svg   | [unDraw license](https://undraw.co/license) |
+| File                                     | Source page                                 | Download URL                                                  | License                                     |
+| ---------------------------------------- | ------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------- |
+| `public/illustrations/onboarding.svg`    | https://undraw.co/search/setup              | https://cdn.undraw.co/illustration/onboarding_dcq2.svg        | [unDraw license](https://undraw.co/license) |
+| `public/illustrations/catalog.svg`       | https://undraw.co/search/product            | https://cdn.undraw.co/illustration/product-explainer_b7ft.svg | [unDraw license](https://undraw.co/license) |
+| `public/illustrations/analytics.svg`     | https://undraw.co/search/analytics          | https://cdn.undraw.co/illustration/analytics-setup_ptrz.svg   | [unDraw license](https://undraw.co/license) |
+| `public/illustrations/support-empty.svg` | https://undraw.co/search/customer%20support | https://cdn.undraw.co/illustration/faq_pgxi.svg               | [unDraw license](https://undraw.co/license) |

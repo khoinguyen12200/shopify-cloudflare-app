@@ -164,7 +164,8 @@
     "newTicket": "New ticket",
     "empty": {
       "heading": "No tickets yet",
-      "body": "When something looks wrong or you want a feature, open a ticket and we will reply here."
+      "body": "When something looks wrong or you want a feature, open a ticket and we will reply here.",
+      "illustrationAlt": "Support conversation illustration"
     },
     "columns": {
       "subject": "Subject",

@@ -164,7 +164,8 @@
     "newTicket": "Nuevo ticket",
     "empty": {
       "heading": "Aún no hay tickets",
-      "body": "Cuando algo no funcione o quieras una función, abre un ticket y te responderemos aquí."
+      "body": "Cuando algo no funcione o quieras una función, abre un ticket y te responderemos aquí.",
+      "illustrationAlt": "Ilustración de una conversación de soporte"
     },
     "columns": {
       "subject": "Asunto",
