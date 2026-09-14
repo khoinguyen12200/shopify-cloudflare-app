@@ -42,7 +42,7 @@ Before implementation is accepted:
 This is a proposed standards and rollout document, not a completed migration.
 `AGENTS.md` remains the repository's single source of truth. Amend its linked
 rules before adopting any proposal here that changes their wording. This
-document does not grant exceptions to TDD, tenant isolation, or verification.
+document does not grant exceptions to tenant isolation or verification.
 The code observations below were made during the September 8 review. Other work
 is changing the repository; re-read affected files before implementation. The
 research did not execute a live merchant billing flow or comprehensively audit
@@ -552,7 +552,7 @@ Required behavior cases:
 idempotency, ordering, or rollback behavior. No direct SQL is retained solely
 because it is already written.
 
-## 4. Behavior-Focused Tests Without Weakening TDD
+## 4. Behavior-Focused Tests
 
 ### Correct interpretation
 A short function can enforce an important contract. The pricing URL helper is
@@ -616,7 +616,7 @@ not a lower test count or a lower coverage target.
 
 - [ ] Propose wording changes to the existing rule before applying them. Resolve
   the current "every new function" and mechanical test-title wording toward
-  behavioral coverage without waiving mandatory RED for new behavior/bug fixes.
+  behavioral coverage.
 - [ ] For each candidate, record the behavior, current assertion, how it could
   pass with broken behavior, and the stronger replacement assertion.
 - [ ] Demonstrate a weak dashboard assertion with a render fixture containing
@@ -678,7 +678,7 @@ postponing testing to a final cleanup pass. Each task can be reviewed separately
 Shopify facts were researched through the Shopify AI Toolkit. Drizzle,
 Cloudflare, and testing guidance use their official documentation or original
 publisher. These sources support technical facts; the proposed repository rules
-are our engineering choices, not claims that Shopify mandates Drizzle or TDD.
+are our engineering choices, not claims that Shopify mandates Drizzle or our testing practices.
 
 - **S1:** [Shopify app configuration](https://shopify.dev/docs/apps/build/cli-for-apps/app-configuration)
 - **S2:** [Manage app credentials](https://shopify.dev/docs/apps/build/authentication-authorization/manage-credentials)

@@ -54,9 +54,3 @@ test("Codex receives the project-scoped Shopify MCP server", async () => {
   assert.match(config, /command = "npx"/);
   assert.match(config, /args = \["-y", "@shopify\/dev-mcp@latest"\]/);
 });
-
-test("the design skill required by agent rules and hooks is installed", async () => {
-  const lock = JSON.parse(await readProjectFile("skills-lock.json"));
-
-  assert.ok(lock.skills?.impeccable);
-});

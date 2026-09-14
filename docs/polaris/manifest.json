@@ -1,0 +1,502 @@
+{
+  "source": "https://shopify.dev/docs/api/app-home/latest",
+  "syncedAt": "2026-09-14T14:58:19.941Z",
+  "pageCount": 70,
+  "families": {
+    "web-components": 48,
+    "app-bridge-web-components": 5,
+    "patterns": 16
+  },
+  "pages": [
+    {
+      "family": "app-bridge-web-components",
+      "title": "App nav",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/app-bridge-web-components/app-nav",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/app-bridge-web-components/app-nav.md",
+      "file": "app-bridge-web-components/app-nav.md"
+    },
+    {
+      "family": "app-bridge-web-components",
+      "title": "App window",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/app-bridge-web-components/app-window",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/app-bridge-web-components/app-window.md",
+      "file": "app-bridge-web-components/app-window.md"
+    },
+    {
+      "family": "app-bridge-web-components",
+      "title": "App Bridge web components",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/app-bridge-web-components",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/app-bridge-web-components.md",
+      "file": "app-bridge-web-components/README.md"
+    },
+    {
+      "family": "app-bridge-web-components",
+      "title": "Save bar",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/app-bridge-web-components/save-bar",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/app-bridge-web-components/save-bar.md",
+      "file": "app-bridge-web-components/save-bar.md"
+    },
+    {
+      "family": "app-bridge-web-components",
+      "title": "Title bar",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/app-bridge-web-components/title-bar",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/app-bridge-web-components/title-bar.md",
+      "file": "app-bridge-web-components/title-bar.md"
+    },
+    {
+      "family": "overview",
+      "title": "App Home",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest.md",
+      "file": "overview.md"
+    },
+    {
+      "family": "patterns",
+      "title": "Account connection",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/patterns/compositions/account-connection",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/patterns/compositions/account-connection.md",
+      "file": "patterns/compositions/account-connection.md"
+    },
+    {
+      "family": "patterns",
+      "title": "App card",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/patterns/compositions/app-card",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/patterns/compositions/app-card.md",
+      "file": "patterns/compositions/app-card.md"
+    },
+    {
+      "family": "patterns",
+      "title": "Callout card",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/patterns/compositions/callout-card",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/patterns/compositions/callout-card.md",
+      "file": "patterns/compositions/callout-card.md"
+    },
+    {
+      "family": "patterns",
+      "title": "Empty state",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/patterns/compositions/empty-state",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/patterns/compositions/empty-state.md",
+      "file": "patterns/compositions/empty-state.md"
+    },
+    {
+      "family": "patterns",
+      "title": "Footer help",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/patterns/compositions/footer-help",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/patterns/compositions/footer-help.md",
+      "file": "patterns/compositions/footer-help.md"
+    },
+    {
+      "family": "patterns",
+      "title": "Index table",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/patterns/compositions/index-table",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/patterns/compositions/index-table.md",
+      "file": "patterns/compositions/index-table.md"
+    },
+    {
+      "family": "patterns",
+      "title": "Interstitial nav",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/patterns/compositions/interstitial-nav",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/patterns/compositions/interstitial-nav.md",
+      "file": "patterns/compositions/interstitial-nav.md"
+    },
+    {
+      "family": "patterns",
+      "title": "Media card",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/patterns/compositions/media-card",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/patterns/compositions/media-card.md",
+      "file": "patterns/compositions/media-card.md"
+    },
+    {
+      "family": "patterns",
+      "title": "Metrics card",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/patterns/compositions/metrics-card",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/patterns/compositions/metrics-card.md",
+      "file": "patterns/compositions/metrics-card.md"
+    },
+    {
+      "family": "patterns",
+      "title": "Resource list",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/patterns/compositions/resource-list",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/patterns/compositions/resource-list.md",
+      "file": "patterns/compositions/resource-list.md"
+    },
+    {
+      "family": "patterns",
+      "title": "Setup guide",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/patterns/compositions/setup-guide",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/patterns/compositions/setup-guide.md",
+      "file": "patterns/compositions/setup-guide.md"
+    },
+    {
+      "family": "patterns",
+      "title": "Patterns",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/patterns",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/patterns.md",
+      "file": "patterns/README.md"
+    },
+    {
+      "family": "patterns",
+      "title": "Details",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/patterns/templates/details",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/patterns/templates/details.md",
+      "file": "patterns/templates/details.md"
+    },
+    {
+      "family": "patterns",
+      "title": "Homepage",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/patterns/templates/homepage",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/patterns/templates/homepage.md",
+      "file": "patterns/templates/homepage.md"
+    },
+    {
+      "family": "patterns",
+      "title": "Index",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/patterns/templates/resource-index",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/patterns/templates/resource-index.md",
+      "file": "patterns/templates/resource-index.md"
+    },
+    {
+      "family": "patterns",
+      "title": "Settings",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/patterns/templates/settings",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/patterns/templates/settings.md",
+      "file": "patterns/templates/settings.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Button group",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/actions/button-group",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/actions/button-group.md",
+      "file": "web-components/actions/button-group.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Button",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/actions/button",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/actions/button.md",
+      "file": "web-components/actions/button.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Clickable chip",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/actions/clickable-chip",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/actions/clickable-chip.md",
+      "file": "web-components/actions/clickable-chip.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Clickable",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/actions/clickable",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/actions/clickable.md",
+      "file": "web-components/actions/clickable.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Link",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/actions/link",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/actions/link.md",
+      "file": "web-components/actions/link.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Menu",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/actions/menu",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/actions/menu.md",
+      "file": "web-components/actions/menu.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Badge",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/feedback-and-status-indicators/badge",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/feedback-and-status-indicators/badge.md",
+      "file": "web-components/feedback-and-status-indicators/badge.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Banner",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/feedback-and-status-indicators/banner",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/feedback-and-status-indicators/banner.md",
+      "file": "web-components/feedback-and-status-indicators/banner.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Spinner",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/feedback-and-status-indicators/spinner",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/feedback-and-status-indicators/spinner.md",
+      "file": "web-components/feedback-and-status-indicators/spinner.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Checkbox",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/checkbox",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/checkbox.md",
+      "file": "web-components/forms/checkbox.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Choice list",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/choice-list",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/choice-list.md",
+      "file": "web-components/forms/choice-list.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Color field",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/color-field",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/color-field.md",
+      "file": "web-components/forms/color-field.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Color picker",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/color-picker",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/color-picker.md",
+      "file": "web-components/forms/color-picker.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Date field",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/date-field",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/date-field.md",
+      "file": "web-components/forms/date-field.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Date picker",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/date-picker",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/date-picker.md",
+      "file": "web-components/forms/date-picker.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Drop zone",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/drop-zone",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/drop-zone.md",
+      "file": "web-components/forms/drop-zone.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Email field",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/email-field",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/email-field.md",
+      "file": "web-components/forms/email-field.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Money field",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/money-field",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/money-field.md",
+      "file": "web-components/forms/money-field.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Number field",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/number-field",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/number-field.md",
+      "file": "web-components/forms/number-field.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Password field",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/password-field",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/password-field.md",
+      "file": "web-components/forms/password-field.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Search field",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/search-field",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/search-field.md",
+      "file": "web-components/forms/search-field.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Select",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/select",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/select.md",
+      "file": "web-components/forms/select.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Switch",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/switch",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/switch.md",
+      "file": "web-components/forms/switch.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Text area",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/text-area",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/text-area.md",
+      "file": "web-components/forms/text-area.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Text field",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/text-field",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/text-field.md",
+      "file": "web-components/forms/text-field.md"
+    },
+    {
+      "family": "web-components",
+      "title": "URL field",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/url-field",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/forms/url-field.md",
+      "file": "web-components/forms/url-field.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Box",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/layout-and-structure/box",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/layout-and-structure/box.md",
+      "file": "web-components/layout-and-structure/box.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Divider",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/layout-and-structure/divider",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/layout-and-structure/divider.md",
+      "file": "web-components/layout-and-structure/divider.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Grid",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/layout-and-structure/grid",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/layout-and-structure/grid.md",
+      "file": "web-components/layout-and-structure/grid.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Ordered list",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/layout-and-structure/ordered-list",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/layout-and-structure/ordered-list.md",
+      "file": "web-components/layout-and-structure/ordered-list.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Page",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/layout-and-structure/page",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/layout-and-structure/page.md",
+      "file": "web-components/layout-and-structure/page.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Query container",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/layout-and-structure/query-container",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/layout-and-structure/query-container.md",
+      "file": "web-components/layout-and-structure/query-container.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Section",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/layout-and-structure/section",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/layout-and-structure/section.md",
+      "file": "web-components/layout-and-structure/section.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Stack",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/layout-and-structure/stack",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/layout-and-structure/stack.md",
+      "file": "web-components/layout-and-structure/stack.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Table",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/layout-and-structure/table",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/layout-and-structure/table.md",
+      "file": "web-components/layout-and-structure/table.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Unordered list",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/layout-and-structure/unordered-list",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/layout-and-structure/unordered-list.md",
+      "file": "web-components/layout-and-structure/unordered-list.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Avatar",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/media-and-visuals/avatar",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/media-and-visuals/avatar.md",
+      "file": "web-components/media-and-visuals/avatar.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Icon",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/media-and-visuals/icon",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/media-and-visuals/icon.md",
+      "file": "web-components/media-and-visuals/icon.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Image",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/media-and-visuals/image",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/media-and-visuals/image.md",
+      "file": "web-components/media-and-visuals/image.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Thumbnail",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/media-and-visuals/thumbnail",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/media-and-visuals/thumbnail.md",
+      "file": "web-components/media-and-visuals/thumbnail.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Modal",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/overlays/modal",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/overlays/modal.md",
+      "file": "web-components/overlays/modal.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Popover",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/overlays/popover",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/overlays/popover.md",
+      "file": "web-components/overlays/popover.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Web components",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components.md",
+      "file": "web-components/README.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Chip",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/typography-and-content/chip",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/typography-and-content/chip.md",
+      "file": "web-components/typography-and-content/chip.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Heading",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/typography-and-content/heading",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/typography-and-content/heading.md",
+      "file": "web-components/typography-and-content/heading.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Paragraph",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/typography-and-content/paragraph",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/typography-and-content/paragraph.md",
+      "file": "web-components/typography-and-content/paragraph.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Text",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/typography-and-content/text",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/typography-and-content/text.md",
+      "file": "web-components/typography-and-content/text.md"
+    },
+    {
+      "family": "web-components",
+      "title": "Tooltip",
+      "sourceUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/typography-and-content/tooltip",
+      "markdownUrl": "https://shopify.dev/docs/api/app-home/latest/web-components/typography-and-content/tooltip.md",
+      "file": "web-components/typography-and-content/tooltip.md"
+    }
+  ]
+}

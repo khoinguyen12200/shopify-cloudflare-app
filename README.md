@@ -97,13 +97,12 @@ rewriting `skills-lock.json`. Run
 lockfile from the upstream skill repositories.
 
 `skills-lock.json` is committed and lists every skill package this repo uses —
-**48 skills from four sources**:
+**33 skills from two sources**:
 
 | Source | What it gives an agent |
 | ------ | ---------------------- |
 | `Shopify/shopify-ai-toolkit` (21) | Look up Admin GraphQL, Polaris, Functions, CLI, App Store review — the lookups `@rules/shopify-and-ui.md` requires |
 | `remotion-dev/skills` (12) | React video, if a project needs it |
-| `pbakaus/impeccable` (1) | Required design workflow and UI quality hooks |
 
 Testing and verification rules are maintained in the repository itself, so the
 installer has no dependency on a separate workflow plugin.
@@ -717,7 +716,7 @@ a production email.
 
 ## Conventions for agents
 
-`AGENTS.md` is the single contract — no cheating, strict TDD, CLEAN rings,
+`AGENTS.md` is the single contract — no cheating, CLEAN rings,
 Cloudflare invariants, and "never write Shopify code from memory". `CLAUDE.md` is
 a one-line pointer at it, so there is no second copy to keep in sync. The
 detailed rules live in `.claude/rules/`.

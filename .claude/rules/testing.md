@@ -1,5 +1,5 @@
 ---
-description: Strict TDD — red→green→refactor with a watched failure every time, real behavior over mocks, no test ever touching a real external service. Apply when writing or changing any test, or any production code that needs one.
+description: Testing guidance — real behavior over mocks, no test ever touching a real external service. Apply when writing or changing any test, or any production code that needs one.
 globs:
   - "app/test/**/*.ts"
   - "app/**/*.test.{ts,tsx}"
@@ -9,56 +9,10 @@ globs:
 alwaysApply: true
 ---
 
-# Testing — strict TDD
-
-This file is the authoritative version of the TDD contract summarized in
-`.claude/CLAUDE.md`. It is not advisory.
-
-## The Iron Law
-
-```
-NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST
-```
-
-Wrote production code before its test? **Delete it and start over test-first.**
-Not "keep it as reference", not "adapt it while writing the test", not "look at
-it once". Delete means delete — code you kept will bias the test into describing
-what you built instead of what was required.
-
-**A test that has never failed is not evidence.** It might assert the wrong
-thing, assert the implementation rather than the behavior, or pass for a reason
-unrelated to the feature. The watched failure is the only proof the test is
-wired to the behavior at all.
-
-**Violating the letter of this rule is violating its spirit.**
-
-## Before writing implementation code
-
-This file carries the complete cycle, good and bad test examples, and the
-rebuttal to every rationalisation. Read and follow it before writing production
-code or changing a test.
+# Testing
 
 Use evidence before claiming anything is done, fixed, or passing, and isolate the
 root cause before changing code for a bug or test failure.
-
-## The loop — every behavior change, no exceptions
-
-1. **RED** — write ONE small test naming the behavior. One thing per test; an
-   "and" in the test name means split it.
-2. **Verify RED — MANDATORY.** Run it. Confirm it *fails*, and fails for the
-   RIGHT reason (feature missing), not from a typo, bad import, or missing
-   fixture. Passed immediately? You are testing existing behavior — fix the
-   test. Errored? Fix the error and re-run until it fails cleanly.
-3. **GREEN** — the minimal code to pass. No speculative options, no config
-   objects "for later", no adjacent refactors. YAGNI.
-4. **Verify GREEN — MANDATORY.** Run it. It passes, neighboring tests still
-   pass, and the output is pristine — no stray errors or warnings. Test still
-   failing? Fix the code, never the assertion.
-5. **REFACTOR** — only once green. Remove duplication, improve names, extract
-   helpers. Stay green. Add no behavior.
-
-You must be able to state, for any behavior you shipped, what the failure
-message said before you implemented it. If you cannot, you did not do this.
 
 ## Test shape by layer
 
@@ -73,12 +27,7 @@ integration test against **real local bindings**. Match the layer, not the file.
 | **Use cases** (`app/services/`) | Decisions tested with fake ports — no D1, no network. If a use case needs real bindings to test, a decision leaked into the wrong ring. |
 | **Webhook and queue consumers** | Integration. Always include a **duplicate-delivery test proving exactly one effect** — deliveries are at-least-once, so the replay test ships with the handler, not as a follow-up ticket. |
 | **Session storage / KV adapters** | Integration against real local KV. Cover expiry, absence, and the oversized-payload fallback. |
-| **Routes / UI** | TDD the server side — loaders, actions, intent handlers, payload builders. Polaris web components cannot be meaningfully unit-tested; verify those by hand and **say so honestly**. Never fake UI coverage by mocking the component tree. |
-
-## A bug fix STARTS with a failing test
-
-Reproduce the bug in a test, watch it fail, then fix it. The test is what proves
-the fix and what stops the regression. Never fix a bug without one.
+| **Routes / UI** | Test the server side — loaders, actions, intent handlers, payload builders. Polaris web components cannot be meaningfully unit-tested; verify those by hand and **say so honestly**. Never fake UI coverage by mocking the component tree. |
 
 ## A test must NEVER call a real external service
 
@@ -99,9 +48,8 @@ So, in this repo:
 - If a test ever needs a recipient address, use a domain you own. Never
   `@example.com`, `.test`, `.invalid`, or `.localhost` (RFC-2606 reserved → hard
   bounce), and never a stranger's real inbox.
-- **The guard has its own test** (`app/outbound-guard.test.ts`), and it must be
-  watched failing with the guard removed. A guard you have never seen fail is
-  not a guard.
+- **The guard has its own test** (`app/outbound-guard.test.ts`) to verify that
+  outbound requests are blocked.
 
 ## Real behavior, not mocks
 
@@ -142,30 +90,7 @@ delete a check, or narrow scope silently to reach green.
 
 ### Checklist
 
-- [ ] Every new behavior has a test that **failed first** at the appropriate layer
-- [ ] Each failure was for the expected reason, and I can state the message
-- [ ] Minimal code written to pass each one
 - [ ] All relevant tests pass; output pristine
 - [ ] Real code exercised; mocks only at the external HTTP boundary
 - [ ] Edge cases: zero, negative, boundary, missing data, duplicate/replay, unauthorized
 - [ ] Ran the commands above and reported the real result
-
-Can't check every box? You skipped TDD. Start over.
-
-## Rationalizations — all rejected
-
-| Excuse | Reality |
-|---|---|
-| "Too simple to test" | Simple code breaks. The test takes 30 seconds. |
-| "I'll write tests after" | Tests written after pass immediately, and prove nothing. |
-| "Tests-after achieve the same goal" | Tests-after ask "what does this do?" Tests-first ask "what *should* it do?" |
-| "I already tested it manually" | Ad-hoc ≠ systematic. No record, can't re-run, forgotten under pressure. |
-| "Deleting hours of work is wasteful" | Sunk cost. Keeping code you can't trust is the actual debt. |
-| "Keep it as reference while I write the test" | You will adapt it. That is testing after. Delete it. |
-| "I need to explore first" | Fine — throw the spike away, then start with TDD. |
-| "TDD is dogmatic, I'm being pragmatic" | TDD *is* the pragmatic path. Debugging production is the slow one. |
-| "This case is different because…" | It isn't. |
-
-Only a human partner can waive this, explicitly, for a named piece of work.
-Throwaway spikes, generated code, and config files are the sole candidates —
-ask, don't assume.

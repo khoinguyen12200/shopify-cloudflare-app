@@ -50,8 +50,6 @@ database.sqlite
 
 # Local tooling noise
 .claude/settings.local.json
-.impeccable/config.local.json
-.impeccable/hook.cache.json
 .DS_Store
 *.log
 

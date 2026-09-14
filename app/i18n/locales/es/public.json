@@ -4,6 +4,8 @@
     "heading": "TODO: qué hace tu aplicación, en una línea",
     "lead": "TODO: la frase siguiente: para quién es y por qué importa.",
     "installCta": "Instalar en Shopify",
+    "storeUrlLabel": "Introduce la URL de tu tienda Shopify",
+    "storeUrlPlaceholder": "tu-tienda.myshopify.com",
     "pricingCta": "Ver precios",
     "featuresHeading": "TODO: título de la sección",
     "features": {

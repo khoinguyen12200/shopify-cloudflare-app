@@ -383,12 +383,7 @@ the equivalent mechanism.
 - [ ] `inlineSize` matches the content, and supporting material is in `aside`
 - [ ] Spacing comes entirely from `s-page` / `s-section` / `s-stack` / `s-grid`
 - [ ] Every string is translated
-- [ ] The server side is TDD'd — loader, action, intent handlers, payload
+- [ ] The server side is tested — loader, action, intent handlers, payload
       builders. Polaris web components cannot be meaningfully unit-tested, so the
       rendering is **verified by hand and reported as verified by hand**
       (`@rules/testing.md`)
-
-Non-trivial design decisions — a new screen, an information-architecture call, an
-empty or error state, a flow — go through `impeccable:impeccable` first. Polaris
-decides which components exist; impeccable decides hierarchy, density, flow, and
-copy.

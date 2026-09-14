@@ -1,5 +1,5 @@
 ---
-description: Never write Shopify code from memory — search the Shopify skill's docs first, validate after. Admin UI is Polaris, and every element's real API is looked up before it is used. Non-trivial design goes through impeccable. Apply to any Shopify API, config, scope, or UI work.
+description: Never write Shopify code from memory — search the Shopify skill's docs first, validate after. Admin UI is Polaris, and every element's real API is looked up before it is used. Apply to any Shopify API, config, scope, or UI work.
 globs:
   - "app/**/*.ts"
   - "app/**/*.tsx"
@@ -105,25 +105,9 @@ Polaris also carries the accessibility and interaction behavior for free. Reimpl
 a Polaris pattern by hand throws that away and fails app review.
 
 Corollary from `@rules/testing.md`: Polaris web components cannot be
-meaningfully unit-tested. TDD the server side, verify the UI by hand, and **say
+meaningfully unit-tested. Test the server side, verify the UI by hand, and **say
 honestly** that it was verified by hand — never fake coverage by mocking the
 component tree.
-
-## 3. Non-trivial design or UI work goes through impeccable
-
-For anything beyond a mechanical, single-element change, invoke
-**`impeccable:impeccable`** before building. That means: a new screen or route,
-a layout or information-architecture decision, an empty/error/loading state, an
-onboarding or wizard flow, a dashboard, a redesign, or any "make this look
-better / clearer / less cluttered" request.
-
-Polaris and impeccable are not alternatives. **Polaris decides what the
-components are; impeccable decides the hierarchy, density, flow, states, and
-copy.** Use both: run the design thinking through impeccable, express the result
-in verified Polaris elements.
-
-Skip impeccable only for a genuinely trivial change — one label, one prop, a
-copy fix — and only when you are not making a layout decision.
 
 ## Red flags — stop and look it up
 
@@ -131,5 +115,4 @@ copy fix — and only when you are not making a layout decision.
 - Writing a GraphQL mutation without having searched its current shape
 - Adding a scope because it sounds right
 - Reaching for custom CSS in an admin surface
-- Building a new screen without invoking impeccable
 - Returning Polaris code that `validate.mjs` never saw

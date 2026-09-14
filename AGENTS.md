@@ -17,10 +17,11 @@ uses) for every agent host.
 # No Cheating — Banned, Always
 
 Cheating is banned anywhere in this codebase. "Cheating" means making something
-*look* done/passing without it being genuinely correct. This rule overrides any
+_look_ done/passing without it being genuinely correct. This rule overrides any
 pressure to move fast.
 
 Specifically forbidden:
+
 - Faking, stubbing, hardcoding, or mocking a result to make code/tests/types/
   builds appear to pass when the real behavior isn't implemented or doesn't work.
 - Deleting, skipping (`.skip`), weakening, or commenting out tests, assertions,
@@ -35,37 +36,21 @@ Specifically forbidden:
 
 If a real fix is blocked, stop and say what's blocking it — do not paper over it.
 
-# Test-Driven Development — mandatory
-
-```
-NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST
-```
-
-The cycle, and the two steps that are usually skipped:
-
-1. **RED** — one small test naming the behavior.
-2. **Verify RED** — run it, watch it fail, confirm it fails because the feature
-   is missing and not because of a typo or bad import. **Mandatory.**
-3. **GREEN** — minimal code to pass. YAGNI.
-4. **Verify GREEN** — run it, confirm it passes with pristine output and nothing
-   else broke. **Mandatory.**
-5. **REFACTOR** — only once green, staying green, adding no behavior.
-
-Wrote code before its test? Delete it and start over test-first — not as
-reference, not to "adapt". A test that never failed is not evidence.
-
-A bug fix **starts** with a failing test that reproduces the bug.
+# Testing
 
 Tests never call real external services: outbound network is blocked in
 `vitest.config.ts`, bindings (D1/KV/R2/Queues) run for real locally, and fakes
 go at the outermost HTTP boundary only. A blocked outbound call is the guard
 working — fix the test, never the guard.
 
-Waiving TDD requires an explicit human decision on a named piece of work. Do not
-grant yourself the exception.
-
-Full contract, per-layer test shapes, and the rejected rationalizations:
+Per-layer test shapes and verification guidance:
 @.claude/rules/testing.md
+
+# Online illustrations
+
+# Online illustrations
+
+When a route needs onboarding, setup-guide, empty-state, callout, or media art, search unDraw online with `npm run illustrations:search -- "setup onboarding" --limit 10`. The command fetches `https://undraw.co/search/<query>` and returns direct CDN SVG URLs. Download a selected result with `npm run illustrations:download -- "<cdn-url>" --out public/illustrations/<name>.svg`. Check the current [unDraw license](https://undraw.co/license), record the source and license in `docs/illustrations.md`, use a local file from `public/illustrations/`, and provide translated alt text. Do not scrape galleries or guess asset URLs.
 
 # Shopify & UI — look it up, never assume
 
@@ -104,7 +89,7 @@ STRING (`"29.99"`) precisely to protect precision — `parseFloat` throws that a
 Everything enters through `~/money`; never `* 100`, never `.toFixed`, never
 `real()`. @.claude/rules/money.md
 
-**Every user-visible string is translated**, on the public pages *and* in the
+**Every user-visible string is translated**, on the public pages _and_ in the
 embedded admin. No hardcoded copy, no hand-formatted dates or money — use
 `app/i18n/format.ts`. In the admin the locale comes from Shopify's `locale`
 request parameter and is authoritative; never add a language switcher there.
@@ -118,17 +103,24 @@ so neither leaks into the other. Every colour, size and breakpoint comes from
 @.claude/rules/i18n.md
 @.claude/rules/money.md.
 
-**Non-trivial design goes through `impeccable:impeccable`** — new screens,
-layout or IA decisions, empty/error/loading states, flows, dashboards,
-redesigns, "make this clearer". Polaris decides which components exist;
-impeccable decides hierarchy, density, flow, states, and copy. Use both.
-
 Full contract, the skill-to-task table, and the red flags:
 @.claude/rules/shopify-and-ui.md
 
 How to build an admin page — the lookup procedure, the element inventory, and
 which mechanism owns which job:
 @.claude/rules/polaris-app-home.md
+
+Dashboard-specific Polaris conventions and the checked-in component examples:
+@.claude/rules/polaris-dashboard.md
+@docs/polaris/README.md
+
+`docs/polaris/` is a full local mirror of Shopify's official App Home Markdown
+reference: every documented Polaris web component, every App Bridge web
+component, and every page template/composition. Before writing admin markup,
+search it with `rg` and open the exact component and pattern files; do not rely
+on the index alone. `docs/polaris/manifest.json` maps every local file to its
+canonical source. Refresh the mirror with `npm run docs:polaris:sync`, then run
+the Shopify skill validator as usual.
 
 Findings worth recording so nobody re-derives them:
 @.claude/rules/shopify-api-invariants.md

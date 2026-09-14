@@ -167,7 +167,7 @@ each adopter.
 1. **Safety and cost:** B1, B3, B4, B5, B6, B7.
 2. **Boundary integrity:** B2, B9, B10, B11, B12, B13, B14.
 3. **Adoption tooling:** production-config parity checks, placeholder checks, release checklist, and an operations runbook.
-4. **Verification:** for every behavior change, write and observe a failing test first; then run targeted tests and `npm run verify`. Do not claim a fix without fresh output.
+4. **Verification:** run targeted tests and `npm run verify` for behavior changes. Do not claim a fix without fresh output.
 
 ## Verified strengths to preserve
 

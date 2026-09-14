@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 
 /**
- * The guard's own test. A guard nobody has watched fail is not a guard — if
- * vitest.config.ts ever loses `outboundService`, this test is what notices.
+ * Verifies that outbound requests are blocked. If vitest.config.ts ever loses
+ * `outboundService`, this test is what notices.
  */
 describe("outbound network guard", () => {
   it("blocks a request to the public internet", async () => {

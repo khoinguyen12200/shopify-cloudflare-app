@@ -47,14 +47,14 @@ export default function Landing() {
           <p className="eyebrow">{t("landing.eyebrow")}</p>
           <h1>{t("landing.heading")}</h1>
           <p className="lead">{t("landing.lead")}</p>
-          <div className="row row--center">
-            <Link to="/auth/login" className="btn btn--primary">
-              {t("landing.installCta")}
-            </Link>
-            <Link to="/pricing" className="btn btn--secondary">
-              {t("landing.pricingCta")}
-            </Link>
-          </div>
+          <form action="/auth/login" method="get" className="stack form--narrow">
+            <div className="field">
+              <label className="field__label" htmlFor="shop">{t("landing.storeUrlLabel")}</label>
+              <input className="field__input" id="shop" name="shop" type="text" required placeholder={t("landing.storeUrlPlaceholder")} autoComplete="url" inputMode="url" />
+            </div>
+            <button type="submit" className="btn btn--primary">{t("landing.installCta")}</button>
+          </form>
+          <Link to="/pricing" className="btn btn--secondary">{t("landing.pricingCta")}</Link>
         </div>
       </section>
 
