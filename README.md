@@ -97,11 +97,11 @@ rewriting `skills-lock.json`. Run
 lockfile from the upstream skill repositories.
 
 `skills-lock.json` is committed and lists every skill package this repo uses —
-**33 skills from two sources**:
+**14 skills from two sources**:
 
 | Source | What it gives an agent |
 | ------ | ---------------------- |
-| `Shopify/shopify-ai-toolkit` (21) | Look up Admin GraphQL, Polaris, Functions, CLI, App Store review — the lookups `@rules/shopify-and-ui.md` requires |
+| `Shopify/shopify-ai-toolkit` (2) | Unified Shopify API/CLI/Polaris lookup plus UCP — the lookups `@rules/shopify-and-ui.md` requires |
 | `remotion-dev/skills` (12) | React video, if a project needs it |
 
 Testing and verification rules are maintained in the repository itself, so the
