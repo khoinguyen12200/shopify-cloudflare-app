@@ -18,7 +18,7 @@
     "preview": "npm run build && vite preview",
     "typecheck": "react-router typegen && tsc --noEmit",
     "lint": "eslint --cache --cache-location ./node_modules/.cache/eslint .",
-    "test": "vitest run && vitest run --config vitest.dom.config.ts",
+    "test": "node --test scripts/localhost-port.test.mjs && vitest run && vitest run --config vitest.dom.config.ts",
     "test:watch": "vitest",
     "cf-typegen": "wrangler types",
     "ai:catalogue": "node scripts/ai-catalogue.mjs",

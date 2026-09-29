@@ -36,6 +36,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { existsSync, lstatSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
 import { homedir } from "node:os";
+import { DEFAULT_LOCALHOST_PORT, findAvailablePort } from "./localhost-port.mjs";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const home = join(repoRoot, ".shopify-home");
@@ -118,13 +119,38 @@ if (!existsSync(localBin)) {
   process.exit(1);
 }
 
+function isAppDev(args) {
+  return args[0] === "app" && args[1] === "dev" && !args.includes("--help");
+}
+
+function hasThemePort(args) {
+  return args.some((arg) => arg === "--theme-app-extension-port" || arg.startsWith("--theme-app-extension-port="));
+}
+
+function configuredPort() {
+  const configured = process.env.SHOPIFY_FLAG_THEME_APP_EXTENSION_PORT;
+  return configured ? Number(configured) : DEFAULT_LOCALHOST_PORT;
+}
+
+async function appDevArgs(args) {
+  if (!isAppDev(args) || hasThemePort(args)) return args;
+
+  const preferred = configuredPort();
+  const port = await findAvailablePort(preferred);
+  if (port !== preferred) {
+    console.log(`Theme extension port ${preferred} is in use; using ${port}.`);
+  }
+  return [...args, `--theme-app-extension-port=${port}`];
+}
+
 // `shopify app dev` opens a TryCloudflare quick tunnel via the bundled
 // cloudflared, which defaults to QUIC (UDP :7844). QUIC registration is
 // unreliable behind many NATs and fails intermittently — the tunnel URL prints
 // but its hostname never provisions, so the browser reports "server IP address
 // could not be found". HTTP/2 rides plain TCP and registers deterministically.
 // Force it, overridable: TUNNEL_TRANSPORT_PROTOCOL=quic npm run dev
-const child = spawn(localBin, process.argv.slice(2), {
+const cliArgs = await appDevArgs(process.argv.slice(2));
+const child = spawn(localBin, cliArgs, {
   stdio: "inherit",
   env: {
     ...process.env,
