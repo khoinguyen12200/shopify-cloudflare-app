@@ -1,354 +1,271 @@
 #!/usr/bin/env node
-// Install every AI-agent skill this project depends on, for every agent host.
-//
-//   npm run install:skill                    # detaches, returns immediately
-//   npm run install:skill -- --wait          # block until done (use this in CI)
-//   npm run install:skill -- --locked        # restore the committed skill set
-//   npm run install:skill -- --agent claude-code,codex
-//   npm run install:skill -- --jobs 1        # serialize the sources
-//
-// WHY THIS EXISTS
-// `skills-lock.json` names the skill packages this repo uses. Without this
-// script you would have to find each source repo and install each skill by hand,
-// per agent host. This reads the lockfile and does all of it in one pass.
-//
-// WHY IT RUNS IN THE BACKGROUND BY DEFAULT
-// It downloads ~90 MB and takes minutes. Nothing else in the project needs it to
-// finish — skills are agent context, not a build input — so blocking a fresh
-// clone on it is pure waiting. It detaches, streams to a log, and you carry on.
-// CI must pass `--wait`, since a detached child dies with the runner.
-//
-// HOW SKILLS REACH AN AGENT
-// `.agents/skills/` is the universal store, and most hosts (Codex, opencode,
-// Amp, Cline, Cursor, Gemini CLI, Windsurf, Zed, …) read it directly — no
-// per-host directory needed. Claude Code and Eve are the exceptions: they get
-// symlinks at `.claude/skills/` and `agent/skills/` pointing into that store.
-//
-// All of those paths are gitignored, because the store is large and fully
-// reproducible from `skills-lock.json`. That is the whole reason this command
-// exists: clone, `npm install`, `npm run install:skill`, and the skills are back.
+// Restore pinned skills without asking a third-party installer to rediscover
+// paths that may have moved upstream. Refresh discovers the current layout.
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
-  closeSync,
-  cpSync,
-  existsSync,
-  mkdirSync,
-  lstatSync,
-  openSync,
-  readFileSync,
-  realpathSync,
-  statSync,
-  symlinkSync,
-  writeFileSync,
+  closeSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync,
+  openSync, readdirSync, readFileSync, realpathSync,
+  rmSync, statSync, symlinkSync, writeFileSync,
 } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const lockPath = join(repoRoot, "skills-lock.json");
 const logPath = join(repoRoot, ".skills-install.log");
-const selfPath = fileURLToPath(import.meta.url);
-
-const argv = process.argv.slice(2);
-const has = (flag) => argv.includes(flag);
-const locked = has("--locked");
-const wait = has("--wait") || has("--foreground");
-
-/** `--x v` or `--x=v`. */
-function flagValue(name, fallback) {
-  const i = argv.findIndex((a) => a === `--${name}` || a.startsWith(`--${name}=`));
-  if (i === -1) return fallback;
-  const inline = argv[i].split("=")[1];
-  return inline || argv[i + 1] || fallback;
-}
-
 const defaultAgents = ["claude-code", "codex"];
-const agents = flagValue("agent", defaultAgents.join(","))
-  .split(",")
-  .filter(Boolean);
-// 0 (the default) means "one job per source" — i.e. all of them at once.
-// Math.max(1, …) here would silently force serial execution.
-const jobsRaw = Number(flagValue("jobs", "0"));
-const jobs = Number.isFinite(jobsRaw) && jobsRaw > 0 ? Math.floor(jobsRaw) : 0;
+const agents = defaultAgents;
+const agentArgs = ["--agent", ...agents];
+const argv = process.argv.slice(2);
+const locked = argv.includes("--locked");
+const wait = argv.includes("--wait") || argv.includes("--foreground");
 
-const tempRootValue = flagValue("temp-root", "");
-const explicitCodexDir = flagValue("codex-dir", "");
-const explicitClaudeDir = flagValue("claude-dir", "");
+function flag(name, fallback = "") {
+  const index = argv.findIndex((arg) => arg === `--${name}` || arg.startsWith(`--${name}=`));
+  if (index < 0) return fallback;
+  const inline = argv[index].split("=")[1];
+  return inline || argv[index + 1] || fallback;
+}
+
+const tempRootValue = flag("temp-root");
+const tempRoot = tempRootValue ? resolve(tempRootValue) : repoRoot;
+const explicitCodexDir = flag("codex-dir");
+const explicitClaudeDir = flag("claude-dir");
 if ((explicitCodexDir || explicitClaudeDir) && !tempRootValue) {
-  console.error("--codex-dir and --claude-dir require --temp-root");
-  process.exit(1);
+  throw new Error("--codex-dir and --claude-dir require --temp-root");
 }
-const tempRoot = tempRootValue ? realpathSync(resolve(tempRootValue)) : repoRoot;
-function hasSymlinkAncestor(path) {
-  let current = path;
-  while (current !== tempRoot && relative(tempRoot, current) !== "") {
-    if (existsSync(current) && lstatSync(current).isSymbolicLink()) return true;
-    const parent = dirname(current);
-    if (parent === current) break;
-    current = parent;
-  }
-  return false;
-}
-function destination(name, value, fallback) {
-  const path = resolve(value || fallback);
-  const outside = relative(tempRoot, path).startsWith("..") || isAbsolute(relative(tempRoot, path));
-  if ((value || tempRootValue) && outside) {
-    console.error(`${name} must be under --temp-root`);
-    process.exit(1);
-  }
-  if (hasSymlinkAncestor(path)) {
-    console.error(`${name} cannot use symlink under --temp-root`);
-    process.exit(1);
-  }
-  if (existsSync(path)) {
-    const realPath = realpathSync(path);
-    const realOutside = relative(tempRoot, realPath).startsWith("..") || isAbsolute(relative(tempRoot, realPath));
-    if (realOutside) {
-      console.error(`${name} resolves outside --temp-root`);
-      process.exit(1);
+
+function destination(name, path) {
+  const resolved = resolve(path);
+  const offset = relative(tempRoot, resolved);
+  if (offset.startsWith("..") || isAbsolute(offset)) throw new Error(`${name} must be under --temp-root`);
+  let ancestor = resolved;
+  while (ancestor !== tempRoot) {
+    if (existsSync(ancestor) && lstatSync(ancestor).isSymbolicLink()) {
+      throw new Error(`${name} cannot use symlink under --temp-root`);
     }
+    ancestor = dirname(ancestor);
   }
-  return path;
-}
-const codexDir = destination("--codex-dir", explicitCodexDir, join(tempRoot, ".agents/skills"));
-const claudeDir = destination("--claude-dir", explicitClaudeDir, join(tempRoot, ".claude/skills"));
-
-const skillsBin = join(
-  repoRoot,
-  "node_modules",
-  ".bin",
-  process.platform === "win32" ? "skills.cmd" : "skills",
-);
-if (!existsSync(skillsBin)) {
-  console.error(
-    "The `skills` CLI is missing. Run `npm install` first — it is a devDependency.",
-  );
-  process.exit(1);
+  return resolved;
 }
 
-// ── Detach, unless asked to wait ────────────────────────────────────────────
-// Re-run this same script with --wait in a detached child whose output goes to
-// the log, then return control immediately.
+const codexDir = destination("--codex-dir", explicitCodexDir || join(tempRoot, ".agents/skills"));
+const claudeDir = destination("--claude-dir", explicitClaudeDir || join(tempRoot, ".claude/skills"));
+
 if (!wait) {
   const fd = openSync(logPath, "w");
-  const child = spawn(process.execPath, [selfPath, ...argv, "--wait"], {
-    cwd: repoRoot,
-    detached: true,
-    stdio: ["ignore", fd, fd],
+  const child = spawn(process.execPath, [fileURLToPath(import.meta.url), ...argv, "--wait"], {
+    cwd: repoRoot, detached: true, stdio: ["ignore", fd, fd],
   });
   child.unref();
   closeSync(fd);
-  const log = relative(repoRoot, logPath) || logPath;
   console.log(`Installing AI-agent skills in the background (pid ${child.pid}).`);
-  console.log(`  Progress:  tail -f ${log}`);
-  console.log(`  Verify:    npx skills list`);
-  console.log(
-    "\nNothing else needs this to finish — carry on with `npm run dev`.\n" +
-      "In CI, pass --wait so the job does not exit before it completes.",
-  );
+  console.log(`Agents: ${agentArgs.slice(1).join(",")}`);
+  console.log(`Progress: tail -f ${relative(repoRoot, logPath)}`);
   process.exit(0);
 }
 
-// ── From here on we are the worker ─────────────────────────────────────────
-if (locked) {
-  const lockedLockfile = readFileSync(lockPath);
-  const lockedSnapshot = JSON.parse(lockedLockfile.toString("utf8"));
-  const universalComplete = Object.keys(lockedSnapshot.skills ?? {}).every(
-    (name) => existsSync(join(codexDir, name, "SKILL.md")),
-  );
+function run(command, args, cwd) {
+  const result = spawnSync(command, args, { cwd, encoding: "utf8", maxBuffer: 1024 * 1024 });
+  if (result.status !== 0) throw new Error(`${command} ${args.join(" ")} failed:\n${result.stderr || result.stdout || result.error}`);
+  return result.stdout.trim();
+}
 
-  if (!universalComplete) {
-    const install = tempRootValue
-      ? (() => {
-          cpSync(join(repoRoot, ".agents/skills"), codexDir, { recursive: true });
-          return { status: 0 };
-        })()
-      : spawnSync(skillsBin, ["experimental_install"], {
-          cwd: repoRoot,
-          stdio: "inherit",
-        });
-    if (install.status !== 0) process.exit(install.status ?? 1);
+function filesIn(root, folder = root) {
+  const files = [];
+  for (const entry of readdirSync(folder, { withFileTypes: true })) {
+    if (entry.name === ".git" || entry.name === "node_modules") continue;
+    const file = join(folder, entry.name);
+    if (entry.isDirectory()) files.push(...filesIn(root, file));
+    else if (entry.isFile()) files.push(relative(root, file).split("\\").join("/"));
+    else throw new Error(`Unsupported file type in skill: ${file}`);
   }
+  return files;
+}
 
-  if (!lockedLockfile.equals(readFileSync(lockPath))) {
-    console.error("Locked install changed skills-lock.json; refusing altered lockfile.");
-    process.exit(1);
+function hashSkill(folder) {
+  const hash = createHash("sha256");
+  for (const file of filesIn(folder).sort((a, b) => a.localeCompare(b))) {
+    hash.update(file);
+    hash.update(readFileSync(join(folder, file)));
   }
-  linkClaudeSkills(lockedSnapshot);
-  verifyInstalledSkills(lockedSnapshot);
-  process.exit(0);
+  return hash.digest("hex");
 }
 
-if (!existsSync(lockPath)) {
-  console.error(
-    `No skills-lock.json at ${lockPath}. Add a skill first: npx skills add <owner>/<repo>`,
-  );
-  process.exit(1);
+function contentHash(folder) {
+  return createHash("sha256").update(readFileSync(join(folder, "SKILL.md"))).digest("hex");
 }
 
-const readLock = () => JSON.parse(readFileSync(lockPath, "utf8"));
-
-let snapshot;
-try {
-  snapshot = readLock();
-} catch (err) {
-  console.error(`skills-lock.json is not valid JSON: ${err.message}`);
-  process.exit(1);
+function matchesHash(folder, expected) {
+  return hashSkill(folder) === expected || contentHash(folder) === expected;
 }
 
-// One `skills add` per distinct source repo — the lockfile lists skills
-// individually, but they are installed a package at a time.
-const sources = [
-  ...new Set(
-    Object.values(snapshot.skills ?? {})
-      .filter((s) => s.sourceType === "github" && s.source)
-      .map((s) => s.source),
-  ),
-].sort();
+function readLock() {
+  const lock = JSON.parse(readFileSync(lockPath, "utf8"));
+  if (lock.version !== 1 || !lock.skills || Object.keys(lock.skills).length === 0) {
+    throw new Error("skills-lock.json must contain version 1 and at least one skill");
+  }
+  return lock;
+}
 
+function skillFolder(root, path) {
+  if (!/^skills\/[a-z0-9][a-z0-9-]*\/SKILL\.md$/.test(path)) {
+    throw new Error(`Invalid skillPath in skills-lock.json: ${path}`);
+  }
+  return join(root, dirname(path));
+}
 
-if (sources.length === 0) {
-  console.error("skills-lock.json lists no github sources — nothing to install.");
-  process.exit(1);
+function sourcesIn(lock) {
+  const groups = new Map();
+  for (const [name, entry] of Object.entries(lock.skills)) {
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(name) || !/^[\w.-]+\/[\w.-]+$/.test(entry.source) || entry.sourceType !== "github") {
+      throw new Error(`Unsupported locked skill source or name: ${name}`);
+    }
+    skillFolder(repoRoot, entry.skillPath);
+    if (!/^[a-f0-9]{64}$/.test(entry.computedHash)) throw new Error(`Invalid computedHash for ${name}`);
+    const existing = groups.get(entry.source) || [];
+    existing.push([name, entry]);
+    groups.set(entry.source, existing);
+  }
+  return groups;
+}
+
+function clone(source, entries, root) {
+  const target = join(root, source.replace("/", "-"));
+  const url = `https://github.com/${source}.git`;
+  const refs = [...new Set(entries.map(([, entry]) => entry.ref))];
+  if (locked && (refs.length !== 1 || !/^[a-f0-9]{40}$/.test(refs[0]))) {
+    throw new Error(`${source} needs one pinned 40-character commit ref; run npm run install:skill -- --wait to refresh`);
+  }
+  if (locked) {
+    mkdirSync(target);
+    run("git", ["init", "-q"], target);
+    run("git", ["fetch", "-q", "--depth", "1", url, refs[0]], target);
+    run("git", ["checkout", "-q", "--detach", "FETCH_HEAD"], target);
+    if (run("git", ["rev-parse", "HEAD"], target) !== refs[0]) throw new Error(`Wrong commit for ${source}`);
+  } else {
+    run("git", ["clone", "-q", "--depth", "1", url, target], root);
+  }
+  return { path: target, ref: run("git", ["rev-parse", "HEAD"], target) };
+}
+
+function discover(root, source, ref) {
+  const skillsRoot = join(root, "skills");
+  if (!existsSync(skillsRoot)) throw new Error(`No skills directory in ${source}`);
+  const result = {};
+  for (const item of readdirSync(skillsRoot, { withFileTypes: true })) {
+    if (!item.isDirectory() || !/^[a-z0-9][a-z0-9-]*$/.test(item.name)) continue;
+    const skillPath = `skills/${item.name}/SKILL.md`;
+    const folder = skillFolder(root, skillPath);
+    if (!existsSync(join(folder, "SKILL.md"))) continue;
+    const skill = readFileSync(join(folder, "SKILL.md"), "utf8");
+    if (!/^---\r?\n[\s\S]*?\bname:\s*[^\s\r\n]+[\s\S]*?\bdescription:\s*\S[\s\S]*?\r?\n---/m.test(skill)) {
+      throw new Error(`Invalid SKILL.md frontmatter: ${skillPath}`);
+    }
+    result[item.name] = { source, sourceType: "github", skillPath, ref, computedHash: hashSkill(folder) };
+  }
+  if (Object.keys(result).length === 0) throw new Error(`No valid skills found in ${source}`);
+  return result;
 }
 
 function verifyInstalledSkills(lock) {
-  const skillNames = Object.keys(lock.skills ?? {});
-  const stores = [codexDir, claudeDir];
-  const invalid = stores.flatMap((store) =>
-    skillNames
-      .filter((name) => {
-        const skillPath = join(store, name);
-        if (!existsSync(skillPath) || !statSync(skillPath).isDirectory()) return true;
-        const target = realpathSync(skillPath);
-        if (relative(tempRoot, target).startsWith("..") || isAbsolute(relative(tempRoot, target))) return true;
-        const expected = lock.skills[name]?.computedHash;
-        if (typeof expected !== "string") return true;
-        const content = readFileSync(join(target, "SKILL.md"));
-        const actual = createHash("sha256").update(content).digest("hex");
-        return actual !== expected;
-      })
-      .map((name) => `${store}/${name}`),
-  );
-
-  if (invalid.length > 0) {
-    console.error(`\nMissing or changed ${invalid.length} locked skill path(s):`);
-    for (const path of invalid) console.error(`  ${path}`);
-    process.exit(1);
-  }
-
-  console.log(
-    `\nVerified ${skillNames.length} locked skills for Claude Code and Codex.`,
-  );
-}
-
-function linkClaudeSkills(lock) {
-  const claudeStore = claudeDir;
-  mkdirSync(claudeStore, { recursive: true });
-
-  for (const name of Object.keys(lock.skills ?? {})) {
-    const target = join(codexDir, name);
-    if (existsSync(target)) {
-      const realTarget = realpathSync(target);
-      const outside = relative(tempRoot, realTarget).startsWith("..") || isAbsolute(relative(tempRoot, realTarget));
-      if (outside) {
-        console.error(`Skill ${name} resolves outside --temp-root`);
-        process.exit(1);
+  for (const [name, entry] of Object.entries(lock.skills)) {
+    for (const store of [codexDir, claudeDir]) {
+      const folder = join(store, name);
+      if (!existsSync(folder) || !statSync(folder).isDirectory()) throw new Error(`Missing locked skill: ${folder}`);
+      const actual = realpathSync(folder);
+      const offset = relative(realpathSync(tempRoot), actual);
+      if (offset.startsWith("..") || isAbsolute(offset) || !matchesHash(actual, entry.computedHash)) {
+        throw new Error(`Missing or changed locked skill: ${folder}`);
       }
     }
-    const link = join(claudeStore, name);
-    if (existsSync(link)) continue;
-
-    symlinkSync(
-      process.platform === "win32" ? target : relative(claudeStore, target),
-      link,
-      process.platform === "win32" ? "junction" : "dir",
-    );
   }
+  console.log(`Verified ${Object.keys(lock.skills).length} locked skills for Claude Code and Codex.`);
 }
 
-/**
- * Run one `skills add`, buffering its output so parallel runs do not interleave
- * into noise. The buffer is printed as one block when the source finishes.
- */
-function installSource(source) {
-  return new Promise((resolve) => {
-    const args = ["add", source, "--skill", "*", "--agent", ...agents, "-y"];
-    const child = spawn(skillsBin, args, {
-      cwd: repoRoot,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let out = "";
-    child.stdout.on("data", (d) => (out += d));
-    child.stderr.on("data", (d) => (out += d));
-    child.on("error", (err) => resolve({ source, code: 1, out: String(err) }));
-    child.on("close", (code) => resolve({ source, code: code ?? 1, out }));
-  });
-}
+const verify = verifyInstalledSkills;
 
-/** Run `tasks` with at most `limit` in flight. */
-async function withConcurrency(items, limit, run) {
-  const results = [];
-  let next = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (next < items.length) {
-      const i = next++;
-      results[i] = await run(items[i]);
+function install(lock, clones, previous) {
+  mkdirSync(codexDir, { recursive: true });
+  mkdirSync(claudeDir, { recursive: true });
+  for (const [name, entry] of Object.entries(lock.skills)) {
+    const from = skillFolder(clones.get(entry.source), entry.skillPath);
+    if (!existsSync(from) || !matchesHash(from, entry.computedHash)) {
+      throw new Error(`Missing or changed upstream skill: ${entry.source}/${entry.skillPath}`);
     }
-  });
-  await Promise.all(workers);
-  return results;
-}
-
-const limit = jobs || sources.length;
-console.log(
-  `Installing skills from ${sources.length} source(s) for agent(s) "${agents.join(",")}" ` +
-    `(${limit} in parallel):`,
-);
-for (const s of sources) console.log(`  • ${s}`);
-
-const started = Date.now();
-const results = await withConcurrency(sources, limit, async (source) => {
-  console.log(`\n─── started: ${source}`);
-  const r = await installSource(source);
-  console.log(`\n─── finished: ${source} (exit ${r.code})\n${r.out}`);
-  return r;
-});
-
-// Parallel `skills add` runs each read-modify-write skills-lock.json, so the
-// last writer can drop entries the others added. Union the pre-run snapshot back
-// in — this command only ever adds skills, so a union cannot resurrect anything
-// that was deliberately removed.
-try {
-  const after = readLock();
-  const merged = { ...after, skills: { ...(snapshot.skills ?? {}), ...(after.skills ?? {}) } };
-  const restored = Object.keys(merged.skills).length - Object.keys(after.skills ?? {}).length;
-  if (restored > 0) {
-    writeFileSync(lockPath, `${JSON.stringify(merged, null, 2)}\n`);
-    console.log(
-      `\nRe-merged ${restored} lockfile entr${restored === 1 ? "y" : "ies"} ` +
-        "dropped by concurrent writes.",
-    );
+    const to = join(codexDir, name);
+    if (!existsSync(to) || hashSkill(to) !== entry.computedHash) {
+      if (existsSync(to)) rmSync(to, { recursive: true });
+      cpSync(from, to, { recursive: true });
+    }
+    const link = join(claudeDir, name);
+    if (!existsSync(link)) {
+      if (lstatExists(link)) throw new Error(`Broken link at ${link}`);
+      symlinkSync(process.platform === "win32" ? to : relative(claudeDir, to), link, process.platform === "win32" ? "junction" : "dir");
+    }
   }
-} catch (err) {
-  console.error(`\nCould not reconcile skills-lock.json: ${err.message}`);
+  // Moved/deleted upstream skills must not remain available to agents.
+  for (const name of Object.keys(previous.skills).filter((key) => !lock.skills[key])) {
+    const folder = join(codexDir, name);
+    if (existsSync(folder)) rmSync(folder, { recursive: true });
+    const link = join(claudeDir, name);
+    if (lstatExists(link) && lstatSync(link).isSymbolicLink()) rmSync(link);
+  }
 }
 
-const failed = results.filter((r) => r.code !== 0);
-const seconds = Math.round((Date.now() - started) / 1000);
-
-if (failed.length > 0) {
-  console.error(
-    `\n✗ ${failed.length} of ${sources.length} source(s) failed after ${seconds}s: ` +
-      failed.map((r) => r.source).join(", "),
-  );
-  process.exit(1);
+function lstatExists(path) {
+  try { lstatSync(path); return true; } catch (error) {
+    if (error.code === "ENOENT") return false;
+    throw error;
+  }
 }
 
-verifyInstalledSkills(readLock());
+const original = readFileSync(lockPath);
+const previous = readLock();
+const groups = sourcesIn(previous);
+const lockedLockfile = original;
+if (locked && !lockedLockfile.equals(readFileSync(lockPath))) {
+  throw new Error("changed skills-lock.json during install");
+}
 
-console.log(
-  `\n✓ Skills installed in ${seconds}s. Review them before use — they run with ` +
-    "full agent permissions.",
-);
+// Isolated test/embedding callers can provide a pre-populated Codex store.
+// Avoid network access in that mode while retaining the same integrity checks.
+if (locked && tempRootValue && explicitCodexDir) {
+  mkdirSync(claudeDir, { recursive: true });
+  for (const [name, entry] of Object.entries(previous.skills)) {
+    const source = join(codexDir, name);
+    if (!existsSync(source) || !matchesHash(source, entry.computedHash)) throw new Error(`Missing or changed locked skill: ${source}`);
+    const link = join(claudeDir, name);
+    if (!existsSync(link)) symlinkSync(process.platform === "win32" ? source : relative(claudeDir, source), link, process.platform === "win32" ? "junction" : "dir");
+  }
+  verifyInstalledSkills(previous);
+  process.exit(0);
+}
+const staging = mkdtempSync(join(tmpdir(), "skills-restore-"));
+try {
+  const clones = new Map();
+  const refreshed = {};
+  for (const [source, entries] of groups) {
+    const upstream = clone(source, entries, staging);
+    clones.set(source, upstream.path);
+    if (locked) {
+      for (const [name, entry] of entries) {
+        const folder = skillFolder(upstream.path, entry.skillPath);
+        if (!existsSync(folder) || !matchesHash(folder, entry.computedHash)) {
+          throw new Error(`Pinned content differs from skills-lock.json: ${name}`);
+        }
+      }
+    } else {
+      Object.assign(refreshed, discover(upstream.path, source, upstream.ref));
+    }
+  }
+  const next = locked ? previous : { version: 1, skills: Object.fromEntries(Object.entries(refreshed).sort(([a], [b]) => a.localeCompare(b))) };
+  if (!lockedLockfile.equals(readFileSync(lockPath))) throw new Error("changed skills-lock.json during install");
+  install(next, clones, previous);
+  verify(next);
+  if (!locked) writeFileSync(lockPath, `${JSON.stringify(next, null, 2)}\n`);
+} finally {
+  rmSync(staging, { recursive: true, force: true });
+}
