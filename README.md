@@ -153,10 +153,11 @@ scripts go through it. It gives you two kinds of isolation:
 Your real `wrangler` credentials are symlinked into that isolated home, because
 wrangler runs inside `shopify app dev`.
 
-`npm run dev` checks the theme app extension server's default port (`9293`)
-before starting Shopify CLI. If another process owns it, the wrapper passes
-the next available port via `--theme-app-extension-port`; Shopify CLI prints
-the selected preview URL. `npm run dev:local` uses Vite's built-in port fallback.
+`npm run dev` checks the theme app extension server's default port (`9293`) and
+GraphiQL's default port (`3457`) before starting Shopify CLI. If another process
+owns either port, the wrapper passes the next available port via the matching
+CLI flag; Shopify CLI prints the selected URLs. `npm run dev:local` uses Vite's
+built-in port fallback.
 
 ## Deploying
 

@@ -36,7 +36,11 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { existsSync, lstatSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
 import { homedir } from "node:os";
-import { DEFAULT_LOCALHOST_PORT, findAvailablePort } from "./localhost-port.mjs";
+import {
+  DEFAULT_GRAPHIQL_PORT,
+  DEFAULT_LOCALHOST_PORT,
+  findAvailablePort,
+} from "./localhost-port.mjs";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const home = join(repoRoot, ".shopify-home");
@@ -123,24 +127,45 @@ function isAppDev(args) {
   return args[0] === "app" && args[1] === "dev" && !args.includes("--help");
 }
 
-function hasThemePort(args) {
-  return args.some((arg) => arg === "--theme-app-extension-port" || arg.startsWith("--theme-app-extension-port="));
+function hasFlag(args, flag) {
+  return args.some((arg) => arg === flag || arg.startsWith(`${flag}=`));
 }
 
-function configuredPort() {
-  const configured = process.env.SHOPIFY_FLAG_THEME_APP_EXTENSION_PORT;
-  return configured ? Number(configured) : DEFAULT_LOCALHOST_PORT;
+function preferredPort(envName, fallback) {
+  const configured = process.env[envName];
+  if (configured === undefined) return fallback;
+
+  const port = Number(configured);
+  return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : fallback;
+}
+
+async function addAvailablePort(args, { flag, envName, fallback, label }) {
+  if (hasFlag(args, flag)) return args;
+
+  const preferred = preferredPort(envName, fallback);
+  const port = await findAvailablePort(preferred);
+  if (port !== preferred) {
+    console.log(`${label} port ${preferred} is in use; using ${port}.`);
+  }
+  return [...args, `${flag}=${port}`];
 }
 
 async function appDevArgs(args) {
-  if (!isAppDev(args) || hasThemePort(args)) return args;
+  if (!isAppDev(args)) return args;
 
-  const preferred = configuredPort();
-  const port = await findAvailablePort(preferred);
-  if (port !== preferred) {
-    console.log(`Theme extension port ${preferred} is in use; using ${port}.`);
-  }
-  return [...args, `--theme-app-extension-port=${port}`];
+  let nextArgs = await addAvailablePort(args, {
+    flag: "--theme-app-extension-port",
+    envName: "SHOPIFY_FLAG_THEME_APP_EXTENSION_PORT",
+    fallback: DEFAULT_LOCALHOST_PORT,
+    label: "Theme extension",
+  });
+  nextArgs = await addAvailablePort(nextArgs, {
+    flag: "--graphiql-port",
+    envName: "SHOPIFY_FLAG_GRAPHIQL_PORT",
+    fallback: DEFAULT_GRAPHIQL_PORT,
+    label: "GraphiQL",
+  });
+  return nextArgs;
 }
 
 // `shopify app dev` opens a TryCloudflare quick tunnel via the bundled

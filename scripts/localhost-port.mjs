@@ -1,5 +1,6 @@
 import { createServer } from "node:net";
 
+export const DEFAULT_GRAPHIQL_PORT = 3457;
 export const DEFAULT_LOCALHOST_PORT = 9293;
 
 function canListen(port) {
