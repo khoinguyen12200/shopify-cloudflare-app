@@ -9,6 +9,9 @@ import {
 import ShopDetail from "./detail";
 import type { Shop } from "~/db/schema";
 import type { SubscriptionHistoryRow } from "~/models/shopify-events.server";
+import type { ShopPlanGrant } from "~/db/schema/plan-grants";
+import type { EffectivePlanResult } from "~/domain/plan-hierarchy";
+import type { PlanHandle } from "~/billing/plans";
 
 type EventHistoryRow = {
   readonly id: string;
@@ -61,9 +64,9 @@ async function render(data: {
   history: SubscriptionHistoryRow[];
   events: EventHistoryRow[];
   reconciliation?: { lastSucceededAt: number | null; lastFailedAt: number | null; failureCode: string | null; failureDetail: string | null } | null;
-  promoStatus?: any;
-  effective?: any;
-  promoAvailablePlans?: any[];
+  promoStatus?: { activeGrant: ShopPlanGrant | null; history: ShopPlanGrant[] };
+  effective?: EffectivePlanResult;
+  promoAvailablePlans?: { handle: PlanHandle; name: string }[];
   now?: number;
 }) {
   const routes: RouteObject[] = [
