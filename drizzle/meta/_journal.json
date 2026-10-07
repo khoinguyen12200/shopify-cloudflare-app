@@ -176,6 +176,13 @@
       "when": 1791346929099,
       "tag": "0024_tough_shard",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1791367861179,
+      "tag": "0025_wandering_korath",
+      "breakpoints": true
     }
   ]
 }

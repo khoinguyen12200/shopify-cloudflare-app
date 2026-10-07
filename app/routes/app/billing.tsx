@@ -1,4 +1,3 @@
-import { shopSubscriptions } from "~/wiring.server";
 import { useEffect } from "react";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { data, useFetcher, useLoaderData, useNavigate } from "react-router";
@@ -17,11 +16,18 @@ import { currentPlanHandleFor } from "~/billing/current-plan";
 import { planPriceLine, type PriceCadence } from "~/billing/plan-price-line";
 import { pricingPlansUrl } from "~/billing/pricing-plans-url";
 import { FEATURED_PLAN_HANDLE, PLANS, PLAN_LIST, planForShopifyHandle } from "~/billing/plans";
-import { persistShopIdentity, refreshShopHistory, refreshShopSubscription } from "~/wiring.server";
+import {
+  persistShopIdentity,
+  planGrants,
+  refreshShopHistory,
+  refreshShopSubscription,
+  shopSubscriptions,
+} from "~/wiring.server";
 import { PlanCard, PLAN_CARD_CSS } from "~/components/billing/PlanCard";
 import type { SubscriptionStatus } from "~/billing/subscription-status";
 import { isPricingReturn } from "~/billing/pricing-return";
 import { reconcileShop } from "~/services/reconcile-shop";
+import { resolveEffectivePlan } from "~/domain/plan-hierarchy";
 
 type Subscribed = Extract<BillingStatus, { kind: "subscribed" }>;
 
@@ -85,9 +91,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Shopify owns the actual subscribe/upgrade/cancel flow (Managed Pricing);
   // this page only ever reads status. There's no in-app request()/cancel() —
   // Partner history projects entitlement changes, and D1 serves normal visits.
-  const projection = await shopSubscriptions().currentForShop(session.shop);
+  const [projection, activeGrant] = await Promise.all([
+    shopSubscriptions().currentForShop(session.shop),
+    planGrants().findActiveGrant(session.shop),
+  ]);
+  const effective = resolveEffectivePlan(
+    projection?.planHandle,
+    projection?.status,
+    activeGrant,
+    PLAN_LIST,
+  );
   const planName = planForShopifyHandle(projection?.planHandle)?.name ?? PLANS.free.name;
   const status = resolveProjectionBillingStatus(projection, planName, Date.now());
+
+  const promo = effective.source === "promo" && effective.activePromo
+    ? {
+        handle: effective.planHandle,
+        name: PLANS[effective.planHandle]?.name ?? effective.planHandle,
+        remainingDays: effective.activePromo.remainingDays,
+      }
+    : null;
 
   const env = getEnv();
   const appIdentity = await new ShopifyAppIdentityAdapter({
@@ -101,6 +124,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     planHandle: projection?.planHandle ?? null,
     pricingPlansUrl: pricingPlansUrl(session.shop, appIdentity.handle),
     pricingReturn,
+    promo,
   };
 };
 
@@ -110,10 +134,10 @@ export default function Billing() {
   const locale = useLocale();
   if (loaderData.pricingReturn) return <BillingProcessing />;
 
-  const { status, pricingPlansUrl, planHandle } = loaderData;
+  const { status, pricingPlansUrl, planHandle, promo } = loaderData;
   const cycleCopy =
     status.kind === "subscribed" ? billingCycleCopy(locale, status) : null;
-  const currentPlanHandle = currentPlanHandleFor(status, planHandle);
+  const currentPlanHandle = promo ? promo.handle : currentPlanHandleFor(status, planHandle);
   const priceLine = planPriceLine(status);
 
   return (
@@ -140,8 +164,13 @@ export default function Billing() {
 
             <s-stack direction="inline" gap="small" alignItems="center">
               <s-heading>
-                {status.kind === "free" ? PLANS.free.name : status.name}
+                {promo ? promo.name : (status.kind === "free" ? PLANS.free.name : status.name)}
               </s-heading>
+              {promo && (
+                <s-badge tone="success">
+                  {`Promo active (${promo.remainingDays}d remaining)`}
+                </s-badge>
+              )}
               {status.kind === "subscribed" && (
                 <>
                   <s-badge tone={STATUS_TONE[status.status]}>

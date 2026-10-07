@@ -1,7 +1,7 @@
 import { drizzle } from "drizzle-orm/d1";
 import { count, eq, inArray, and, isTable, getTableName } from "drizzle-orm";
 import * as schema from "~/db/schema";
-import { aiRuns, entitlementAllocations, entitlementOperations, entitlementUsage, mcpAuditLogs, notificationLogs, notificationOptOuts, notificationPreferences, pendingUploads, shopGrantedScopes, shopScopeChanges, shopSubscriptionItems, shopSubscriptions, shopifyEvents, shopifySyncCheckpoints, shops, supportAttachments, supportMessages, supportTickets, webhookDeliveries, webhookScopeObservations } from "~/db/schema";
+import { aiRuns, entitlementAllocations, entitlementOperations, entitlementUsage, mcpAuditLogs, notificationLogs, notificationOptOuts, notificationPreferences, pendingUploads, shopGrantedScopes, shopPlanGrants, shopScopeChanges, shopSubscriptionItems, shopSubscriptions, shopifyEvents, shopifySyncCheckpoints, shops, supportAttachments, supportMessages, supportTickets, webhookDeliveries, webhookScopeObservations } from "~/db/schema";
 import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:test";
 import { runWithRequestContext } from "~/request-context.server";
@@ -15,7 +15,7 @@ describe("TenantPurgeRepo", () => {
   it("inventory covers every table with a shop column", async () => {
     const tables = await runWithRequestContext(env, schemaShopColumns);
     expect(tables).toEqual([
-      "ai_runs", "entitlement_allocations", "entitlement_operations", "entitlement_usage", "mcp_audit_logs", "notification_logs", "pending_uploads", "shop_granted_scopes", "shop_scope_changes", "shop_subscription_items",
+      "ai_runs", "entitlement_allocations", "entitlement_operations", "entitlement_usage", "mcp_audit_logs", "notification_logs", "pending_uploads", "shop_granted_scopes", "shop_plan_grants", "shop_scope_changes", "shop_subscription_items",
       "shop_subscriptions", "shopify_events", "shops", "support_attachments",
       "support_messages", "support_tickets", "webhook_deliveries", "webhook_scope_observations",
     ]);
@@ -106,6 +106,7 @@ describe("TenantPurgeRepo", () => {
         await db.insert(entitlementOperations).values({ shop: shop, operationId: `op-${shop}`, key: "test", period: "lifetime", requestedAmount: 1, reservedAmount: 1, subscriptionRevision: 1, state: "held", createdAt: 1, updatedAt: 1 }).run();
         await db.insert(entitlementAllocations).values({ shop: shop, key: "staff.max", allocationId: `alloc-${shop}`, operationId: `op-alloc-${shop}`, subscriptionRevision: 1, state: "allocated", createdAt: 1, updatedAt: 1 }).run();
         await db.insert(mcpAuditLogs).values({ id: `audit-${shop}`, actorEmail: "staff@test.com", actorType: "staff_pat", toolName: "test", shop: shop, isMutation: false, ok: true, latencyMs: 1, createdAt: 1 }).run();
+        await db.insert(shopPlanGrants).values({ id: `grant-${shop}`, shop: shop, planHandle: "pro", reason: "test", grantedBy: "staff@test.com", startsAt: 1, expiresAt: 2, createdAt: 1 }).run();
       }
       await db.insert(notificationPreferences).values({ scope: "global", event: "test", channel: "email", enabled: true, updatedAt: 1 }).run();
       await db.insert(notificationOptOuts).values({ scope: "global", channel: "email", address: "global@example.com", optedOutAt: 1, source: "test" }).run();

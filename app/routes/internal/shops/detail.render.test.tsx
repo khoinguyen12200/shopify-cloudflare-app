@@ -56,7 +56,16 @@ function event(overrides: Partial<SubscriptionHistoryRow> = {}): SubscriptionHis
   };
 }
 
-async function render(data: { shop: Shop; history: SubscriptionHistoryRow[]; events: EventHistoryRow[]; reconciliation?: { lastSucceededAt: number | null; lastFailedAt: number | null; failureCode: string | null; failureDetail: string | null } | null }) {
+async function render(data: {
+  shop: Shop;
+  history: SubscriptionHistoryRow[];
+  events: EventHistoryRow[];
+  reconciliation?: { lastSucceededAt: number | null; lastFailedAt: number | null; failureCode: string | null; failureDetail: string | null } | null;
+  promoStatus?: any;
+  effective?: any;
+  promoAvailablePlans?: any[];
+  now?: number;
+}) {
   const routes: RouteObject[] = [
     { path: "/internal/shops/:shop", Component: ShopDetail, loader: () => data },
   ];
@@ -109,5 +118,38 @@ describe("the internal shop detail page", () => {
     const html = await render({ shop: shop(), history: [], events: [], reconciliation: { lastSucceededAt: null, lastFailedAt: 1_700_000_000_000, failureCode: "HISTORY_SYNC_FAILED", failureDetail: "Manage apps required" } });
     expect(html).toContain("Partner reconciliation failed");
     expect(html).toContain("Manage apps required");
+  });
+
+  it("renders promotional plan override card and active promo banner", async () => {
+    const html = await render({
+      shop: shop(),
+      history: [],
+      events: [],
+      promoStatus: {
+        activeGrant: {
+          id: "grant-test",
+          shop: "cool-shop.myshopify.com",
+          planHandle: "pro",
+          reason: "VIP Partner",
+          grantedBy: "staff@example.com",
+          startsAt: 1_700_000_000_000,
+          expiresAt: 1_700_864_000_000,
+          revokedAt: null,
+          revokedBy: null,
+          createdAt: 1_700_000_000_000,
+        },
+        history: [],
+      },
+      effective: {
+        planHandle: "pro",
+        source: "promo",
+        activePromo: { planHandle: "pro", expiresAt: 1_700_864_000_000, remainingDays: 10 },
+      },
+      promoAvailablePlans: [{ handle: "pro", name: "Pro" }],
+      now: 1_700_000_000_000,
+    });
+    expect(html).toContain("Promotional Plan Overrides");
+    expect(html).toContain("Promo Active: PRO");
+    expect(html).toContain("10d left");
   });
 });

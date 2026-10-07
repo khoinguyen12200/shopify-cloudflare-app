@@ -36,9 +36,12 @@ import type { EntitlementCachePort, ExistingQuotaOperation, SubscriptionPort } f
 import { ENTITLEMENT_CATALOGUE } from "~/billing/entitlement-catalogue";
 import { createEntitlementCache, type EntitlementCacheAdapterPort } from "~/adapters/entitlement-cache.server";
 import type { HeldItem, HeldReconciliationPort } from "~/ports/entitlement-reconciliation";
-
 import { McpAuditLogRepo, McpOAuthRepo, McpTokenRepo } from "~/models/mcp.server";
 import type { McpAuditLogPort, McpOAuthPort, McpTokenPort } from "~/ports/mcp";
+import { PlanGrantsRepo } from "~/models/plan-grants.server";
+import type { PlanGrantsPort } from "~/ports/plan-grants";
+import { resolveEffectivePlan } from "~/domain/plan-hierarchy";
+import { PLAN_LIST } from "~/billing/plans";
 
 type HeldPosition = Pick<HeldItem, "createdAt" | "kind" | "key" | "id">;
 
@@ -167,6 +170,7 @@ export function aiRepository(): AiRepositoryPort { return new AiRepo(); }
 export function mcpTokens(): McpTokenPort { return new McpTokenRepo(); }
 export function mcpOAuth(): McpOAuthPort { return new McpOAuthRepo(); }
 export function mcpAuditLogs(): McpAuditLogPort { return new McpAuditLogRepo(); }
+export function planGrants(): PlanGrantsPort { return new PlanGrantsRepo(); }
 
 /** Advisory KV cache for entitlement previews; D1 remains authoritative. */
 export function entitlementCache(): EntitlementCacheAdapterPort {
@@ -182,7 +186,7 @@ export function entitlementCachePort(): EntitlementCachePort {
   };
 }
 
-async function invalidateEntitlements(shop: string): Promise<void> {
+export async function invalidateEntitlements(shop: string): Promise<void> {
   try {
     await entitlementCache().delete(shop);
   } catch (error) {
@@ -198,11 +202,28 @@ export function subscriptionsPort(): SubscriptionPort {
   const current = async (shop: string) => {
     const relationship = await shops().get(shop);
     if (!relationship || relationship.relationshipStatus !== "INSTALLED") return { status: "UNKNOWN" as const, planHandle: null, revision: 0 };
-    const projection = await shopSubscriptions().currentForShop(shop);
-    return { status: projection?.status ?? "UNKNOWN" as const, planHandle: projection?.planHandle ?? null,
-      revision: projection?.revision ?? 0, periodStart: projection?.currentPeriodStartsAt ?? undefined,
-      periodEnd: projection?.currentPeriodEndsAt ?? undefined,
-      cancellationEffectiveAt: projection?.cancellationEffectiveAt ?? undefined };
+    const [projection, activeGrant] = await Promise.all([
+      shopSubscriptions().currentForShop(shop),
+      planGrants().findActiveGrant(shop),
+    ]);
+    const effective = resolveEffectivePlan(
+      projection?.planHandle,
+      projection?.status,
+      activeGrant,
+      PLAN_LIST,
+    );
+    const effectiveStatus = effective.source === "promo"
+      ? ("ACTIVE" as const)
+      : (projection?.status ?? ("UNKNOWN" as const));
+
+    return {
+      status: effectiveStatus,
+      planHandle: effective.planHandle,
+      revision: projection?.revision ?? 0,
+      periodStart: projection?.currentPeriodStartsAt ?? activeGrant?.startsAt ?? undefined,
+      periodEnd: projection?.currentPeriodEndsAt ?? activeGrant?.expiresAt ?? undefined,
+      cancellationEffectiveAt: projection?.cancellationEffectiveAt ?? undefined,
+    };
   };
   return { current, async refresh(shop) {
     const env = getEnv();

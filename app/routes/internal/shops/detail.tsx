@@ -22,10 +22,16 @@ import {
 import { requireAdminUser } from "~/services/admin-auth.server";
 import { adminUsers, refreshShopHistory, refreshShopSubscription } from "~/wiring.server";
 import { getEnv } from "~/request-context.server";
-import { planForShopifyHandle } from "~/billing/plans";
+import { PLAN_LIST, planForShopifyHandle } from "~/billing/plans";
 import { formatDateTime } from "~/i18n/format";
 import type { Locale } from "~/i18n/config";
-import { setShopDevStatus } from "~/services/internal-admin/ops.server";
+import {
+  setShopDevStatus,
+  grantShopPromoPlan,
+  revokeShopPromoPlan,
+  getShopPromoStatus,
+} from "~/services/internal-admin/ops.server";
+import { resolveEffectivePlan } from "~/domain/plan-hierarchy";
 import type { SubscriptionStatus } from "~/domain/subscription-lifecycle";
 
 /** The internal console is staff-only and English-only — no i18n here. */
@@ -74,12 +80,26 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   }
 
   const eventsRepo = shopifyEvents();
-  const [history, relationshipEvents, deliveries, reconciliation] = await Promise.all([
+  const [history, relationshipEvents, deliveries, reconciliation, promoStatus] = await Promise.all([
     eventsRepo.listSubscriptionEvents(shopDomain),
     eventsRepo.listRelationshipEvents(shopDomain),
     webhookDeliveryRepository().listForShop(shopDomain),
     shopSyncCheckpoints().read(`partner_history:${shopDomain}`),
+    getShopPromoStatus(shopDomain),
   ]);
+
+  const latestSub = history[0];
+  const effective = resolveEffectivePlan(
+    latestSub?.planHandle,
+    latestSub?.status,
+    promoStatus.activeGrant,
+    PLAN_LIST,
+  );
+
+  const promoAvailablePlans = PLAN_LIST
+    .filter((p) => p.priceMonthly.amount > 0)
+    .map((p) => ({ handle: p.handle, name: p.name }));
+
   const events: EventHistoryRow[] = [
     ...relationshipEvents.map((event) => ({
       id: `relationship:${event.eventId}`,
@@ -104,11 +124,12 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     })),
   ].sort((left, right) => right.occurredAt - left.occurredAt);
 
-  return { shop, history, events, reconciliation };
+  const now = Date.now();
+  return { shop, history, events, reconciliation, promoStatus, effective, promoAvailablePlans, now };
 };
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
-  await requireAdminUser(request, { users: adminUsers() });
+  const user = await requireAdminUser(request, { users: adminUsers() });
   const shopDomain = decodeURIComponent(params.shop ?? "");
   const shop = await shops().get(shopDomain);
   if (!shop) throw new Response("Not found", { status: 404 });
@@ -117,13 +138,35 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   const intent = String(form.get("intent") ?? "");
   if (intent === "toggle_dev_status") {
     await setShopDevStatus(shopDomain, !shop.isDevStore);
+  } else if (intent === "grant_promo") {
+    const planHandle = String(form.get("planHandle") ?? "");
+    const durationDays = Number(form.get("durationDays") ?? 7);
+    const reason = String(form.get("reason") ?? "");
+    await grantShopPromoPlan(shopDomain, {
+      planHandle,
+      durationDays,
+      reason,
+      grantedBy: user.email,
+    });
+  } else if (intent === "revoke_promo") {
+    const grantId = String(form.get("grantId") ?? "");
+    await revokeShopPromoPlan(shopDomain, grantId, user.email);
   }
 
   return null;
 };
 
 export default function ShopDetail() {
-  const { shop, history, events, reconciliation } = useLoaderData<typeof loader>();
+  const {
+    shop,
+    history,
+    events,
+    reconciliation,
+    promoStatus = { activeGrant: null, history: [] },
+    effective = { planHandle: "free", source: "organic", activePromo: null },
+    promoAvailablePlans = [],
+    now = 0,
+  } = useLoaderData<typeof loader>();
 
   return (
     <Page
@@ -190,6 +233,149 @@ export default function ShopDetail() {
                   ? "—"
                   : formatDateTime(LOCALE, shop.uninstalledAt)}
               </Text>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div>
+                  <Text as="h2" className="text-base font-semibold">
+                    Promotional Plan Overrides
+                  </Text>
+                  <Text as="p" className="text-sm text-muted-foreground">
+                    Grant temporary comped plan access with auto-expiry. Organic higher-tier plans take precedence.
+                  </Text>
+                </div>
+                <div>
+                  {effective.source === "promo" ? (
+                    <Badge variant="secondary" className="font-semibold">
+                      {`Promo Active: ${effective.planHandle.toUpperCase()} (${effective.activePromo?.remainingDays}d left)`}
+                    </Badge>
+                  ) : effective.activePromo ? (
+                    <Badge variant="outline">
+                      {`Paid Plan Active: ${effective.planHandle.toUpperCase()} (Promo ${effective.activePromo.planHandle.toUpperCase()} superseded)`}
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline">No Active Promo</Badge>
+                  )}
+                </div>
+              </div>
+
+              {shop.uninstalledAt === null && (
+                <Form method="post" className="flex flex-wrap items-end gap-3 pt-3 border-t">
+                  <input type="hidden" name="intent" value="grant_promo" />
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="planHandle" className="text-xs font-medium text-muted-foreground">
+                      Promo Plan
+                    </label>
+                    <select
+                      id="planHandle"
+                      name="planHandle"
+                      className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      required
+                    >
+                      {promoAvailablePlans.map((p) => (
+                        <option key={p.handle} value={p.handle}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="durationDays" className="text-xs font-medium text-muted-foreground">
+                      Duration
+                    </label>
+                    <select
+                      id="durationDays"
+                      name="durationDays"
+                      className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      defaultValue="10"
+                    >
+                      <option value="3">3 Days</option>
+                      <option value="7">7 Days</option>
+                      <option value="10">10 Days</option>
+                      <option value="14">14 Days</option>
+                      <option value="30">30 Days</option>
+                      <option value="90">90 Days</option>
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5 flex-1 min-w-[200px]">
+                    <label htmlFor="reason" className="text-xs font-medium text-muted-foreground">
+                      Reason / Justification
+                    </label>
+                    <input
+                      type="text"
+                      id="reason"
+                      name="reason"
+                      placeholder="e.g., VIP Demo, Retention goodwill, Extended trial"
+                      className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      required
+                    />
+                  </div>
+
+                  <Button type="submit" size="sm" className="h-9">
+                    Grant Promo
+                  </Button>
+                </Form>
+              )}
+
+              {promoStatus.history.length > 0 && (
+                <div className="overflow-x-auto pt-2">
+                  <Table className="[&_th]:h-9 [&_th]:px-3 [&_td]:px-3 [&_td]:py-2 text-xs">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Plan</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Reason</TableHead>
+                        <TableHead>Granted By</TableHead>
+                        <TableHead>Valid Until</TableHead>
+                        <TableHead className="text-right">Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {promoStatus.history.map((grant) => {
+                        const isExpired = now >= grant.expiresAt;
+                        const isRevoked = grant.revokedAt !== null;
+                        const isActive = !isExpired && !isRevoked && now >= grant.startsAt;
+
+                        return (
+                          <TableRow key={grant.id}>
+                            <TableCell className="font-medium">{grant.planHandle.toUpperCase()}</TableCell>
+                            <TableCell>
+                              {isActive ? (
+                                <Badge variant="secondary" className="text-xs">Active</Badge>
+                              ) : isRevoked ? (
+                                <Badge variant="destructive" className="text-xs">Revoked</Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-xs">Expired</Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="max-w-xs truncate text-muted-foreground">{grant.reason}</TableCell>
+                            <TableCell className="text-muted-foreground">{grant.grantedBy}</TableCell>
+                            <TableCell className="text-muted-foreground">{formatDateTime(LOCALE, grant.expiresAt)}</TableCell>
+                            <TableCell className="text-right">
+                              {isActive && (
+                                <Form method="post">
+                                  <input type="hidden" name="intent" value="revoke_promo" />
+                                  <input type="hidden" name="grantId" value={grant.id} />
+                                  <Button type="submit" variant="ghost" size="sm" className="h-6 px-2 text-xs text-destructive hover:text-destructive">
+                                    Revoke
+                                  </Button>
+                                </Form>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

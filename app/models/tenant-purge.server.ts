@@ -21,6 +21,7 @@ import {
   entitlementUsage,
   entitlementAllocations,
   mcpAuditLogs,
+  shopPlanGrants,
 } from "~/db/schema";
 import { getDb } from "~/request-context.server";
 
@@ -33,6 +34,7 @@ const PURGED_SHOP_TABLES = [
   "notification_logs",
   "pending_uploads",
   "shop_granted_scopes",
+  "shop_plan_grants",
   "shop_scope_changes",
   "shop_subscription_items",
   "shop_subscriptions",
@@ -68,6 +70,7 @@ export class TenantPurgeRepo {
       db.delete(shopSubscriptionItems).where(eq(shopSubscriptionItems.shop, shop)),
       db.delete(shopSubscriptions).where(eq(shopSubscriptions.shop, shop)),
       db.delete(shopGrantedScopes).where(eq(shopGrantedScopes.shop, shop)),
+      db.delete(shopPlanGrants).where(eq(shopPlanGrants.shop, shop)),
       db.delete(shopScopeChanges).where(eq(shopScopeChanges.shop, shop)),
       db.delete(shopifyEvents).where(eq(shopifyEvents.shop, shop)),
       db.delete(webhookDeliveries).where(eq(webhookDeliveries.shop, shop)),

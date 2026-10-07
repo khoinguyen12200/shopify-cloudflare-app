@@ -3,9 +3,12 @@ import {
   shopSubscriptions,
   supportService,
   webhookScopeObservations,
+  planGrants,
+  invalidateEntitlements,
 } from "~/wiring.server";
-import { planForShopifyHandle } from "~/billing/plans";
+import { PLAN_LIST, planForShopifyHandle } from "~/billing/plans";
 import { statusOf } from "~/support/status";
+import { nanoid } from "nanoid";
 
 /** Newly installed stores in the last N hours. */
 export async function listNewStores({
@@ -176,4 +179,77 @@ export async function getShopWebhookStatus(shopDomain: string) {
     relationshipStatus: shop.relationshipStatus,
     grantedScopes: scopes,
   };
+}
+
+/** Grant a promotional plan override to a shop. */
+export async function grantShopPromoPlan(
+  shopDomain: string,
+  {
+    planHandle,
+    durationDays,
+    reason,
+    grantedBy,
+  }: {
+    planHandle: string;
+    durationDays: number;
+    reason: string;
+    grantedBy: string;
+  },
+) {
+  const shop = await shops().get(shopDomain);
+  if (!shop) throw new Error(`Shop not found: ${shopDomain}`);
+
+  const matchedPlan = PLAN_LIST.find((p) => p.handle === planHandle);
+  if (!matchedPlan || matchedPlan.priceMonthly.amount === 0) {
+    throw new Error(`Invalid plan for promotional grant: ${planHandle}`);
+  }
+
+  if (!Number.isInteger(durationDays) || durationDays <= 0 || durationDays > 365) {
+    throw new Error(`Invalid duration: must be between 1 and 365 days`);
+  }
+
+  const trimmedReason = reason.trim();
+  if (trimmedReason.length === 0) {
+    throw new Error(`A reason is required to grant a promotional plan`);
+  }
+
+  const now = Date.now();
+  const expiresAt = now + durationDays * 86_400_000;
+
+  const grant = await planGrants().createGrant({
+    id: `grant_${nanoid(16)}`,
+    shop: shopDomain,
+    planHandle,
+    reason: trimmedReason,
+    grantedBy,
+    startsAt: now,
+    expiresAt,
+    createdAt: now,
+  });
+
+  await invalidateEntitlements(shopDomain);
+
+  return grant;
+}
+
+/** Revoke an active promotional plan grant for a shop. */
+export async function revokeShopPromoPlan(
+  shopDomain: string,
+  grantId: string,
+  revokedBy: string,
+) {
+  const success = await planGrants().revokeGrant(shopDomain, grantId, revokedBy);
+  if (success) {
+    await invalidateEntitlements(shopDomain);
+  }
+  return success;
+}
+
+/** Get active promo grant and history for a shop. */
+export async function getShopPromoStatus(shopDomain: string, now: number = Date.now()) {
+  const [activeGrant, history] = await Promise.all([
+    planGrants().findActiveGrant(shopDomain, now),
+    planGrants().listGrantsForShop(shopDomain),
+  ]);
+  return { activeGrant, history };
 }
