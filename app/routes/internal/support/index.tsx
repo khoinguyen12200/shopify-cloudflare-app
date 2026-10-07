@@ -1,6 +1,10 @@
 import { shopSubscriptions } from "~/wiring.server";
 import { Link, useLoaderData, useNavigation, useSubmit } from "react-router";
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
+
+export const meta: MetaFunction = () => [
+  { title: "Support · Staff Console" },
+];
 import {
   Badge,
   BlockStack,

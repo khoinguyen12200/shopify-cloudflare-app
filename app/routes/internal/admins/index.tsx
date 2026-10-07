@@ -6,7 +6,11 @@ import {
   useLoaderData,
   useNavigation,
 } from "react-router";
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
+
+export const meta: MetaFunction = () => [
+  { title: "Admins · Staff Console" },
+];
 import { useEffect, useState } from "react";
 import { toast } from "ngk-dashboard";
 import {

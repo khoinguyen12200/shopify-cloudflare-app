@@ -1,6 +1,10 @@
 import { shops, shopifyEvents, shopSyncCheckpoints, webhookDeliveryRepository } from "~/wiring.server";
 import { Form, useLoaderData } from "react-router";
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
+
+export const meta: MetaFunction<typeof loader> = ({ data }) => [
+  { title: `${data?.shop.name ?? data?.shop.shop ?? "Shop"} · Staff Console` },
+];
 import {
   Badge,
   Button,

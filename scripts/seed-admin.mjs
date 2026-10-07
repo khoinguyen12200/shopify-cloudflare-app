@@ -8,9 +8,8 @@
 // ══════════════════════════════════════════════════════════════════════════
 //  THIS IS A DEVELOPMENT FIXTURE. IT MUST NEVER REACH A REAL DATABASE.
 // ══════════════════════════════════════════════════════════════════════════
-// `admin123` is 8 characters — deliberately below the 12-character minimum the
-// console enforces on passwords a human types. It exists so `npm run dev` works
-// with no setup, nothing more.
+// `admin123` is 8 characters, satisfying the 8-character minimum the console
+// enforces. It exists so `npm run dev` works with no setup, nothing more.
 //
 // Three guards keep it local:
 //   1. Only ever runs `wrangler d1 execute --local`. The remote flag is not

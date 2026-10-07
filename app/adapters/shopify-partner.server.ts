@@ -37,7 +37,11 @@ const historicalEventsQuery = `query HistoricalEvents($filter: EventFilterInput!
         occurredAt
         eventType
         shop { id myshopifyDomain }
-        ... on Relationship { relationshipState: state }
+        ... on Relationship {
+          relationshipState: state
+          reason
+          reasonDescription
+        }
         ... on SubscriptionStatus {
           subscriptionState: state
           cancelEffectiveOn

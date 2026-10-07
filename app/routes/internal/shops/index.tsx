@@ -1,5 +1,9 @@
 import { Link, useLoaderData } from "react-router";
-import type { LoaderFunctionArgs } from "react-router";
+import type { LoaderFunctionArgs, MetaFunction } from "react-router";
+
+export const meta: MetaFunction = () => [
+  { title: "Shops · Staff Console" },
+];
 import {
   Badge,
   Card,

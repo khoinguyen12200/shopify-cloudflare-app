@@ -14,11 +14,21 @@ type LoaderData = {
   stats: { totalShops: number; paidShops: number; freeShops: number; mrrByCurrency: { amount: number; currency: string }[] };
   trend: { month: string; installs: number; uninstalls: number; active: number }[];
   health: { failedWebhooks: number; deadLetterWebhooks: number; lifecycleEvents: number; subscriptionEvents: number; checkpoint: { lastSucceededAt: number | null; lastFailedAt: number | null } | null };
+  uninstallFeedback?: {
+    eventId: string;
+    shop: string;
+    shopName: string | null;
+    logoUrl: string | null;
+    occurredAt: number;
+    reason: string | null;
+    reasonDescription: string | null;
+  }[];
 };
 
 async function render(data: LoaderData) {
+  const fullData = { uninstallFeedback: [], ...data };
   const routes: RouteObject[] = [
-    { path: "/internal/dashboard", Component: Dashboard, loader: () => data },
+    { path: "/internal/dashboard", Component: Dashboard, loader: () => fullData },
   ];
   const handler = createStaticHandler(routes);
   const context = await handler.query(new Request("https://example.test/internal/dashboard"));

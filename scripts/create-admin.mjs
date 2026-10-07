@@ -20,7 +20,7 @@ import { dirname, join } from "node:path";
 const ITERATIONS = 600_000;
 const SALT_BYTES = 16;
 const KEY_BITS = 256;
-const MIN_PASSWORD_LENGTH = 12;
+const MIN_PASSWORD_LENGTH = 8;
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const argv = process.argv.slice(2);

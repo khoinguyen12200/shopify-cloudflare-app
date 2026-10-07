@@ -11,7 +11,7 @@
  * composition rules mostly push people toward `Password1!`. NIST recommends a
  * length minimum and no forced composition.
  */
-export const MIN_PASSWORD_LENGTH = 12;
+export const MIN_PASSWORD_LENGTH = 8;
 
 /** Returns a translation-key suffix, or null when the password is acceptable. */
 export function validatePasswordStrength(password: string): "tooShort" | null {

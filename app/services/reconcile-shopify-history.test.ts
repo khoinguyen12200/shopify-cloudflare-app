@@ -14,7 +14,7 @@ import { refreshSubscription } from "./reconcile-subscription";
 setupTestDatabase();
 
 function event(id: string, occurredAt = "2026-01-01T00:00:00.000Z") {
-  return { kind: "relationship" as const, id, occurredAt, shop: "one.myshopify.com", shopId: "gid://shopify/Shop/1", type: "INSTALLED" as const };
+  return { kind: "relationship" as const, id, occurredAt, shop: "one.myshopify.com", shopId: "gid://shopify/Shop/1", type: "INSTALLED" as const, reason: null, reasonDescription: null };
 }
 
 describe("reconcileHistory", () => {

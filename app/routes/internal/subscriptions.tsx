@@ -1,6 +1,10 @@
 import { shopifyEvents } from "~/wiring.server";
 import { useLoaderData } from "react-router";
-import type { LoaderFunctionArgs } from "react-router";
+import type { LoaderFunctionArgs, MetaFunction } from "react-router";
+
+export const meta: MetaFunction = () => [
+  { title: "Subscriptions · Staff Console" },
+];
 import {
   Badge,
   Card,

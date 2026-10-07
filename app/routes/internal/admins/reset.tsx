@@ -7,7 +7,11 @@ import {
   useLoaderData,
   useNavigation,
 } from "react-router";
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
+
+export const meta: MetaFunction = () => [
+  { title: "Reset Admin Password · Staff Console" },
+];
 import {
   Alert,
   AlertDescription,

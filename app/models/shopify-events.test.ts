@@ -89,4 +89,37 @@ describe("ShopifyEventRepo", () => {
 
     expect(history).toEqual([]);
   });
+
+  it("lists all uninstall feedback across shops ordered newest first", async () => {
+    const feedback = await inRequest(async () => {
+      const repo = new ShopifyEventRepo();
+      await repo.recordPartnerRelationship(
+        relationshipEvent({
+          id: "uninstall-1",
+          shop: "churned-1.myshopify.com",
+          type: "UNINSTALLED",
+          occurredAt: 200,
+          reason: "TOO_EXPENSIVE",
+          reasonDescription: "High subscription fee",
+        }),
+      );
+      await repo.recordPartnerRelationship(
+        relationshipEvent({
+          id: "uninstall-2",
+          shop: "churned-2.myshopify.com",
+          type: "UNINSTALLED",
+          occurredAt: 300,
+          reason: "COULD_NOT_SET_UP",
+          reasonDescription: "Theme integration failed",
+        }),
+      );
+      return repo.listAllUninstallFeedback();
+    });
+
+    expect(feedback).toHaveLength(2);
+    expect(feedback[0]?.eventId).toBe("uninstall-2");
+    expect(feedback[0]?.reason).toBe("COULD_NOT_SET_UP");
+    expect(feedback[0]?.reasonDescription).toBe("Theme integration failed");
+    expect(feedback[1]?.eventId).toBe("uninstall-1");
+  });
 });

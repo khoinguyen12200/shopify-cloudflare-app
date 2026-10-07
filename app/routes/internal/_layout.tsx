@@ -57,6 +57,7 @@ import {
 import internalStyles from "~/styles/internal/internal.tailwind.css?url";
 
 export const meta: MetaFunction = () => [
+  { title: "Staff Console" },
   { name: "robots", content: "noindex, nofollow" },
 ];
 

@@ -80,6 +80,8 @@ describe("ShopifyPartnerAdapter", () => {
         shop: "example.myshopify.com",
         shopId: "gid://shopify/Shop/1",
         type: "INSTALLED",
+        reason: null,
+        reasonDescription: null,
       }],
       hasNextPage: true,
       endCursor: "cursor-1",

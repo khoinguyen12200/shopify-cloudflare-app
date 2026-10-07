@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { data, useActionData, useLoaderData } from "react-router";
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
+
+export const meta: MetaFunction = () => [
+  { title: "MCP & API · Staff Console" },
+];
 import {
   Alert,
   AlertDescription,

@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { Form, data, redirect, useActionData, useLoaderData, useNavigation } from "react-router";
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
+
+export const meta: MetaFunction = () => [
+  { title: "New Support Ticket · Staff Console" },
+];
 import {
   Alert,
   AlertDescription,

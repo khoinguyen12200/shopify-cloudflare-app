@@ -86,5 +86,7 @@ export function parsePartnerEvent(value: unknown): PartnerHistoryEvent {
         : eventType === "RELATIONSHIP_DEACTIVATED"
           ? "RELATIONSHIP_DEACTIVATED"
           : "RELATIONSHIP_REACTIVATED"],
+    reason: stringField(event, "reason"),
+    reasonDescription: stringField(event, "reasonDescription"),
   };
 }

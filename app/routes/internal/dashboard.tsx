@@ -1,7 +1,11 @@
-import { operationalHealth, shops, shopSubscriptions } from "~/wiring.server";
+import { operationalHealth, shops, shopSubscriptions, shopifyEvents } from "~/wiring.server";
 import { Suspense, lazy, useSyncExternalStore } from "react";
 import { useLoaderData } from "react-router";
-import type { LoaderFunctionArgs } from "react-router";
+import type { LoaderFunctionArgs, MetaFunction } from "react-router";
+
+export const meta: MetaFunction = () => [
+  { title: "Dashboard · Staff Console" },
+];
 import { BlockStack, Card, InlineStack, Page, StatCard } from "ngk-dashboard";
 import { CircleDollarSign, Crown, Store, Users } from "lucide-react";
 import { requireAdminUser } from "~/services/admin-auth.server";
@@ -33,11 +37,12 @@ const DashboardCharts = lazy(() => import("~/internal/components/DashboardCharts
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const user = await requireAdminUser(request, { users: adminUsers() });
 
-  const [admins, allShops, currentSubscriptions, health] = await Promise.all([
+  const [admins, allShops, currentSubscriptions, health, uninstallFeedback] = await Promise.all([
     adminUsers().countAll(),
     shops().listAll(),
     shopSubscriptions().listCurrent(),
     operationalHealth().read(),
+    shopifyEvents().listAllUninstallFeedback(),
   ]);
 
   const activeShops = allShops.filter((shop) => shop.uninstalledAt === null);
@@ -64,11 +69,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     })),
     trend: merchantTrend(allShops, TREND_MONTHS, Date.now()),
     health,
+    uninstallFeedback,
   };
 };
 
 export default function Dashboard() {
-  const { user, admins, stats, trend, health } = useLoaderData<typeof loader>();
+  const { user, admins, stats, trend, health, uninstallFeedback } = useLoaderData<typeof loader>();
   const showCharts = useMountedCharts();
 
   return (
@@ -106,7 +112,11 @@ export default function Dashboard() {
 
         {showCharts ? (
           <Suspense fallback={<ChartsSkeleton />}>
-            <DashboardCharts trend={trend} period={`Last ${TREND_MONTHS} months`} />
+            <DashboardCharts
+              trend={trend}
+              period={`Last ${TREND_MONTHS} months`}
+              uninstallFeedback={uninstallFeedback}
+            />
           </Suspense>
         ) : (
           <ChartsSkeleton />
@@ -157,6 +167,11 @@ function ChartsSkeleton() {
         <Card className="h-80 animate-pulse bg-muted/40" />
         <Card className="h-80 animate-pulse bg-muted/40" />
       </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card className="h-80 animate-pulse bg-muted/40" />
+        <Card className="h-80 animate-pulse bg-muted/40" />
+      </div>
+      <Card className="h-64 animate-pulse bg-muted/40" />
     </div>
   );
 }

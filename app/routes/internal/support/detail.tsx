@@ -1,6 +1,10 @@
 import { shopSubscriptions } from "~/wiring.server";
 import { Form, useActionData, useLoaderData, useNavigation } from "react-router";
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
+
+export const meta: MetaFunction<typeof loader> = ({ data }) => [
+  { title: `${data?.ticket.subject ?? "Support Ticket"} · Staff Console` },
+];
 import { useState } from "react";
 import {
   Alert,

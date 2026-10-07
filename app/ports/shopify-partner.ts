@@ -10,7 +10,16 @@ export interface ShopifyPartnerPort {
 }
 
 export type PartnerHistoryEvent =
-  | { readonly kind: "relationship"; readonly id: string; readonly occurredAt: string; readonly shop: string; readonly shopId: string; readonly type: "INSTALLED" | "UNINSTALLED" | "DEACTIVATED" | "REACTIVATED" }
+  | {
+      readonly kind: "relationship";
+      readonly id: string;
+      readonly occurredAt: string;
+      readonly shop: string;
+      readonly shopId: string;
+      readonly type: "INSTALLED" | "UNINSTALLED" | "DEACTIVATED" | "REACTIVATED";
+      readonly reason: string | null;
+      readonly reasonDescription: string | null;
+    }
   | { readonly kind: "subscription"; readonly id: string; readonly occurredAt: string; readonly shop: string; readonly shopId: string; readonly type: "CREATED" | "UPDATED" | "CANCELLATION_SCHEDULED" | "CANCELED" | "FROZEN" | "UNFROZEN"; readonly cancelEffectiveOn: string | null; readonly planHandle: string | null; readonly billingPeriod: string | null }
   | { readonly kind: "ignored"; readonly id: string };
 

@@ -1,5 +1,9 @@
 import { data, Form, useActionData, useLoaderData, useNavigation } from "react-router";
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
+
+export const meta: MetaFunction = () => [
+  { title: "Profile · Staff Console" },
+];
 import {
   Alert,
   AlertDescription,

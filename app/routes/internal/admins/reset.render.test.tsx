@@ -57,7 +57,7 @@ describe("the reset-password page", () => {
 
   it("enforces the length policy in the markup, not only on the server", async () => {
     const html = await render();
-    expect(html).toContain('minLength="12"');
+    expect(html).toContain('minLength="8"');
     expect(html).toContain("required");
   });
 

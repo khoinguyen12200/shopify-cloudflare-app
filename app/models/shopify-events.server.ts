@@ -210,4 +210,44 @@ export class ShopifyEventRepo {
       )
       .orderBy(desc(shopifyEvents.occurredAt));
   }
+
+  async listAllUninstallFeedback(limit = 100): Promise<UninstallFeedback[]> {
+    return getDb()
+      .select({
+        eventId: shopifyEvents.eventId,
+        shop: shopifyEvents.shop,
+        shopName: shops.name,
+        logoUrl: shops.logoUrl,
+        occurredAt: shopifyEvents.occurredAt,
+        reason: shopifyRelationshipEvents.reason,
+        reasonDescription: shopifyRelationshipEvents.reasonDescription,
+      })
+      .from(shopifyEvents)
+      .innerJoin(
+        shopifyRelationshipEvents,
+        and(
+          eq(shopifyRelationshipEvents.eventSource, shopifyEvents.source),
+          eq(shopifyRelationshipEvents.eventId, shopifyEvents.eventId),
+        ),
+      )
+      .leftJoin(shops, eq(shops.shop, shopifyEvents.shop))
+      .where(
+        and(
+          eq(shopifyEvents.source, "partner_history"),
+          eq(shopifyEvents.eventType, "UNINSTALLED"),
+        ),
+      )
+      .orderBy(desc(shopifyEvents.occurredAt))
+      .limit(limit);
+  }
+}
+
+export interface UninstallFeedback {
+  readonly eventId: string;
+  readonly shop: string;
+  readonly shopName: string | null;
+  readonly logoUrl: string | null;
+  readonly occurredAt: number;
+  readonly reason: string | null;
+  readonly reasonDescription: string | null;
 }
