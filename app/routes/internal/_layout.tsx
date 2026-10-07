@@ -22,6 +22,7 @@ import {
   LifeBuoy,
   User as UserIcon,
   Cpu,
+  Bot,
   LogOut,
 } from "lucide-react";
 import {
@@ -179,6 +180,7 @@ export default function InternalLayout() {
         { title: "Admins", href: "/internal/admins", icon: Users },
         { title: "Subscriptions", href: "/internal/subscriptions", icon: Receipt },
         { title: "AI", href: "/internal/ai", icon: Cpu },
+        { title: "MCP & API", href: "/internal/mcp", icon: Bot },
       ],
     },
     {

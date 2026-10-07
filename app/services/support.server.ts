@@ -98,6 +98,32 @@ export class SupportService {
     return ok(created);
   }
 
+  /**
+   * File a new ticket from staff side (e.g. following up on external merchant email).
+   * Automatically sets author and lastAuthor to staff, then emails the merchant.
+   */
+  async openTicketAsStaff(input: {
+    shop: string;
+    shopName: string;
+    merchantEmail: string | null;
+    ccEmails: readonly string[];
+    category: SupportCategory;
+    subject: string;
+    body: string;
+    staffName: string;
+    locale?: string | null;
+  }): Promise<Result<{ id: string; messageId: string; shop: string }, never>> {
+    const created = await this.dependencies.repo.openAsStaff({
+      ...input,
+      at: this.dependencies.clock.now(),
+    });
+
+    const thread = await this.dependencies.repo.findForStaff(created.id);
+    if (thread) await this.notifyMerchant(thread, input.staffName, input.body);
+
+    return ok({ ...created, shop: input.shop });
+  }
+
   /** A merchant replies to their own thread. */
   async replyAsMerchant(input: {
     shop: string;

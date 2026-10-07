@@ -32,4 +32,35 @@ describe("persistShopIdentity", () => {
       await expect(persistShopIdentity({ graphql: async () => new Response("unavailable", { status: 503 }) }, "http-error.myshopify.com", 2)).resolves.toEqual({ status: "failed", code: "SHOP_IDENTITY_QUERY_FAILED" });
     });
   });
+
+  it("queries and records full shop identity including name, email, contactEmail, and logoUrl when not yet recorded", async () => {
+    await runWithRequestContext(env, async () => {
+      const shops = new ShopRepo();
+      await shops.recordInstall("fresh.myshopify.com", 1);
+
+      const result = await persistShopIdentity({
+        graphql: async () => new Response(JSON.stringify({
+          data: {
+            shop: {
+              id: "gid://shopify/Shop/99",
+              name: "Fresh Store",
+              email: "owner@fresh.com",
+              contactEmail: "support@fresh.com",
+              myshopifyDomain: "fresh.myshopify.com",
+              url: "https://fresh.example.com",
+            },
+          },
+        })),
+      }, "fresh.myshopify.com", 2);
+
+      expect(result).toEqual({ status: "recorded", shopifyShopId: "gid://shopify/Shop/99" });
+
+      const stored = await shops.get("fresh.myshopify.com");
+      expect(stored?.name).toBe("Fresh Store");
+      expect(stored?.email).toBe("owner@fresh.com");
+      expect(stored?.contactEmail).toBe("support@fresh.com");
+      expect(stored?.url).toBe("https://fresh.example.com");
+      expect(stored?.logoUrl).toBe("https://fresh.myshopify.com/favicon.ico");
+    });
+  });
 });

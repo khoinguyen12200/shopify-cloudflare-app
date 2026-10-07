@@ -1,6 +1,11 @@
 export interface AdminShopIdentity {
   readonly id: string;
   readonly myshopifyDomain: string;
+  readonly name?: string | null;
+  readonly email?: string | null;
+  readonly contactEmail?: string | null;
+  readonly logoUrl?: string | null;
+  readonly url?: string | null;
 }
 
 export type RecordShopifyIdentityResult =
@@ -10,7 +15,18 @@ export type RecordShopifyIdentityResult =
 export async function recordShopifyIdentity(deps: {
   readonly shop: string;
   readonly queryShop: () => Promise<AdminShopIdentity | null>;
-  readonly record: (shop: string, shopifyShopId: string, now: number) => Promise<void>;
+  readonly record: (
+    shop: string,
+    shopifyShopId: string,
+    now: number,
+    details?: {
+      readonly name?: string | null;
+      readonly email?: string | null;
+      readonly contactEmail?: string | null;
+      readonly logoUrl?: string | null;
+      readonly url?: string | null;
+    },
+  ) => Promise<void>;
 }, now: number): Promise<RecordShopifyIdentityResult> {
   let identity: AdminShopIdentity | null;
   try {
@@ -24,6 +40,12 @@ export async function recordShopifyIdentity(deps: {
   if (identity.myshopifyDomain !== deps.shop) {
     return { status: "failed", code: "SHOP_IDENTITY_MISMATCH" };
   }
-  await deps.record(deps.shop, identity.id, now);
+  await deps.record(deps.shop, identity.id, now, {
+    name: identity.name,
+    email: identity.email,
+    contactEmail: identity.contactEmail,
+    logoUrl: identity.logoUrl,
+    url: identity.url,
+  });
   return { status: "recorded", shopifyShopId: identity.id };
 }

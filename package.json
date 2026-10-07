@@ -51,6 +51,7 @@
   },
   "dependencies": {
     "@ai-sdk/react": "^4.0.82",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "@react-email/components": "^1.0.12",
     "@react-email/render": "^2.1.0",
     "@react-router/dev": "^7.18.2",

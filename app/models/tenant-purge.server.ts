@@ -20,11 +20,16 @@ import {
   entitlementOperations,
   entitlementUsage,
   entitlementAllocations,
+  mcpAuditLogs,
 } from "~/db/schema";
 import { getDb } from "~/request-context.server";
 
 const PURGED_SHOP_TABLES = [
   "ai_runs",
+  "entitlement_allocations",
+  "entitlement_operations",
+  "entitlement_usage",
+  "mcp_audit_logs",
   "notification_logs",
   "pending_uploads",
   "shop_granted_scopes",
@@ -38,9 +43,6 @@ const PURGED_SHOP_TABLES = [
   "support_tickets",
   "webhook_deliveries",
   "webhook_scope_observations",
-  "entitlement_operations",
-  "entitlement_usage",
-  "entitlement_allocations",
 ] as const;
 
 export class TenantPurgeRepo {
@@ -76,6 +78,7 @@ export class TenantPurgeRepo {
       db.delete(notificationLogs).where(eq(notificationLogs.shop, shop)),
       db.delete(notificationPreferences).where(eq(notificationPreferences.scope, shop)),
       db.delete(notificationOptOuts).where(eq(notificationOptOuts.scope, shop)),
+      db.delete(mcpAuditLogs).where(eq(mcpAuditLogs.shop, shop)),
       db.delete(shops).where(eq(shops.shop, shop)),
     ]);
     return deleted.reduce((total, result) => total + result.meta.changes, 0);

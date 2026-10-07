@@ -27,6 +27,14 @@ export interface RelationshipObservation {
   readonly externalId: string;
 }
 
+export interface ShopIdentityDetails {
+  readonly name?: string | null;
+  readonly email?: string | null;
+  readonly contactEmail?: string | null;
+  readonly logoUrl?: string | null;
+  readonly url?: string | null;
+}
+
 const relationshipStatuses: Record<RelationshipState["kind"], NonNullable<Shop["relationshipStatus"]>> = {
   installed: "INSTALLED",
   uninstalled: "UNINSTALLED",
@@ -60,23 +68,82 @@ export class ShopRepo {
   }
 
   /** Idempotent: safe to call on every install and re-install. */
-  async recordInstall(shop: string, now: number): Promise<void> {
+  async recordInstall(shop: string, now: number, details?: ShopIdentityDetails): Promise<void> {
+    const installedStatus: NonNullable<Shop["relationshipStatus"]> = "INSTALLED";
+    const baseValues = {
+      shop,
+      installedAt: now,
+      uninstalledAt: null,
+      currentInstalledAt: now,
+      relationshipStatus: installedStatus,
+      relationshipOccurredAt: now,
+      relationshipExternalId: `install:${now}`,
+      ...(details?.name !== undefined ? { name: details.name } : {}),
+      ...(details?.email !== undefined ? { email: details.email } : {}),
+      ...(details?.contactEmail !== undefined ? { contactEmail: details.contactEmail } : {}),
+      ...(details?.logoUrl !== undefined ? { logoUrl: details.logoUrl } : {}),
+      ...(details?.url !== undefined ? { url: details.url } : {}),
+    };
+    const updateValues = {
+      uninstalledAt: null,
+      currentInstalledAt: now,
+      relationshipStatus: installedStatus,
+      relationshipOccurredAt: now,
+      relationshipExternalId: `install:${now}`,
+      ...(details?.name !== undefined ? { name: details.name } : {}),
+      ...(details?.email !== undefined ? { email: details.email } : {}),
+      ...(details?.contactEmail !== undefined ? { contactEmail: details.contactEmail } : {}),
+      ...(details?.logoUrl !== undefined ? { logoUrl: details.logoUrl } : {}),
+      ...(details?.url !== undefined ? { url: details.url } : {}),
+    };
     await getDb()
       .insert(shops)
-      .values({ shop, installedAt: now, uninstalledAt: null, currentInstalledAt: now, relationshipStatus: "INSTALLED", relationshipOccurredAt: now, relationshipExternalId: `install:${now}` })
+      .values(baseValues)
       .onConflictDoUpdate({
         target: shops.shop,
-        set: { uninstalledAt: null, currentInstalledAt: now, relationshipStatus: "INSTALLED", relationshipOccurredAt: now, relationshipExternalId: `install:${now}` },
+        set: updateValues,
       });
   }
 
   /** Persist the Admin API's stable GID after authenticating that same shop. */
-  async recordAuthenticatedIdentity(shop: string, shopifyShopId: string, now: number): Promise<void> {
-    await getDb().update(shops).set({ shopifyShopId, lastAuthenticatedAt: now }).where(eq(shops.shop, shop));
+  async recordAuthenticatedIdentity(
+    shop: string,
+    shopifyShopId: string,
+    now: number,
+    details?: ShopIdentityDetails,
+  ): Promise<void> {
+    const updateValues: Partial<typeof shops.$inferInsert> = {
+      shopifyShopId,
+      lastAuthenticatedAt: now,
+    };
+    if (details?.name !== undefined) updateValues.name = details.name;
+    if (details?.email !== undefined) updateValues.email = details.email;
+    if (details?.contactEmail !== undefined) updateValues.contactEmail = details.contactEmail;
+    if (details?.logoUrl !== undefined) updateValues.logoUrl = details.logoUrl;
+    if (details?.url !== undefined) updateValues.url = details.url;
+
+    await getDb().update(shops).set(updateValues).where(eq(shops.shop, shop));
+  }
+
+  async updateShopIdentity(shop: string, details: ShopIdentityDetails): Promise<void> {
+    const updateValues: Partial<typeof shops.$inferInsert> = {};
+    if (details.name !== undefined) updateValues.name = details.name;
+    if (details.email !== undefined) updateValues.email = details.email;
+    if (details.contactEmail !== undefined) updateValues.contactEmail = details.contactEmail;
+    if (details.logoUrl !== undefined) updateValues.logoUrl = details.logoUrl;
+    if (details.url !== undefined) updateValues.url = details.url;
+
+    if (Object.keys(updateValues).length > 0) {
+      await getDb().update(shops).set(updateValues).where(eq(shops.shop, shop));
+    }
   }
 
   async markReconciled(shop: string, now: number): Promise<void> {
     await getDb().update(shops).set({ lastReconciledAt: now }).where(eq(shops.shop, shop));
+  }
+
+  async setDevStatus(shop: string, isDevStore: boolean): Promise<void> {
+    await getDb().update(shops).set({ isDevStore }).where(eq(shops.shop, shop));
   }
 
   async recordUninstall(shop: string, now: number): Promise<void> {

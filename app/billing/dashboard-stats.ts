@@ -10,12 +10,14 @@ export interface BillingProjection {
   readonly billingInterval: string | null;
   readonly priceAmount: number | null;
   readonly priceCurrency: string | null;
+  readonly isDevStore?: boolean;
 }
 
 export interface BillingStats {
   readonly totalShops: number;
   readonly paidShops: number;
   readonly freeShops: number;
+  readonly devShops: number;
   /**
    * Monthly-recurring-revenue equivalent, one figure per currency — summing
    * across currencies would misstate the total (@rules/money.md), and a real
@@ -46,9 +48,16 @@ function monthlyEquivalent(projection: BillingProjection): Money | null {
 export function computeBillingStats(projections: readonly BillingProjection[]): BillingStats {
   const monthlyByCurrency = new Map<string, Money[]>();
   const paidShops = new Set<string>();
-  const shops = new Set(projections.map((projection) => projection.shop));
+  const realShops = new Set<string>();
+  const devShops = new Set<string>();
 
   for (const projection of projections) {
+    if (projection.isDevStore) {
+      devShops.add(projection.shop);
+      continue;
+    }
+    realShops.add(projection.shop);
+
     if (!isOperationalRelationshipStatus(projection.relationshipStatus)) continue;
     if (!projection.subscriptionStatus || !PAID_STATUSES.has(projection.subscriptionStatus)) continue;
     paidShops.add(projection.shop);
@@ -69,9 +78,10 @@ export function computeBillingStats(projections: readonly BillingProjection[]): 
   }
 
   return {
-    totalShops: shops.size,
+    totalShops: realShops.size,
     paidShops: paidShops.size,
-    freeShops: shops.size - paidShops.size,
+    freeShops: realShops.size - paidShops.size,
+    devShops: devShops.size,
     mrrByCurrency,
   };
 }

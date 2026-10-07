@@ -1,8 +1,9 @@
 import { shops, shopifyEvents, shopSyncCheckpoints, webhookDeliveryRepository } from "~/wiring.server";
-import { useLoaderData } from "react-router";
-import type { LoaderFunctionArgs } from "react-router";
+import { Form, useLoaderData } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import {
   Badge,
+  Button,
   Card,
   CardContent,
   Page,
@@ -20,6 +21,7 @@ import { getEnv } from "~/request-context.server";
 import { planForShopifyHandle } from "~/billing/plans";
 import { formatDateTime } from "~/i18n/format";
 import type { Locale } from "~/i18n/config";
+import { setShopDevStatus } from "~/services/internal-admin/ops.server";
 import type { SubscriptionStatus } from "~/domain/subscription-lifecycle";
 
 /** The internal console is staff-only and English-only — no i18n here. */
@@ -101,11 +103,30 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   return { shop, history, events, reconciliation };
 };
 
+export const action = async ({ request, params }: ActionFunctionArgs) => {
+  await requireAdminUser(request, { users: adminUsers() });
+  const shopDomain = decodeURIComponent(params.shop ?? "");
+  const shop = await shops().get(shopDomain);
+  if (!shop) throw new Response("Not found", { status: 404 });
+
+  const form = await request.formData();
+  const intent = String(form.get("intent") ?? "");
+  if (intent === "toggle_dev_status") {
+    await setShopDevStatus(shopDomain, !shop.isDevStore);
+  }
+
+  return null;
+};
+
 export default function ShopDetail() {
   const { shop, history, events, reconciliation } = useLoaderData<typeof loader>();
 
   return (
-    <Page title={shop.shop} subtitle="Install history and subscription activity." fullWidth>
+    <Page
+      title={shop.name ? `${shop.name} (${shop.shop})` : shop.shop}
+      subtitle={shop.contactEmail || shop.email ? `Merchant Contact: ${shop.contactEmail || shop.email}` : "Install history and subscription activity."}
+      fullWidth
+    >
       <div className="flex flex-col gap-4">
         {reconciliation?.lastFailedAt && (
           <Card>
@@ -118,7 +139,7 @@ export default function ShopDetail() {
           </Card>
         )}
         <Card>
-          <CardContent className="grid gap-4 pt-6 sm:grid-cols-3">
+          <CardContent className="grid gap-4 pt-6 sm:grid-cols-4">
             <div>
               <Text as="p" className="text-xs text-muted-foreground">
                 Status
@@ -126,6 +147,29 @@ export default function ShopDetail() {
               <Badge variant={shop.uninstalledAt === null ? "outline" : "destructive"}>
                 {shop.uninstalledAt === null ? "Active" : "Uninstalled"}
               </Badge>
+              {shop.contactEmail || shop.email ? (
+                <Text as="p" className="text-xs text-muted-foreground mt-1.5 truncate">
+                  {shop.contactEmail || shop.email}
+                </Text>
+              ) : null}
+            </div>
+            <div>
+              <Text as="p" className="text-xs text-muted-foreground">
+                Store Type (Revenue Tracking)
+              </Text>
+              <div className="flex items-center gap-2 mt-1">
+                {shop.isDevStore ? (
+                  <Badge variant="secondary">Development Store</Badge>
+                ) : (
+                  <Badge variant="outline">Production Store</Badge>
+                )}
+                <Form method="post">
+                  <input type="hidden" name="intent" value="toggle_dev_status" />
+                  <Button type="submit" variant="ghost" size="sm" className="h-6 px-2 text-xs">
+                    {shop.isDevStore ? "Mark Production" : "Mark Dev"}
+                  </Button>
+                </Form>
+              </div>
             </div>
             <div>
               <Text as="p" className="text-xs text-muted-foreground">

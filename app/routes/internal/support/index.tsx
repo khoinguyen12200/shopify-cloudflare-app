@@ -4,6 +4,7 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import {
   Badge,
   BlockStack,
+  Button,
   Card,
   CardContent,
   CardHeader,
@@ -103,6 +104,11 @@ export default function InternalSupport() {
       title="Support"
       subtitle="Open tickets from every shop, most recent first."
       fullWidth
+      primaryAction={
+        <Button asChild>
+          <Link to="/internal/support/new">New ticket</Link>
+        </Button>
+      }
     >
       <BlockStack gap={4}>
         <Card>

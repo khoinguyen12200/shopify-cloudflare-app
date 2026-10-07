@@ -26,7 +26,14 @@ export function useReplyDraft(textareaId: string) {
   const abort = useRef<AbortController | null>(null);
 
   const draft = useCallback(
-    async (input: { ticketId: string; tone: ReplyTone; instruction: string }) => {
+    async (input: {
+      ticketId?: string;
+      tone: ReplyTone;
+      instruction: string;
+      subject?: string;
+      shop?: string;
+      category?: string;
+    }) => {
       const target = document.getElementById(textareaId);
       if (!(target instanceof HTMLTextAreaElement)) return;
       // Synchronous, so a second click in the same tick cannot get past it.
@@ -44,10 +51,13 @@ export function useReplyDraft(textareaId: string) {
       const currentText = target.value;
 
       const body = new FormData();
-      body.set("ticketId", input.ticketId);
+      body.set("ticketId", input.ticketId ?? "new");
       body.set("currentText", currentText);
       body.set("instruction", input.instruction);
       body.set("tone", input.tone);
+      if (input.subject) body.set("subject", input.subject);
+      if (input.shop) body.set("shop", input.shop);
+      if (input.category) body.set("category", input.category);
 
       try {
         const response = await fetch("/internal/ai/draft", {

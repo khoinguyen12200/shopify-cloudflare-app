@@ -84,4 +84,20 @@ describe("computeBillingStats", () => {
       { amount: 1900, currency: "USD" },
     ]);
   });
+
+  it("excludes dev stores from real MRR and paid counts while reporting devShops", () => {
+    const stats = computeBillingStats([
+      projection({ shop: "real-paid.myshopify.com", priceAmount: 2900 }),
+      projection({ shop: "real-free.myshopify.com", subscriptionStatus: null, priceAmount: null, priceCurrency: null }),
+      projection({ shop: "dev-test.myshopify.com", priceAmount: 7900, isDevStore: true }),
+    ]);
+    expect(stats).toMatchObject({
+      totalShops: 2,
+      paidShops: 1,
+      freeShops: 1,
+      devShops: 1,
+    });
+    // Dev store's $79.00 must not inflate real MRR: only the real paid store's $29.00 is counted
+    expect(stats.mrrByCurrency).toEqual([{ amount: 2900, currency: "USD" }]);
+  });
 });

@@ -75,7 +75,8 @@ describe("opening a ticket", () => {
   it("adopts uploaded attachments through injected repository", async () => {
     const calls: string[] = [];
     const repo = {
-      attach: async () => { calls.push("attach"); }, open: async () => ({ id: "t", messageId: "m" }), reply: async () => false,
+      attach: async () => { calls.push("attach"); }, open: async () => ({ id: "t", messageId: "m" }),
+      openAsStaff: async () => ({ id: "t", messageId: "m" }), reply: async () => false,
       replyAsStaff: async () => undefined, find: async () => undefined, findForStaff: async () => undefined,
       listForShop: async () => [], listOpenForStaff: async () => [], closeAsStaff: async () => false,
       setCcEmails: async () => false, markRead: async () => {}, markReadAsStaff: async () => {},
@@ -90,6 +91,7 @@ describe("opening a ticket", () => {
     const repo = {
       attach: async () => {},
       open: async () => { calls.push("open"); return { id: "ticket", messageId: "message" }; },
+      openAsStaff: async () => ({ id: "ticket", messageId: "message" }),
       reply: async () => false,
       replyAsStaff: async () => undefined,
       find: async () => undefined,
@@ -609,5 +611,57 @@ describe("what the service asks the notifier to send", () => {
     });
 
     expect(notifier.forEvent("support_staff_reply")).toEqual([]);
+  });
+
+  it("notifies merchant directly when opened by staff", async () => {
+    const shop = newShop();
+    const notifier = await inRequest(async () => {
+      const { notifier, service } = withFake();
+      const created = await service.openTicketAsStaff({
+        shop,
+        shopName: "Alpha Store",
+        merchantEmail: "ian@luxebbq.ca",
+        ccEmails: ["cc@example.com"],
+        category: "bug",
+        subject: "Follow up on your inquiry",
+        body: "We investigated the issue and found a solution.",
+        staffName: "Staff Support",
+      });
+      expect(created.ok).toBe(true);
+      return notifier;
+    });
+
+    const reply = notifier.onlyFor("support_staff_reply");
+    expect(reply.to).toEqual({ email: "ian@luxebbq.ca" });
+    expect(reply.cc).toEqual({ email: ["cc@example.com"] });
+    expect(reply.payload).toMatchObject({
+      staffName: "Staff Support",
+      subject: "Follow up on your inquiry",
+      excerpt: expect.stringContaining("investigated the issue"),
+    });
+  });
+
+  it("stores staff as initial author and sets lastAuthor to staff when opened by staff", async () => {
+    const shop = newShop();
+    const thread = await inRequest(async () => {
+      const { service } = withFake();
+      const created = await service.openTicketAsStaff({
+        shop,
+        shopName: "Alpha Store",
+        merchantEmail: "merchant@test.com",
+        ccEmails: [],
+        category: "question",
+        subject: "Proactive outreach",
+        body: "Checking in.",
+        staffName: "Support Team",
+      });
+      if (!created.ok) throw new Error("failed");
+      return service.find(shop, created.value.id);
+    });
+
+    expect(thread).toBeDefined();
+    expect(thread?.ticket.lastAuthor).toBe("staff");
+    expect(thread?.messages[0]?.author).toBe("staff");
+    expect(thread?.messages[0]?.authorName).toBe("Support Team");
   });
 });

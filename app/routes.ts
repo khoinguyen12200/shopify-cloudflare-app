@@ -75,10 +75,43 @@ export default [
     route("internal/subscriptions", "routes/internal/subscriptions.tsx"),
     route("internal/ai", "routes/internal/ai.tsx"),
     route("internal/support", "routes/internal/support/index.tsx"),
+    route("internal/support/new", "routes/internal/support/new.tsx"),
     route("internal/support/:ticketId", "routes/internal/support/detail.tsx"),
     route("internal/shops", "routes/internal/shops/index.tsx"),
     route("internal/shops/:shop", "routes/internal/shops/detail.tsx"),
+    route("internal/mcp", "routes/internal/mcp.tsx"),
     route("internal/profile", "routes/internal/profile.tsx"),
+  ]),
+
+  // ── MCP & Automation Surface ──────────────────────────────────────────────
+  // RFC 9728 & RFC 8414 discovery
+  route(".well-known/oauth-protected-resource", "routes/.well-known/oauth-protected-resource.ts"),
+  route(".well-known/oauth-authorization-server", "routes/.well-known/oauth-authorization-server.ts"),
+
+  // Streamable HTTP JSON-RPC MCP Server
+  route("api/mcp", "routes/api/mcp.ts"),
+
+  // OAuth 2.0 PKCE Endpoints
+  route("api/oauth/register", "routes/api/oauth/register.ts"),
+  route("api/oauth/authorize", "routes/api/oauth/authorize.tsx"),
+  route("api/oauth/token", "routes/api/oauth/token.ts"),
+  route("api/oauth/revoke", "routes/api/oauth/revoke.ts"),
+
+  // Reusable REST APIs (/api/v1/*)
+  ...prefix("api/v1", [
+    route("metrics/revenue", "routes/api/v1/metrics/revenue.ts"),
+    route("metrics/churn", "routes/api/v1/metrics/churn.ts"),
+    route("health", "routes/api/v1/health.ts"),
+    route("shops/recent", "routes/api/v1/shops/recent.ts"),
+    route("shops", "routes/api/v1/shops/index.ts"),
+    route("shops/detail", "routes/api/v1/shops/detail.ts"),
+    route("shops/dev-status", "routes/api/v1/shops/dev-status.ts"),
+    route("webhooks/failures", "routes/api/v1/webhooks/failures.ts"),
+    route("tickets", "routes/api/v1/tickets/index.ts"),
+    route("tickets/detail", "routes/api/v1/tickets/detail.ts"),
+    route("tickets/reply", "routes/api/v1/tickets/reply.ts"),
+    route("support/upload", "routes/api/v1/support/upload.ts"),
+    route("audit", "routes/api/v1/audit.ts"),
   ]),
 
   // ── Resource routes ────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-import { support, shopSubscriptions } from "~/wiring.server";
+import { shopSubscriptions } from "~/wiring.server";
 import { Form, useActionData, useLoaderData, useNavigation } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { useState } from "react";
@@ -24,6 +24,7 @@ import {
 import { requireAdminUser } from "~/services/admin-auth.server";
 import { adminUsers } from "~/wiring.server";
 import { supportService } from "~/wiring.server";
+import { replyToTicket, closeTicket } from "~/services/internal-admin/ops.server";
 import { planForShopifyHandle } from "~/billing/plans";
 import { statusOf, type SupportStatus } from "~/support/status";
 import { CATEGORY_LABEL_EN } from "~/support/categories";
@@ -106,10 +107,9 @@ export const action = async ({ params, request }: ActionFunctionArgs) => {
   const actor = await requireAdminUser(request, { users: adminUsers() });
   const ticketId = params.ticketId ?? "";
   const form = await request.formData();
-  const service = supportService();
 
   if (String(form.get("intent")) === "close") {
-    await service.closeAsStaff(ticketId);
+    await closeTicket(ticketId);
     return { success: "closed" as const };
   }
 
@@ -118,17 +118,14 @@ export const action = async ({ params, request }: ActionFunctionArgs) => {
   if (!body && uploadIds.length === 0) return { error: "Write a reply or attach a file first." as const };
   if (body.length > BODY_MAX) return { error: "That reply is too long." as const };
 
-  // The staff member's own name is the author snapshot — never a form field.
-  const replied = await service.replyAsStaff({
+  const replied = await replyToTicket({
     ticketId,
     staffName: actor.name,
     body,
+    uploadIds,
   });
   if (!replied.ok) return { error: "That ticket no longer exists." as const };
 
-  if (!(await support().adoptPendingUploads(replied.value.shop, replied.value.messageId, uploadIds, Date.now()))) {
-    return { error: "invalid_upload" as const };
-  }
   return { success: "replied" as const };
 };
 

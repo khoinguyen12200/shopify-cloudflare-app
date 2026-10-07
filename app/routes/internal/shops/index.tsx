@@ -1,4 +1,3 @@
-import { shops, shopSubscriptions } from "~/wiring.server";
 import { Link, useLoaderData } from "react-router";
 import type { LoaderFunctionArgs } from "react-router";
 import {
@@ -17,34 +16,28 @@ import {
 import { Store } from "lucide-react";
 import { requireAdminUser } from "~/services/admin-auth.server";
 import { adminUsers } from "~/wiring.server";
-import { planForShopifyHandle } from "~/billing/plans";
 import { formatDate } from "~/i18n/format";
 import type { Locale } from "~/i18n/config";
+import { listShopsDirectory } from "~/services/internal-admin/ops.server";
 
 /** The internal console is staff-only and English-only — no i18n here. */
 const LOCALE: Locale = "en";
 
-const PAID_STATUSES = new Set(["ACTIVE", "ACCEPTED"]);
-
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await requireAdminUser(request, { users: adminUsers() });
-  const [shopRows, currentSubscriptions] = await Promise.all([
-    shops().listAll(),
-    shopSubscriptions().listCurrent(),
-  ]);
-  const currentByShop = new Map(currentSubscriptions.map((subscription) => [subscription.shop, subscription]));
+  const directory = await listShopsDirectory({ limit: 1_000 });
 
   return {
-    shops: shopRows.map((shop) => {
-      const current = currentByShop.get(shop.shop);
-      const paid = current && PAID_STATUSES.has(current.status) ? current : undefined;
-      return {
-        shop: shop.shop,
-        installedAt: shop.installedAt,
-        active: shop.uninstalledAt === null,
-        planName: planForShopifyHandle(paid?.planHandle)?.name ?? (paid?.planHandle ?? "Free"),
-      };
-    }),
+    shops: directory.map((shop) => ({
+      shop: shop.shop,
+      name: shop.name,
+      email: shop.contactEmail || shop.email,
+      logoUrl: shop.logoUrl || `https://${shop.shop}/favicon.ico`,
+      installedAt: shop.installedAt,
+      active: shop.uninstalledAt === null,
+      isDevStore: shop.isDevStore,
+      planName: shop.planName,
+    })),
   };
 };
 
@@ -64,6 +57,7 @@ export default function Shops() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Shop</TableHead>
+                  <TableHead>Type</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Plan</TableHead>
                   <TableHead>Installed</TableHead>
@@ -73,12 +67,46 @@ export default function Shops() {
                 {shops.map((shop) => (
                   <TableRow key={shop.shop}>
                     <TableCell className="font-medium">
-                      <Link
-                        to={`/internal/shops/${encodeURIComponent(shop.shop)}`}
-                        className="hover:underline"
-                      >
-                        {shop.shop}
-                      </Link>
+                      <div className="flex items-center gap-3">
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground overflow-hidden border border-border/40">
+                          {shop.logoUrl ? (
+                            <img
+                              src={shop.logoUrl}
+                              alt=""
+                              className="size-5 object-contain"
+                              onError={(e) => {
+                                e.currentTarget.style.display = "none";
+                              }}
+                            />
+                          ) : (
+                            <Store className="size-4" />
+                          )}
+                        </div>
+                        <div>
+                          <Link
+                            to={`/internal/shops/${encodeURIComponent(shop.shop)}`}
+                            className="font-semibold text-foreground hover:underline block leading-tight"
+                          >
+                            {shop.name || shop.shop}
+                          </Link>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                            <span>{shop.shop}</span>
+                            {shop.email && (
+                              <>
+                                <span>•</span>
+                                <span>{shop.email}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {shop.isDevStore ? (
+                        <Badge variant="secondary" className="text-xs">Dev Store</Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Production</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Badge variant={shop.active ? "outline" : "destructive"}>

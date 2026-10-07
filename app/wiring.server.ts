@@ -37,6 +37,9 @@ import { ENTITLEMENT_CATALOGUE } from "~/billing/entitlement-catalogue";
 import { createEntitlementCache, type EntitlementCacheAdapterPort } from "~/adapters/entitlement-cache.server";
 import type { HeldItem, HeldReconciliationPort } from "~/ports/entitlement-reconciliation";
 
+import { McpAuditLogRepo, McpOAuthRepo, McpTokenRepo } from "~/models/mcp.server";
+import type { McpAuditLogPort, McpOAuthPort, McpTokenPort } from "~/ports/mcp";
+
 type HeldPosition = Pick<HeldItem, "createdAt" | "kind" | "key" | "id">;
 
 function compareHeldPosition(left: HeldPosition, right: HeldPosition): number {
@@ -93,7 +96,14 @@ export function entitlementReconciliationPort(): HeldReconciliationPort {
 
 const SHOP_IDENTITY_QUERY = `#graphql
   query AuthenticatedShopIdentity {
-    shop { id myshopifyDomain }
+    shop {
+      id
+      name
+      email
+      contactEmail
+      myshopifyDomain
+      url
+    }
   }
 `;
 
@@ -113,12 +123,20 @@ export async function persistShopIdentity(admin: { graphql: (query: string) => P
   const value = data !== null && typeof data === "object" && "shop" in data ? data.shop : null;
   const identity = value !== null && typeof value === "object" && "id" in value && "myshopifyDomain" in value
     && typeof value.id === "string" && typeof value.myshopifyDomain === "string"
-    ? { id: value.id, myshopifyDomain: value.myshopifyDomain }
+    ? {
+        id: value.id,
+        myshopifyDomain: value.myshopifyDomain,
+        name: "name" in value && typeof value.name === "string" ? value.name : null,
+        email: "email" in value && typeof value.email === "string" ? value.email : null,
+        contactEmail: "contactEmail" in value && typeof value.contactEmail === "string" ? value.contactEmail : null,
+        url: "url" in value && typeof value.url === "string" ? value.url : null,
+        logoUrl: `https://${value.myshopifyDomain}/favicon.ico`,
+      }
     : null;
   return recordShopifyIdentity({
     shop,
     queryShop: async () => identity,
-    record: (tenant, shopifyShopId, at) => repository.recordAuthenticatedIdentity(tenant, shopifyShopId, at),
+    record: (tenant, shopifyShopId, at, details) => repository.recordAuthenticatedIdentity(tenant, shopifyShopId, at, details),
   }, now);
 }
 
@@ -127,13 +145,13 @@ export function adminUsers(): AdminUserPort {
 }
 
 /** Adapter factories are the only production boundary to repository classes. */
-export type ShopsPort = Pick<ShopRepo, "get" | "recordAuthenticatedIdentity" | "recordInstall" | "recordUninstall" | "markReconciled" | "listAll">;
-export type SupportPort = Pick<SupportRepo, "find" | "findForStaff" | "stageUpload" | "adoptPendingUploads" | "findAttachment" | "listForShop" | "listOpenForStaff" | "replyAsStaff" | "closeAsStaff" | "markReadAsStaff" | "setCcEmails" | "attach" | "open" | "reply" | "markRead" | "listExpiredUploads" | "deleteExpiredUploads">;
+export type ShopsPort = Pick<ShopRepo, "get" | "recordAuthenticatedIdentity" | "recordInstall" | "updateShopIdentity" | "recordUninstall" | "markReconciled" | "listAll" | "setDevStatus">;
+export type SupportPort = Pick<SupportRepo, "find" | "findForStaff" | "stageUpload" | "adoptPendingUploads" | "findAttachment" | "listForShop" | "listOpenForStaff" | "listKnownContacts" | "replyAsStaff" | "closeAsStaff" | "markReadAsStaff" | "setCcEmails" | "attach" | "open" | "openAsStaff" | "reply" | "markRead" | "listExpiredUploads" | "deleteExpiredUploads">;
 export type ShopSubscriptionsPort = Pick<ShopSubscriptionRepo, "currentForShop" | "listCurrent" | "upsertObservation">;
 export type ShopifyEventsPort = Pick<ShopifyEventRepo, "listSubscriptionEvents" | "listRelationshipEvents" | "listRecentSubscriptionEvents" | "recordPartnerRelationship" | "recordPartnerSubscription">;
 export type ShopSyncCheckpointsPort = Pick<ShopSyncCheckpointRepo, "read" | "markSucceeded" | "markFailed" | "readCheckpoint" | "markCheckpointSucceeded" | "markCheckpointFailed">;
-export type WebhookScopeObservationsPort = Pick<WebhookScopeObservationRepo, "record" | "list" | "applyScopes">;
-export type WebhookDeliveryRepositoryPort = Pick<WebhookDeliveryRepo, "listForShop" | "claim" | "get" | "markQueued" | "markProcessing" | "markProcessed" | "markFailed" | "markDeadLetter">;
+export type WebhookScopeObservationsPort = Pick<WebhookScopeObservationRepo, "record" | "list" | "applyScopes" | "listGrantedForShop">;
+export type WebhookDeliveryRepositoryPort = Pick<WebhookDeliveryRepo, "listForShop" | "claim" | "get" | "markQueued" | "markProcessing" | "markProcessed" | "markFailed" | "markDeadLetter" | "listFailures">;
 export type OperationalHealthPort = Pick<OperationalHealthRepo, "read">;
 export type AiRepositoryPort = Pick<AiRepo, "chainFor" | "markHealth" | "recordRun" | "allModels" | "tokensSince" | "recentRuns" | "addToChain" | "removeFromChain" | "reorder" | "setEnabled">;
 
@@ -146,6 +164,9 @@ export function webhookScopeObservations(): WebhookScopeObservationsPort { retur
 export function webhookDeliveryRepository(): WebhookDeliveryRepositoryPort { return new WebhookDeliveryRepo(); }
 export function operationalHealth(): OperationalHealthPort { return new OperationalHealthRepo(); }
 export function aiRepository(): AiRepositoryPort { return new AiRepo(); }
+export function mcpTokens(): McpTokenPort { return new McpTokenRepo(); }
+export function mcpOAuth(): McpOAuthPort { return new McpOAuthRepo(); }
+export function mcpAuditLogs(): McpAuditLogPort { return new McpAuditLogRepo(); }
 
 /** Advisory KV cache for entitlement previews; D1 remains authoritative. */
 export function entitlementCache(): EntitlementCacheAdapterPort {

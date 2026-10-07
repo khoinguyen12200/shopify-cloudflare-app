@@ -23,7 +23,7 @@ export interface UploadController {
 
 const MAX_FILES = 10;
 
-export function usePendingUploads(ticketId?: string): UploadController {
+export function usePendingUploads(ticketId?: string, shop?: string): UploadController {
   const [files, setFiles] = useState<PendingUpload[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +51,7 @@ export function usePendingUploads(ticketId?: string): UploadController {
               "Content-Type": file.type,
               "X-Support-Filename": encodeURIComponent(file.name),
               ...(ticketId ? { "X-Support-Ticket": ticketId } : {}),
+              ...(shop ? { "X-Shop": shop } : {}),
             },
           });
         } catch {
@@ -77,7 +78,7 @@ export function usePendingUploads(ticketId?: string): UploadController {
     } finally {
       setBusy(false);
     }
-  }, [files.length, ticketId]);
+  }, [files.length, ticketId, shop]);
 
   const remove = useCallback((uploadId: string) => {
     setFiles((current) => {

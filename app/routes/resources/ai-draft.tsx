@@ -5,6 +5,7 @@ import { adminUsers, aiService, supportService } from "~/wiring.server";
 import type { ThreadForPrompt } from "~/ai/draft-prompt";
 import { toReplyTone } from "~/ai/tones";
 import { replyTask } from "~/ai/tasks/reply";
+import { SUPPORT_CATEGORIES, type SupportCategory } from "~/support/categories";
 
 interface DraftStreamController {
   enqueue(chunk: Uint8Array): void;
@@ -57,21 +58,37 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
   const currentText = String(form.get("currentText") ?? "");
   const instruction = String(form.get("instruction") ?? "");
   const tone = toReplyTone(String(form.get("tone") ?? ""));
+  const subject = String(form.get("subject") ?? "");
+  const shop = String(form.get("shop") ?? "");
+  const categoryRaw = String(form.get("category") ?? "question");
 
-  const support = supportService();
-  const found = await support.findForStaff(ticketId);
-  if (!found) return new Response("Not found", { status: 404 });
+  let thread: ThreadForPrompt;
+  if (ticketId && ticketId !== "new") {
+    const support = supportService();
+    const found = await support.findForStaff(ticketId);
+    if (!found) return new Response("Not found", { status: 404 });
 
-  const thread: ThreadForPrompt = {
-    subject: found.ticket.subject,
-    shopName: found.ticket.shopName,
-    category: found.ticket.category,
-    messages: found.messages.map((message) => ({
-      author: message.author,
-      authorName: message.authorName,
-      body: message.body,
-    })),
-  };
+    thread = {
+      subject: found.ticket.subject,
+      shopName: found.ticket.shopName,
+      category: found.ticket.category,
+      messages: found.messages.map((message) => ({
+        author: message.author,
+        authorName: message.authorName,
+        body: message.body,
+      })),
+    };
+  } else {
+    // New ticket being drafted from internal console
+    thread = {
+      subject: subject.trim() || "Customer Support",
+      shopName: shop ? shop.replace(".myshopify.com", "") : "Merchant",
+      category: (SUPPORT_CATEGORIES.includes(categoryRaw as SupportCategory)
+        ? categoryRaw
+        : "question") as SupportCategory,
+      messages: [],
+    };
+  }
 
   const started = await aiService().stream(
     replyTask,

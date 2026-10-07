@@ -39,4 +39,14 @@ export class WebhookScopeObservationRepo {
       .orderBy(asc(webhookScopeObservations.scope));
     return rows.map(({ scope }) => scope);
   }
+
+  async listGrantedForShop(shop: string): Promise<string[]> {
+    const rows = await getDb()
+      .select({ scope: shopGrantedScopes.scope })
+      .from(shopGrantedScopes)
+      .where(eq(shopGrantedScopes.shop, shop))
+      .orderBy(asc(shopGrantedScopes.scope));
+    return rows.map(({ scope }) => scope);
+  }
 }
+

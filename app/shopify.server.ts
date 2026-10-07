@@ -10,7 +10,7 @@ import {
 } from "@shopify/shopify-app-react-router/server";
 
 import { KVSessionStorage } from "./session-storage.server";
-import { refreshShopSubscription } from "~/wiring.server";
+import { persistShopIdentity, refreshShopSubscription } from "~/wiring.server";
 import { getEnv } from "~/request-context.server";
 import { hashShop } from "~/observability/shop-log";
 
@@ -42,10 +42,23 @@ export const apiVersion = ApiVersion.July26;
  */
 export async function afterAuth({
   session,
+  admin,
 }: {
   session: { shop: string };
+  admin?: { graphql: (query: string) => Promise<Response> };
 }, refresh: (env: Env, shop: string) => Promise<unknown> = refreshShopSubscription): Promise<void> {
   await shops().recordInstall(session.shop, Date.now());
+  if (admin) {
+    try {
+      await persistShopIdentity(admin, session.shop);
+    } catch (error) {
+      console.error(JSON.stringify({
+        event: "shop_identity.persist_failed",
+        shopHash: await hashShop(session.shop),
+        error: error instanceof Error ? error.message : String(error),
+      }));
+    }
+  }
   try {
     await refresh(getEnv(), session.shop);
   } catch (error) {

@@ -124,6 +124,54 @@ export class SupportRepo {
     return { id, messageId };
   }
 
+  /**
+   * Open a ticket from staff side. Sets lastAuthor = "staff", so it starts
+   * in "answered" / waiting on merchant status.
+   */
+  async openAsStaff(input: {
+    shop: string;
+    shopName: string;
+    merchantEmail: string | null;
+    ccEmails: readonly string[];
+    category: SupportCategory;
+    subject: string;
+    body: string;
+    staffName: string;
+    locale?: string | null;
+    at: number;
+  }): Promise<{ id: string; messageId: string }> {
+    const id = crypto.randomUUID();
+    const messageId = crypto.randomUUID();
+    const db = getDb();
+
+    await db.insert(supportTickets).values({
+      id,
+      shop: input.shop,
+      shopName: input.shopName,
+      merchantEmail: input.merchantEmail,
+      ccEmails: [...input.ccEmails],
+      category: input.category,
+      subject: input.subject,
+      lastAuthor: "staff",
+      lastMessageAt: input.at,
+      staffLastReadAt: input.at,
+      locale: input.locale ?? null,
+      createdAt: input.at,
+    });
+
+    await db.insert(supportMessages).values({
+      id: messageId,
+      ticketId: id,
+      shop: input.shop,
+      author: "staff",
+      authorName: input.staffName,
+      body: input.body,
+      createdAt: input.at,
+    });
+
+    return { id, messageId };
+  }
+
   /** A merchant's own thread. Undefined for any other shop's id. */
   async find(shop: string, ticketId: string): Promise<SupportThread | undefined> {
     const [ticket] = await getDb()
@@ -191,6 +239,28 @@ export class SupportRepo {
       .from(supportTickets)
       .where(isNull(supportTickets.closedAt))
       .orderBy(desc(supportTickets.lastMessageAt));
+  }
+
+  /** Known contacts (store name and merchant email) derived from past tickets across shops. */
+  async listKnownContacts(): Promise<Record<string, { shopName: string; merchantEmail: string | null }>> {
+    const rows = await getDb()
+      .select({
+        shop: supportTickets.shop,
+        shopName: supportTickets.shopName,
+        merchantEmail: supportTickets.merchantEmail,
+      })
+      .from(supportTickets)
+      .orderBy(desc(supportTickets.lastMessageAt));
+
+    const result: Record<string, { shopName: string; merchantEmail: string | null }> = {};
+    for (const row of rows) {
+      if (!result[row.shop]) {
+        result[row.shop] = { shopName: row.shopName, merchantEmail: row.merchantEmail };
+      } else if (!result[row.shop]?.merchantEmail && row.merchantEmail) {
+        result[row.shop] = { shopName: row.shopName, merchantEmail: row.merchantEmail };
+      }
+    }
+    return result;
   }
 
   /**

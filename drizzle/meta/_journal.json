@@ -162,6 +162,20 @@
       "when": 1788927484690,
       "tag": "0022_wealthy_rage",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1791339443364,
+      "tag": "0023_kind_nightcrawler",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1791346929099,
+      "tag": "0024_tough_shard",
+      "breakpoints": true
     }
   ]
 }

@@ -31,8 +31,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   const ticketId = request.headers.get("X-Support-Ticket") ?? "new";
   const staff = await getAdminUser(request, { users: adminUsers() });
+  const explicitShop = request.headers.get("X-Shop");
   const shop = staff
-    ? (await support().findForStaff(ticketId))?.ticket.shop
+    ? (explicitShop || (ticketId !== "new" ? (await support().findForStaff(ticketId))?.ticket.shop : undefined))
     : (await createShopify(env).authenticate.admin(request)).session.shop;
   if (!shop) return data({ error: "not_found" as const }, { status: 404 });
   if (!staff && ticketId !== "new" && !(await support().find(shop, ticketId))) {
@@ -40,8 +41,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   // Uploads cost storage, so they share the limiter with ticket writes. Fails
-  // open when the binding is absent.
-  if (env.SUPPORT_LIMITER) {
+  // open when the binding is absent. Staff uploads bypass limiter.
+  if (!staff && env.SUPPORT_LIMITER) {
     const { success } = await env.SUPPORT_LIMITER.limit({ key: shop });
     if (!success) return data({ error: "rate_limited" as const }, { status: 429 });
   }

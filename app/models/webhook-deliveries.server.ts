@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
 import {
   type WebhookDelivery,
   webhookDeliveries,
@@ -142,5 +142,22 @@ export class WebhookDeliveryRepo {
         ),
       ).returning({ id: webhookDeliveries.id });
     return changed.length === 1 ? "applied" : "conflict";
+  }
+
+  async listFailures(options: { shop?: string; status?: "failed" | "dead_letter"; limit?: number } = {}): Promise<WebhookDelivery[]> {
+    const limit = options.limit ?? 20;
+    const conditions = [];
+    if (options.shop) conditions.push(eq(webhookDeliveries.shop, options.shop));
+    if (options.status) {
+      conditions.push(eq(webhookDeliveries.status, options.status));
+    } else {
+      conditions.push(or(eq(webhookDeliveries.status, "failed"), eq(webhookDeliveries.status, "dead_letter")));
+    }
+    return getDb()
+      .select()
+      .from(webhookDeliveries)
+      .where(and(...conditions))
+      .orderBy(desc(webhookDeliveries.receivedAt))
+      .limit(limit);
   }
 }
