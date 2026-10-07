@@ -100,4 +100,37 @@ describe("computeBillingStats", () => {
     // Dev store's $79.00 must not inflate real MRR: only the real paid store's $29.00 is counted
     expect(stats.mrrByCurrency).toEqual([{ amount: 2900, currency: "USD" }]);
   });
+
+  it("counts stores by plan correctly across free and paid tiers", () => {
+    const stats = computeBillingStats([
+      projection({ shop: "pro-1.myshopify.com", planHandle: "pro", subscriptionStatus: "ACTIVE" }),
+      projection({ shop: "pro-2.myshopify.com", planHandle: "pro", subscriptionStatus: "ACTIVE" }),
+      projection({ shop: "free-1.myshopify.com", subscriptionStatus: null, priceAmount: null, priceCurrency: null }),
+      projection({ shop: "free-2.myshopify.com", subscriptionStatus: "CANCELED", priceAmount: null, priceCurrency: null }),
+    ]);
+
+    expect(stats.totalShops).toBe(4);
+    expect(stats.paidShops).toBe(2);
+    expect(stats.freeShops).toBe(2);
+    expect(stats.shopsByPlan).toEqual({
+      free: 2,
+      pro: 2,
+    });
+  });
+
+  it("handles multi-item subscriptions without double-counting the shop in shopsByPlan", () => {
+    const stats = computeBillingStats([
+      projection({ shop: "pro-multi.myshopify.com", planHandle: "pro", priceAmount: 1900 }),
+      projection({ shop: "pro-multi.myshopify.com", planHandle: "pro", priceAmount: 500 }),
+      projection({ shop: "free-single.myshopify.com", subscriptionStatus: null, priceAmount: null, priceCurrency: null }),
+    ]);
+
+    expect(stats.totalShops).toBe(2);
+    expect(stats.paidShops).toBe(1);
+    expect(stats.freeShops).toBe(1);
+    expect(stats.shopsByPlan).toEqual({
+      free: 1,
+      pro: 1,
+    });
+  });
 });

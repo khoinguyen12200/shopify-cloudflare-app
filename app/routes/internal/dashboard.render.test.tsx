@@ -11,7 +11,13 @@ import Dashboard from "./dashboard";
 type LoaderData = {
   user: { name: string };
   admins: number;
-  stats: { totalShops: number; paidShops: number; freeShops: number; mrrByCurrency: { amount: number; currency: string }[] };
+  stats: {
+    totalShops: number;
+    paidShops: number;
+    freeShops: number;
+    mrrByCurrency: { amount: number; currency: string }[];
+    shopsByPlan?: Record<string, number>;
+  };
   trend: { month: string; installs: number; uninstalls: number; active: number }[];
   health: { failedWebhooks: number; deadLetterWebhooks: number; lifecycleEvents: number; subscriptionEvents: number; checkpoint: { lastSucceededAt: number | null; lastFailedAt: number | null } | null };
   uninstallFeedback?: {
@@ -54,7 +60,13 @@ describe("the internal dashboard", () => {
     const html = await render({
       user: { name: "Jamie" },
       admins: 3,
-      stats: { totalShops: 10, paidShops: 4, freeShops: 6, mrrByCurrency: [{ amount: 7600, currency: "USD" }] },
+      stats: {
+        totalShops: 10,
+        paidShops: 4,
+        freeShops: 6,
+        mrrByCurrency: [{ amount: 7600, currency: "USD" }],
+        shopsByPlan: { free: 6, pro: 4 },
+      },
       trend: [{ month: "Jan", installs: 2, uninstalls: 0, active: 2 }],
       health: { failedWebhooks: 2, deadLetterWebhooks: 1, lifecycleEvents: 4, subscriptionEvents: 3, checkpoint: { lastSucceededAt: 100, lastFailedAt: null } },
     });
@@ -62,6 +74,8 @@ describe("the internal dashboard", () => {
     expectStat(html, "Installed shops", "10");
     expectStat(html, "Paid shops", "4");
     expectStat(html, "Free shops", "6");
+    expectStat(html, "Free plan", "6");
+    expectStat(html, "Pro plan", "4");
     expect(html).toContain("$76.00");
   });
 

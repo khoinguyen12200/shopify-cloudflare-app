@@ -11,6 +11,7 @@ import { CircleDollarSign, Crown, Store, Users } from "lucide-react";
 import { requireAdminUser } from "~/services/admin-auth.server";
 import { adminUsers } from "~/wiring.server";
 import { computeBillingStats } from "~/billing/dashboard-stats";
+import { PLAN_LIST } from "~/billing/plans";
 import { merchantTrend } from "~/domain/merchant-trend";
 import { formatMoney, toCurrency, zero } from "~/money";
 import { formatDateTime } from "~/i18n/format";
@@ -65,6 +66,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         billingInterval: subscription?.billingInterval ?? null,
         priceAmount: subscription?.priceAmount ?? null,
         priceCurrency: subscription?.priceCurrency ?? null,
+        planHandle: subscription?.planHandle ?? null,
+        isDevStore: shop.isDevStore,
       }));
     })),
     trend: merchantTrend(allShops, TREND_MONTHS, Date.now()),
@@ -94,6 +97,25 @@ export default function Dashboard() {
             }
             icon={CircleDollarSign}
           />
+        </InlineStack>
+
+        <InlineStack gap={4} className="flex-wrap [&>*]:min-w-44 [&>*]:flex-1">
+          {PLAN_LIST.map((plan) => {
+            const count = stats.shopsByPlan?.[plan.handle] ?? 0;
+            const cleanName = plan.name.replace(/^TODO:/i, "");
+            const title = cleanName.charAt(0).toUpperCase() + cleanName.slice(1).toLowerCase();
+            const isPaid = plan.priceMonthly.amount > 0;
+            const pct = stats.totalShops > 0 ? Math.round((count / stats.totalShops) * 100) : 0;
+            return (
+              <StatCard
+                key={plan.handle}
+                label={`${title} plan`}
+                value={String(count)}
+                icon={isPaid ? Crown : Store}
+                helpText={`${pct}% of active stores`}
+              />
+            );
+          })}
         </InlineStack>
 
         <Card>
