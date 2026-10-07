@@ -1,4 +1,4 @@
-import { render } from "@react-email/render";
+import { render } from "react-email";
 import type { ReactElement } from "react";
 
 /** A fully rendered email: HTML for real clients, plain text as the alternative. */

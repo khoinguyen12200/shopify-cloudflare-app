@@ -30,6 +30,23 @@ export async function clearAllTables(db: D1Database): Promise<void> {
 
 }
 
+let cachedMigrations: Parameters<typeof applyD1Migrations>[1] | null = null;
+function getMigrations(): Parameters<typeof applyD1Migrations>[1] {
+  if (!cachedMigrations) {
+    cachedMigrations = JSON.parse(env.TEST_MIGRATIONS) as Parameters<typeof applyD1Migrations>[1];
+  }
+  return cachedMigrations;
+}
+
+let isMigrated = false;
+
+async function ensureMigrated(db: D1Database): Promise<void> {
+  if (!isMigrated) {
+    await applyD1Migrations(db, getMigrations());
+    isMigrated = true;
+  }
+}
+
 /**
  * Give each test a clean database.
  *
@@ -42,7 +59,7 @@ export async function clearAllTables(db: D1Database): Promise<void> {
  */
 export function setupTestDatabase() {
   beforeEach(async () => {
-    await applyD1Migrations(env.DB, JSON.parse(env.TEST_MIGRATIONS));
+    await ensureMigrated(env.DB);
     await clearAllTables(env.DB);
   });
 }

@@ -6,6 +6,7 @@ import {
 } from "@cloudflare/vitest-pool-workers";
 import { defineConfig } from "vitest/config";
 import path from "node:path";
+import { readdirSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 
 // Keep environment validation quiet and deterministic in the test process;
@@ -26,12 +27,6 @@ const migrations = await readD1Migrations(
   path.join(import.meta.dirname, "drizzle"),
 );
 
-// The public design tokens, as SOURCE text. app/emails/tokens.test.ts compares
-// the email palette against it, so the two cannot drift.
-//
-// Read here, in Node, rather than with a `?raw` import: Vite's SCSS plugin
-// handles `.scss` before `?raw` can take effect, and the import resolves to an
-// empty string — which would make every assertion in that test vacuously pass.
 const emptyCleanupSchema = await generateSQLiteDrizzleJson({});
 const parentCleanupSchema = await generateSQLiteDrizzleJson({ fkParent });
 const fullCleanupSchema = await generateSQLiteDrizzleJson({ fkParent, fkChild });
@@ -48,64 +43,112 @@ const publicTokensScss = await readFile(
   "utf8",
 );
 
+function collectTests(dir: string): string[] {
+  const results: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      results.push(...collectTests(full));
+    } else if (entry.isFile() && (entry.name.endsWith(".test.ts") || entry.name.endsWith(".test.tsx"))) {
+      results.push(full);
+    }
+  }
+  return results;
+}
+
+const allTestFiles = collectTests("app");
+
+const DOM_FILES = [
+  "app/components/support/AttachmentPicker.render.test.tsx",
+  "app/routes/app/support/use-pending-uploads.test.tsx",
+  "app/routes/app/support/dom-outbound-guard.test.ts",
+];
+
+const EXPLICIT_WORKERS = [
+  "app/outbound-guard.test.ts",
+  "app/adapters/shopify-partner.test.ts",
+  "app/adapters/shopify-store-credit.test.ts",
+  "app/routes/app/_layout.render.test.tsx",
+];
+
+const domSet = new Set(DOM_FILES);
+const workersFiles: string[] = [];
+const domFiles: string[] = [];
+const unitFiles: string[] = [];
+
+for (const file of allTestFiles) {
+  if (domSet.has(file) || file.includes(".dom.test.")) {
+    domFiles.push(file);
+  } else if (EXPLICIT_WORKERS.includes(file)) {
+    workersFiles.push(file);
+  } else {
+    const content = readFileSync(file, "utf8");
+    if (
+      content.includes("cloudflare:test") ||
+      content.includes("cloudflare:workers") ||
+      content.includes("applyD1Migrations")
+    ) {
+      workersFiles.push(file);
+    } else {
+      unitFiles.push(file);
+    }
+  }
+}
+
 export default defineConfig({
-  // Resolve the `~/*` tsconfig alias (Vite 8 native — same as vite.config.ts).
-  resolve: { tsconfigPaths: true },
-  plugins: [
-    cloudflareTest({
-      wrangler: { configPath: "./wrangler.jsonc" },
-      // Tests must NEVER touch remote resources — the pool defaults
-      // remoteBindings to true, which would reach real Cloudflare services.
-      // Bindings still run for real, locally, under Miniflare.
-      remoteBindings: false,
-      miniflare: {
-        // NO TEST MAY REACH THE PUBLIC INTERNET. A suite that inherits live
-        // credentials and quietly talks to a real service can stay green while
-        // doing real damage — so the network is closed, not trusted. Local
-        // bindings (D1, KV, R2, Queues) still run for real; that is the point
-        // of the Workers pool. A blocked-outbound error is this guard WORKING:
-        // fix it with a fake at the outermost HTTP boundary, never by opening
-        // a hole here.
-        outboundService: () =>
-          new Response(
-            "Outbound network is blocked in tests. Fake this call at the HTTP boundary.",
-            { status: 403 },
-          ),
-        bindings: {
-          TEST_MIGRATIONS: JSON.stringify(migrations),
-          TEST_CLEANUP_MIGRATIONS: JSON.stringify(cleanupMigrations),
-          TEST_PUBLIC_TOKENS_SCSS: publicTokensScss,
-          // Keep the suite self-contained: locally these come from .dev.vars,
-          // which is gitignored and absent on a CI runner.
-          SHOPIFY_API_KEY: "test-api-key",
-          SHOPIFY_API_SECRET: "test-api-secret",
-          ATTACHMENT_TOKEN_SECRET: "test-attachment-secret",
-          SHOP_CUSTOM_DOMAIN: "example.myshopify.com",
-          SHOPIFY_PARTNER_API_TOKEN: "test-partner-token",
-          SHOPIFY_APP_URL: "https://example.test",
-          // Signs the internal console's session cookie. Injected here so the
-          // session layer is TESTABLE: admin-auth.server.ts refuses to run
-          // without it (a constant default would make the cookie forgeable), so
-          // without this binding every session test would throw instead of
-          // exercising the code.
-          INTERNAL_SESSION_SECRET: "test-internal-session-secret",
+  test: {
+    projects: [
+      {
+        resolve: { alias: { "~": path.resolve(import.meta.dirname, "app") } },
+        test: {
+          name: "unit",
+          include: unitFiles,
+          environment: "node",
         },
       },
-    }),
-  ],
-  test: {
-    // Integration tests against real workerd + D1 are legitimately slower than
-    // unit tests, especially on a cold CI runner. Give them headroom so the
-    // suite is reliable rather than flaky — without masking a real hang.
-    testTimeout: 60_000,
-    hookTimeout: 60_000,
-    exclude: [
-      "**/node_modules/**",
-      "build/**",
-      "extensions/**",
-      "scripts/**",
-      "app/components/support/AttachmentPicker.render.test.tsx",
-      "app/routes/app/support/use-pending-uploads.test.tsx",
+      {
+        resolve: { alias: { "~": path.resolve(import.meta.dirname, "app") } },
+        test: {
+          name: "dom",
+          include: domFiles,
+          environment: "jsdom",
+          setupFiles: ["app/test/dom-outbound-guard.setup.ts"],
+        },
+      },
+      {
+        resolve: { tsconfigPaths: true },
+        plugins: [
+          cloudflareTest({
+            wrangler: { configPath: "./wrangler.jsonc" },
+            remoteBindings: false,
+            miniflare: {
+              outboundService: () =>
+                new Response(
+                  "Outbound network is blocked in tests. Fake this call at the HTTP boundary.",
+                  { status: 403 },
+                ),
+              bindings: {
+                TEST_MIGRATIONS: JSON.stringify(migrations),
+                TEST_CLEANUP_MIGRATIONS: JSON.stringify(cleanupMigrations),
+                TEST_PUBLIC_TOKENS_SCSS: publicTokensScss,
+                SHOPIFY_API_KEY: "test-api-key",
+                SHOPIFY_API_SECRET: "test-api-secret",
+                ATTACHMENT_TOKEN_SECRET: "test-attachment-secret",
+                SHOP_CUSTOM_DOMAIN: "example.myshopify.com",
+                SHOPIFY_PARTNER_API_TOKEN: "test-partner-token",
+                SHOPIFY_APP_URL: "https://example.test",
+                INTERNAL_SESSION_SECRET: "test-internal-session-secret",
+              },
+            },
+          }),
+        ],
+        test: {
+          name: "workers",
+          testTimeout: 60_000,
+          hookTimeout: 60_000,
+          include: workersFiles,
+        },
+      },
     ],
   },
 });
