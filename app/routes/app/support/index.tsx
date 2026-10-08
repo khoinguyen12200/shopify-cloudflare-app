@@ -151,7 +151,6 @@ function EmptyState() {
             alt={t("support.empty.illustrationAlt")}
             aspectRatio="1/0.77"
             objectFit="contain"
-            loading="lazy"
           ></s-image>
         </s-box>
 

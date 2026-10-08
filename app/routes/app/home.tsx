@@ -135,7 +135,6 @@ function GuideStep({
                 src={image}
                 alt={alt}
                 objectFit="contain"
-                loading="lazy"
               ></s-image>
             </s-box>
           </s-grid>
