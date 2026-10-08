@@ -17,8 +17,7 @@ import {
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useTranslation } from "react-i18next";
 
-import { createShopify } from "~/shopify.server";
-import { getEnv } from "~/request-context.server";
+import { authenticateAdmin } from "~/admin/require-merchant.server";
 import { useLocale } from "~/i18n/useLocale";
 import { formatDate, formatDateTime, formatNumber } from "~/i18n/format";
 import { supportService } from "~/wiring.server";
@@ -36,7 +35,7 @@ import { usePendingUploads } from "./use-pending-uploads";
 export const handle = { i18n: ["common", "admin"] };
 
 export const loader = async ({ params, request }: LoaderFunctionArgs) => {
-  const { session } = await createShopify(getEnv()).authenticate.admin(request);
+  const { session } = await authenticateAdmin(request);
   const service = supportService();
 
   const thread = await service.find(session.shop, params.ticketId ?? "");
@@ -95,7 +94,7 @@ export const loader = async ({ params, request }: LoaderFunctionArgs) => {
  * on their screen. Staff close threads from the internal console.
  */
 export const action = async ({ params, request }: ActionFunctionArgs) => {
-  const { session } = await createShopify(getEnv()).authenticate.admin(request);
+  const { session } = await authenticateAdmin(request);
   const ticketId = params.ticketId ?? "";
   const form = await request.formData();
   const intent = String(form.get("intent") ?? "reply");

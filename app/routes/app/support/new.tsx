@@ -9,8 +9,7 @@ import { data, redirect, useActionData, useLoaderData, Form } from "react-router
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useTranslation } from "react-i18next";
 
-import { createShopify } from "~/shopify.server";
-import { getEnv } from "~/request-context.server";
+import { authenticateAdmin } from "~/admin/require-merchant.server";
 import { getLocale } from "~/i18n/i18n.server";
 import { supportService } from "~/wiring.server";
 import {
@@ -45,7 +44,7 @@ const SHOP_CONTACT_QUERY = `#graphql
 `;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin } = await createShopify(getEnv()).authenticate.admin(request);
+  const { admin } = await authenticateAdmin(request);
 
   const response = await admin.graphql(SHOP_CONTACT_QUERY);
   const contact = readShopContact(await response.json());
@@ -54,7 +53,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session, admin } = await createShopify(getEnv()).authenticate.admin(request);
+  const { session, admin } = await authenticateAdmin(request);
   const form = await request.formData();
 
   const parsed = createTicketSchema.safeParse(Object.fromEntries(form));

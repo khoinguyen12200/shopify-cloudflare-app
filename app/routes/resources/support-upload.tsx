@@ -1,7 +1,7 @@
 import { support } from "~/wiring.server";
 import { data } from "react-router";
 import type { ActionFunctionArgs } from "react-router";
-import { createShopify } from "~/shopify.server";
+import { authenticateAdmin } from "~/admin/require-merchant.server";
 import { getEnv } from "~/request-context.server";
 import { attachmentKey, safeFilename, validateUpload } from "~/support/attachment";
 import { getAdminUser } from "~/services/admin-auth.server";
@@ -34,7 +34,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const explicitShop = request.headers.get("X-Shop");
   const shop = staff
     ? (explicitShop || (ticketId !== "new" ? (await support().findForStaff(ticketId))?.ticket.shop : undefined))
-    : (await createShopify(env).authenticate.admin(request)).session.shop;
+    : (await authenticateAdmin(request)).session.shop;
   if (!shop) return data({ error: "not_found" as const }, { status: 404 });
   if (!staff && ticketId !== "new" && !(await support().find(shop, ticketId))) {
     return data({ error: "not_found" as const }, { status: 404 });

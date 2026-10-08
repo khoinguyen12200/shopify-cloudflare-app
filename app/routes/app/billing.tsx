@@ -4,7 +4,7 @@ import { data, useFetcher, useLoaderData, useNavigate } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useTranslation } from "react-i18next";
 
-import { createShopify } from "~/shopify.server";
+import { authenticateAdmin } from "~/admin/require-merchant.server";
 import { getEnv } from "~/request-context.server";
 import { currentAppInstallationSchema } from "~/schemas/current-app-installation";
 import { ShopifyAppIdentityAdapter } from "~/adapters/shopify-app-identity.server";
@@ -71,7 +71,7 @@ export function parseCurrentAppInstallationHandle(payload: unknown): string {
 }
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin, session } = await createShopify(getEnv()).authenticate.admin(request);
+  const { admin, session } = await authenticateAdmin(request);
   await persistShopIdentity(admin, session.shop);
   const result = await reconcileShop({
     refreshSubscription: () => refreshShopSubscription(getEnv(), session.shop),
@@ -84,7 +84,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } =
-    await createShopify(getEnv()).authenticate.admin(request);
+    await authenticateAdmin(request);
   await persistShopIdentity(admin, session.shop);
   const pricingReturn = shouldShowProcessing(request.url);
 

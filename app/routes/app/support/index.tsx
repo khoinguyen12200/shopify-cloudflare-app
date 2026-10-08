@@ -3,8 +3,7 @@ import { useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useTranslation } from "react-i18next";
 
-import { createShopify } from "~/shopify.server";
-import { getEnv } from "~/request-context.server";
+import { authenticateAdmin } from "~/admin/require-merchant.server";
 import { useLocale } from "~/i18n/useLocale";
 import { formatDate } from "~/i18n/format";
 import { supportService } from "~/wiring.server";
@@ -14,7 +13,7 @@ import { CATEGORY_LABEL_KEY } from "~/support/categories";
 export const handle = { i18n: ["common", "admin"] };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await createShopify(getEnv()).authenticate.admin(request);
+  const { session } = await authenticateAdmin(request);
   const tickets = await supportService().listForShop(session.shop);
 
   // Derived here, not in the component: the row only renders what it is given,

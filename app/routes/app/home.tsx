@@ -7,15 +7,14 @@ import { useTranslation } from "react-i18next";
 import { pricingReturnDestination } from "~/billing/pricing-return";
 import { formatMoney, formatNumber } from "~/i18n/format";
 import { useLocale } from "~/i18n/useLocale";
-import { getEnv } from "~/request-context.server";
-import { createShopify } from "~/shopify.server";
+import { authenticateAdmin } from "~/admin/require-merchant.server";
 import { persistShopIdentity, shops } from "~/wiring.server";
 
 export const handle = { i18n: ["common", "admin"] };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } =
-    await createShopify(getEnv()).authenticate.admin(request);
+    await authenticateAdmin(request);
   await persistShopIdentity(admin, session.shop);
 
   const destination = pricingReturnDestination(request.url);

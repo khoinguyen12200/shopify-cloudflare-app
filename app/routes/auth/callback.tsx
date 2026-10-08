@@ -1,7 +1,6 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { createShopify } from "~/shopify.server";
-import { getEnv } from "~/request-context.server";
+import { authenticateAdmin } from "~/admin/require-merchant.server";
 
 /**
  * The `/auth/*` splat, kept for the library's own bounce pages.
@@ -13,7 +12,7 @@ import { getEnv } from "~/request-context.server";
  * the app actually learns a shop has a session.
  */
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await createShopify(getEnv()).authenticate.admin(request);
+  await authenticateAdmin(request);
   return null;
 };
 

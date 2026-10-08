@@ -4,7 +4,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { useTranslation } from "react-i18next";
 
-import { createShopify } from "~/shopify.server";
+import { authenticateAdmin } from "~/admin/require-merchant.server";
 import { getEnv } from "~/request-context.server";
 import { persistShopIdentity } from "~/wiring.server";
 
@@ -16,7 +16,7 @@ export const handle = { i18n: ["common", "admin"] };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const env = getEnv();
-  const { admin, session } = await createShopify(env).authenticate.admin(request);
+  const { admin, session } = await authenticateAdmin(request);
   await persistShopIdentity(admin, session.shop);
 
   // The public client_id, read from the Worker's env binding — there is no
