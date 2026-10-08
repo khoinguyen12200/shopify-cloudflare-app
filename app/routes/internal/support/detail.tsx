@@ -35,6 +35,7 @@ import { CATEGORY_LABEL_EN } from "~/support/categories";
 import { BODY_MAX } from "~/schemas/support";
 import { Thread, THREAD_CSS, type ThreadMessage } from "~/components/support/Thread";
 import { formatDateTime, formatNumber } from "~/i18n/format";
+import { UTC } from "~/i18n/time-zone";
 import type { Locale } from "~/i18n/config";
 import { Sparkles } from "lucide-react";
 import { useReplyDraft } from "~/internal/use-reply-draft";
@@ -211,7 +212,7 @@ export default function InternalSupportThread() {
                   youLabel="You"
                   downloadLabel="Download file"
                   formatFileSize={(sizeBytes) => `${formatNumber(LOCALE, Math.max(1, Math.round(sizeBytes / 1024)))} KB`}
-                  formatWhen={(at) => formatDateTime(LOCALE, at)}
+                  formatWhen={(at) => formatDateTime(LOCALE, at, UTC)}
                 />
               </CardContent>
             </Card>
@@ -335,7 +336,7 @@ export default function InternalSupportThread() {
                 </Detail>
                 {plan && <Detail label="Subscription">{plan.status}</Detail>}
                 <Detail label="Opened">
-                  {formatDateTime(LOCALE, ticket.createdAt)}
+                  {formatDateTime(LOCALE, ticket.createdAt, UTC)}
                 </Detail>
                 <Detail label="Reply to">
                   {ticket.merchantEmail ?? "In-app only"}

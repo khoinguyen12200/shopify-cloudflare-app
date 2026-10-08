@@ -26,6 +26,7 @@ import {
 import type { ProfileErrorReason } from "~/services/admin-management.server";
 import { MIN_PASSWORD_LENGTH } from "~/lib/password-policy";
 import { formatDateTime } from "~/i18n/format";
+import { UTC } from "~/i18n/time-zone";
 import type { Locale } from "~/i18n/config";
 import { adminUsers } from "~/wiring.server";
 
@@ -200,7 +201,7 @@ export default function Profile() {
 
         {user.lastLoginAt && (
           <Text as="p" className="text-xs text-muted-foreground">
-            {formatDateTime(LOCALE, user.lastLoginAt)}
+            {formatDateTime(LOCALE, user.lastLoginAt, UTC)}
           </Text>
         )}
       </BlockStack>

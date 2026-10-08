@@ -27,6 +27,9 @@ import { reconcileHistory, reconcileShopHistory } from "~/services/reconcile-sho
 import { refreshSubscription } from "~/services/reconcile-subscription";
 import type { AdminUserPort } from "~/ports/admin-users";
 import type { PasswordResetTokenPort } from "~/ports/password-reset-tokens";
+import { shopLog } from "~/observability/shop-log";
+import { resolveShopTimeZone } from "~/services/shop-time-zone";
+import { z } from "zod";
 import { recordShopifyIdentity } from "~/services/record-shopify-identity";
 import { reconcileAfterUninstall } from "~/services/reconcile-after-uninstall";
 import type { AuthAttemptLimiter } from "~/ports/auth-rate-limit";
@@ -109,6 +112,33 @@ const SHOP_IDENTITY_QUERY = `#graphql
     }
   }
 `;
+
+const SHOP_TIME_ZONE_QUERY = `#graphql
+  query AuthenticatedShopTimeZone {
+    shop { ianaTimezone }
+  }
+`;
+
+const timeZoneResponse = z.object({ data: z.object({ shop: z.object({ ianaTimezone: z.string() }) }) });
+
+/** The zone every date for this shop renders in; see `resolveShopTimeZone`. */
+export function shopTimeZone(
+  admin: { graphql: (query: string) => Promise<Response> },
+  shop: string,
+): Promise<string> {
+  const repository = new ShopRepo();
+  return resolveShopTimeZone(shop, {
+    stored: async (domain) => (await repository.get(domain))?.timeZone ?? null,
+    fetch: async () => {
+      const response = await admin.graphql(SHOP_TIME_ZONE_QUERY);
+      if (!response.ok) return null;
+      const parsed = timeZoneResponse.safeParse(await response.json());
+      return parsed.success ? parsed.data.data.shop.ianaTimezone : null;
+    },
+    record: (domain, timeZone) => repository.recordTimeZone(domain, timeZone),
+    unavailable: (domain) => shopLog("shop.time_zone_unavailable", domain),
+  });
+}
 
 export async function persistShopIdentity(admin: { graphql: (query: string) => Promise<Response> }, shop: string, now = Date.now()) {
   const repository = new ShopRepo();

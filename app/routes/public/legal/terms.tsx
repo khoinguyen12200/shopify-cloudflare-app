@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { i18nServer } from "~/i18n/i18n.server";
 import { useLocale } from "~/i18n/useLocale";
 import { formatDate } from "~/i18n/format";
+import { UTC } from "~/i18n/time-zone";
 import { identity } from "~/identity";
 
 export const handle = { i18n: ["common", "public"] };
@@ -37,7 +38,7 @@ export default function TermsOfService() {
 
   const updated = Number.isNaN(Date.parse(identity.legal.effectiveDate))
     ? identity.legal.effectiveDate
-    : formatDate(locale, new Date(identity.legal.effectiveDate), { dateStyle: "long" });
+    : formatDate(locale, new Date(identity.legal.effectiveDate), UTC, { dateStyle: "long" });
 
   return (
     <section className="section">

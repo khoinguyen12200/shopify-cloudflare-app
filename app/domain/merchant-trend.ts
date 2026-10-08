@@ -31,7 +31,7 @@ export interface TrendShop {
   readonly uninstalledAt: number | null;
 }
 
-const MONTH_LABEL = new Intl.DateTimeFormat("en", { month: "short" });
+const MONTH_LABEL = new Intl.DateTimeFormat("en", { month: "short", timeZone: "UTC" });
 
 export function merchantTrend(
   shops: readonly TrendShop[],

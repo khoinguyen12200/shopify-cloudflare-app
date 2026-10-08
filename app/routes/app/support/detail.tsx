@@ -20,6 +20,7 @@ import { useTranslation } from "react-i18next";
 import { authenticateAdmin } from "~/admin/require-merchant.server";
 import { useLocale } from "~/i18n/useLocale";
 import { formatDate, formatDateTime, formatNumber } from "~/i18n/format";
+import { useTimeZone } from "~/i18n/useTimeZone";
 import { supportService } from "~/wiring.server";
 import { statusOf, type SupportStatus } from "~/support/status";
 import { CATEGORY_LABEL_KEY } from "~/support/categories";
@@ -150,6 +151,7 @@ export default function SupportThreadPage() {
   const navigation = useNavigation();
   const { t } = useTranslation(["admin", "common"]);
   const locale = useLocale();
+  const timeZone = useTimeZone();
   const uploads = usePendingUploads(ticket.id);
   const submit = useSubmit();
   const ccForm = useRef<HTMLFormElement>(null);
@@ -223,7 +225,7 @@ export default function SupportThreadPage() {
             youLabel={t("support.thread.you")}
             downloadLabel={t("support.thread.download")}
             formatFileSize={(sizeBytes) => `${formatNumber(locale, Math.max(1, Math.round(sizeBytes / 1024)))} KB`}
-            formatWhen={(at) => formatDateTime(locale, at)}
+            formatWhen={(at) => formatDateTime(locale, at, timeZone)}
           />
         </s-section>
 
@@ -286,7 +288,7 @@ export default function SupportThreadPage() {
 
               <s-stack direction="block" gap="small-300">
                 <s-text color="subdued">{t("support.thread.created")}</s-text>
-                <s-text>{formatDate(locale, ticket.createdAt)}</s-text>
+                <s-text>{formatDate(locale, ticket.createdAt, timeZone)}</s-text>
               </s-stack>
 
               <s-divider direction="block" />

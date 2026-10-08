@@ -30,6 +30,7 @@ function shop(overrides: Partial<Shop> = {}): Shop {
     contactEmail: null,
     logoUrl: null,
     url: null,
+    timeZone: null,
     relationshipStatus: null,
     relationshipOccurredAt: null,
     relationshipExternalId: null,

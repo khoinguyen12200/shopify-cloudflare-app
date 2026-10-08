@@ -48,6 +48,7 @@ import type { AdminErrorReason } from "~/services/admin-management.server";
 import { MIN_PASSWORD_LENGTH } from "~/lib/password-policy";
 import { paths } from "~/urls";
 import { formatDateTime } from "~/i18n/format";
+import { UTC } from "~/i18n/time-zone";
 import type { Locale } from "~/i18n/config";
 import { useActionToast } from "~/internal/use-action-toast";
 import {
@@ -217,7 +218,7 @@ export default function Admins() {
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {admin.lastLoginAt
-                          ? formatDateTime(LOCALE, admin.lastLoginAt)
+                          ? formatDateTime(LOCALE, admin.lastLoginAt, UTC)
                           : "Never"}
                       </TableCell>
                       <TableCell className="text-right">

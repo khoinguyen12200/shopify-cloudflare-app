@@ -15,6 +15,7 @@ import { PLAN_LIST } from "~/billing/plans";
 import { merchantTrend } from "~/domain/merchant-trend";
 import { formatMoney, toCurrency, zero } from "~/money";
 import { formatDateTime } from "~/i18n/format";
+import { UTC } from "~/i18n/time-zone";
 import { unwrap } from "~/lib/result";
 import type { Locale } from "~/i18n/config";
 
@@ -127,7 +128,7 @@ export default function Dashboard() {
           </div>
           <div className="border-t px-6 py-4 text-sm text-muted-foreground">
             Last sync: {health.checkpoint?.lastSucceededAt
-              ? formatDateTime(LOCALE, health.checkpoint.lastSucceededAt)
+              ? formatDateTime(LOCALE, health.checkpoint.lastSucceededAt, UTC)
               : "Not yet completed"}
           </div>
         </Card>

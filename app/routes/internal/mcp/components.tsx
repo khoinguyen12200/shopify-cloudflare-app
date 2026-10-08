@@ -30,6 +30,7 @@ import type { listRecentAuditLogs } from "~/services/mcp/audit.server";
 import type { TOOL_CATALOG } from "~/mcp/catalog";
 import { MCP_SCOPES, SCOPE_DESCRIPTIONS } from "~/domain/mcp/scopes";
 import { formatDateTime } from "~/i18n/format";
+import { UTC } from "~/i18n/time-zone";
 import type { Locale } from "~/i18n/config";
 
 const LOCALE: Locale = "en";
@@ -353,7 +354,7 @@ export function TokensClientsTab({
                           </div>
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
-                          {tok.lastUsedAt ? formatDateTime(LOCALE, tok.lastUsedAt) : "Never"}
+                          {tok.lastUsedAt ? formatDateTime(LOCALE, tok.lastUsedAt, UTC) : "Never"}
                         </TableCell>
                         <TableCell>
                           {isRevoked ? (
@@ -430,7 +431,7 @@ export function TokensClientsTab({
                           {cli.redirectUris.join(", ")}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
-                          {formatDateTime(LOCALE, cli.createdAt)}
+                          {formatDateTime(LOCALE, cli.createdAt, UTC)}
                         </TableCell>
                         <TableCell>
                           {isRevoked ? (
@@ -507,7 +508,7 @@ export function AuditLogsTab({
               logs.map((log) => (
                 <TableRow key={log.id}>
                   <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                    {formatDateTime(LOCALE, log.createdAt)}
+                    {formatDateTime(LOCALE, log.createdAt, UTC)}
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-col">

@@ -24,6 +24,7 @@ import { adminUsers, refreshShopHistory, refreshShopSubscription } from "~/wirin
 import { getEnv } from "~/request-context.server";
 import { PLAN_LIST, planForShopifyHandle } from "~/billing/plans";
 import { formatDateTime } from "~/i18n/format";
+import { UTC } from "~/i18n/time-zone";
 import type { Locale } from "~/i18n/config";
 import {
   setShopDevStatus,
@@ -222,7 +223,7 @@ export default function ShopDetail() {
               <Text as="p" className="text-xs text-muted-foreground">
                 Installed
               </Text>
-              <Text as="p">{formatDateTime(LOCALE, shop.installedAt)}</Text>
+              <Text as="p">{formatDateTime(LOCALE, shop.installedAt, UTC)}</Text>
             </div>
             <div>
               <Text as="p" className="text-xs text-muted-foreground">
@@ -231,7 +232,7 @@ export default function ShopDetail() {
               <Text as="p">
                 {shop.uninstalledAt === null
                   ? "—"
-                  : formatDateTime(LOCALE, shop.uninstalledAt)}
+                  : formatDateTime(LOCALE, shop.uninstalledAt, UTC)}
               </Text>
             </div>
           </CardContent>
@@ -357,7 +358,7 @@ export default function ShopDetail() {
                             </TableCell>
                             <TableCell className="max-w-xs truncate text-muted-foreground">{grant.reason}</TableCell>
                             <TableCell className="text-muted-foreground">{grant.grantedBy}</TableCell>
-                            <TableCell className="text-muted-foreground">{formatDateTime(LOCALE, grant.expiresAt)}</TableCell>
+                            <TableCell className="text-muted-foreground">{formatDateTime(LOCALE, grant.expiresAt, UTC)}</TableCell>
                             <TableCell className="text-right">
                               {isActive && (
                                 <Form method="post">
@@ -413,7 +414,7 @@ export default function ShopDetail() {
                         <TableCell className="font-medium">{event.kind}</TableCell>
                         <TableCell><Badge variant="outline">{event.status}</Badge></TableCell>
                         <TableCell className="max-w-md whitespace-normal text-muted-foreground">{event.detail}</TableCell>
-                        <TableCell className="text-muted-foreground">{formatDateTime(LOCALE, event.occurredAt)}</TableCell>
+                        <TableCell className="text-muted-foreground">{formatDateTime(LOCALE, event.occurredAt, UTC)}</TableCell>
                       </TableRow>
                     ))
                   )}
@@ -450,7 +451,7 @@ export default function ShopDetail() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {formatDateTime(LOCALE, event.occurredAt)}
+                        {formatDateTime(LOCALE, event.occurredAt, UTC)}
                       </TableCell>
                     </TableRow>
                   ))

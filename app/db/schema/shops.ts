@@ -34,6 +34,11 @@ export const shops = sqliteTable(
     logoUrl: text("logo_url"),
     /** Online store public URL. */
     url: text("url"),
+    /**
+     * The shop's IANA time zone from Shopify, e.g. "Asia/Ho_Chi_Minh"; null until first synced. Every date the app
+     * renders uses it, so the server's HTML and the browser's first render print the same text.
+     */
+    timeZone: text("time_zone"),
     /** The current relationship projection; null only for rows predating lifecycle tracking. */
     relationshipStatus: text("relationship_status", {
       enum: ["INSTALLED", "UNINSTALLED", "DEACTIVATED", "REACTIVATED"],

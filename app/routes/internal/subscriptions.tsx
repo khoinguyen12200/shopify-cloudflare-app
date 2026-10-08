@@ -23,6 +23,7 @@ import { requireAdminUser } from "~/services/admin-auth.server";
 import { adminUsers } from "~/wiring.server";
 import { planForShopifyHandle } from "~/billing/plans";
 import { formatDateTime } from "~/i18n/format";
+import { UTC } from "~/i18n/time-zone";
 import type { Locale } from "~/i18n/config";
 import type { SubscriptionStatus } from "~/domain/subscription-lifecycle";
 
@@ -97,7 +98,7 @@ export default function Subscriptions() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {formatDateTime(LOCALE, event.occurredAt)}
+                      {formatDateTime(LOCALE, event.occurredAt, UTC)}
                     </TableCell>
                   </TableRow>
                 ))}

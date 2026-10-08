@@ -125,6 +125,10 @@ export class ShopRepo {
     await getDb().update(shops).set(updateValues).where(eq(shops.shop, shop));
   }
 
+  async recordTimeZone(shop: string, timeZone: string): Promise<void> {
+    await getDb().update(shops).set({ timeZone }).where(eq(shops.shop, shop));
+  }
+
   async updateShopIdentity(shop: string, details: ShopIdentityDetails): Promise<void> {
     const updateValues: Partial<typeof shops.$inferInsert> = {};
     if (details.name !== undefined) updateValues.name = details.name;

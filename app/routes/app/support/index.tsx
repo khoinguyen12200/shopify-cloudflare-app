@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { authenticateAdmin } from "~/admin/require-merchant.server";
 import { useLocale } from "~/i18n/useLocale";
 import { formatDate } from "~/i18n/format";
+import { useTimeZone } from "~/i18n/useTimeZone";
 import { supportService } from "~/wiring.server";
 import { isUnreadFor, statusOf, type SupportStatus } from "~/support/status";
 import { CATEGORY_LABEL_KEY } from "~/support/categories";
@@ -48,6 +49,7 @@ export default function SupportIndex() {
   const { tickets } = useLoaderData<typeof loader>();
   const { t } = useTranslation(["admin", "common"]);
   const locale = useLocale();
+  const timeZone = useTimeZone();
 
   return (
     <s-page heading={t("support.heading")}>
@@ -118,7 +120,7 @@ export default function SupportIndex() {
                     </s-badge>
                   </s-table-cell>
                   <s-table-cell>
-                    {formatDate(locale, ticket.lastMessageAt)}
+                    {formatDate(locale, ticket.lastMessageAt, timeZone)}
                   </s-table-cell>
                 </s-table-row>
               ))}

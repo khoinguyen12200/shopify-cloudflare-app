@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   formatDate,
+  formatDateTime,
   formatNumber,
   formatMoney,
   formatList,
@@ -14,14 +15,31 @@ describe("dates differ by locale", () => {
   const date = new Date("2026-02-01T12:00:00Z");
 
   it("formats the same instant differently", () => {
-    const en = formatDate("en", date, { dateStyle: "short" });
-    const es = formatDate("es", date, { dateStyle: "short" });
+    const en = formatDate("en", date, "UTC", { dateStyle: "short" });
+    const es = formatDate("es", date, "UTC", { dateStyle: "short" });
     expect(en).not.toBe(es);
   });
 
   it("puts the day first in es and the month first in en", () => {
-    expect(formatDate("en", date, { dateStyle: "short" })).toMatch(/^2\/1\//);
-    expect(formatDate("es", date, { dateStyle: "short" })).toMatch(/^1\/2\//);
+    expect(formatDate("en", date, "UTC", { dateStyle: "short" })).toMatch(/^2\/1\//);
+    expect(formatDate("es", date, "UTC", { dateStyle: "short" })).toMatch(/^1\/2\//);
+  });
+});
+
+// The server (UTC) and the visitor's browser (their own zone) must print the same text, or React discards the server
+// HTML (hydration error #418). Naming the zone is what makes the output independent of where the code runs.
+describe("dates are rendered in the zone they are given, not the host's", () => {
+  const instant = Date.UTC(2026, 9, 8, 23, 30);
+
+  it("prints the same instant in each requested zone", () => {
+    expect(formatDateTime("en", instant, "UTC")).toBe("Oct 8, 2026, 11:30 PM");
+    expect(formatDateTime("en", instant, "Asia/Ho_Chi_Minh")).toBe("Oct 9, 2026, 6:30 AM");
+    expect(formatDateTime("en", instant, "America/Chicago")).toBe("Oct 8, 2026, 6:30 PM");
+  });
+
+  it("moves the calendar day across the zone boundary", () => {
+    expect(formatDate("en", instant, "UTC")).toBe("Oct 8, 2026");
+    expect(formatDate("en", instant, "Asia/Ho_Chi_Minh")).toBe("Oct 9, 2026");
   });
 });
 

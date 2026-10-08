@@ -13,21 +13,28 @@ import type { Locale } from "./config";
  * en. Formatting a date or number by hand is a localisation bug.
  */
 
+/**
+ * `timeZone` is required, never defaulted: leaving it to the runtime renders the server's zone on the server and the
+ * visitor's zone in the browser, which is a hydration mismatch. See `./time-zone`.
+ */
 export function formatDate(
   locale: Locale,
   value: Date | number,
+  timeZone: string,
   options: Intl.DateTimeFormatOptions = { dateStyle: "medium" },
 ): string {
-  return new Intl.DateTimeFormat(locale, options).format(value);
+  return new Intl.DateTimeFormat(locale, { ...options, timeZone }).format(value);
 }
 
 export function formatDateTime(
   locale: Locale,
   value: Date | number,
+  timeZone: string,
 ): string {
   return new Intl.DateTimeFormat(locale, {
     dateStyle: "medium",
     timeStyle: "short",
+    timeZone,
   }).format(value);
 }
 

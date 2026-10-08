@@ -31,6 +31,7 @@ import { planForShopifyHandle } from "~/billing/plans";
 import { isUnreadFor, statusOf, type SupportStatus } from "~/support/status";
 import { CATEGORY_LABEL_EN } from "~/support/categories";
 import { formatDateTime } from "~/i18n/format";
+import { UTC } from "~/i18n/time-zone";
 import type { Locale } from "~/i18n/config";
 
 /** The internal console is staff-only and English-only — no i18n here. */
@@ -193,7 +194,7 @@ export default function InternalSupport() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {formatDateTime(LOCALE, ticket.lastMessageAt)}
+                        {formatDateTime(LOCALE, ticket.lastMessageAt, UTC)}
                       </TableCell>
                     </TableRow>
                   ))}

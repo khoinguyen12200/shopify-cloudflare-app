@@ -48,6 +48,7 @@ import {
   type RawUninstallFeedback,
 } from "~/domain/uninstall-feedback";
 import { formatDateTime, formatNumber } from "~/i18n/format";
+import { UTC } from "~/i18n/time-zone";
 import type { Locale } from "~/i18n/config";
 
 /**
@@ -494,7 +495,7 @@ function UninstallFeedbackList({
                     </div>
                   </TableCell>
                   <TableCell className="text-right text-xs tabular-nums text-muted-foreground whitespace-nowrap">
-                    {formatDateTime(LOCALE, item.occurredAt)}
+                    {formatDateTime(LOCALE, item.occurredAt, UTC)}
                   </TableCell>
                 </TableRow>
               ))
@@ -509,7 +510,7 @@ function UninstallFeedbackList({
             <DialogTitle>Merchant exit feedback</DialogTitle>
             {activeItem && (
               <DialogDescription>
-                {activeItem.shopName ? `${activeItem.shopName} (${activeItem.shop})` : activeItem.shop} · {formatDateTime(LOCALE, activeItem.occurredAt)}
+                {activeItem.shopName ? `${activeItem.shopName} (${activeItem.shop})` : activeItem.shop} · {formatDateTime(LOCALE, activeItem.occurredAt, UTC)}
               </DialogDescription>
             )}
           </DialogHeader>

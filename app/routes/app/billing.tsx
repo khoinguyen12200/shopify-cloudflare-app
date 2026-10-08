@@ -10,6 +10,7 @@ import { currentAppInstallationSchema } from "~/schemas/current-app-installation
 import { ShopifyAppIdentityAdapter } from "~/adapters/shopify-app-identity.server";
 import { useLocale } from "~/i18n/useLocale";
 import { formatDateTime } from "~/i18n/format";
+import { useTimeZone } from "~/i18n/useTimeZone";
 import { formatMoney } from "~/money";
 import { resolveProjectionBillingStatus, type BillingStatus } from "~/billing/subscription-status";
 import { currentPlanHandleFor } from "~/billing/current-plan";
@@ -132,11 +133,12 @@ export default function Billing() {
   const loaderData = useLoaderData<typeof loader>();
   const { t } = useTranslation(["admin", "common"]);
   const locale = useLocale();
+  const timeZone = useTimeZone();
   if (loaderData.pricingReturn) return <BillingProcessing />;
 
   const { status, pricingPlansUrl, planHandle, promo } = loaderData;
   const cycleCopy =
-    status.kind === "subscribed" ? billingCycleCopy(locale, status) : null;
+    status.kind === "subscribed" ? billingCycleCopy(locale, timeZone, status) : null;
   const currentPlanHandle = promo ? promo.handle : currentPlanHandleFor(status, planHandle);
   const priceLine = planPriceLine(status);
 
@@ -295,18 +297,19 @@ type BillingCycleKey =
 /** Returns a [key, params] pair, spread straight into `t(...)` by the caller. */
 function billingCycleCopy(
   locale: Parameters<typeof formatDateTime>[0],
+  timeZone: string,
   status: Subscribed,
 ): readonly [BillingCycleKey, { date: string; price?: string }] {
   const price = status.price ? formatMoney(locale, status.price) : undefined;
 
   if (status.trialEndsAt) {
-    const date = formatDateTime(locale, status.trialEndsAt);
+    const date = formatDateTime(locale, status.trialEndsAt, timeZone);
     return price
       ? ["billing.current.trial", { date, price }]
       : ["billing.current.trialUnknownPrice", { date }];
   }
 
-  const date = formatDateTime(locale, status.periodEnd);
+  const date = formatDateTime(locale, status.periodEnd, timeZone);
   return price
     ? ["billing.current.renews", { date, price }]
     : ["billing.current.renewsUnknownPrice", { date }];

@@ -6,7 +6,8 @@ import { useTranslation } from "react-i18next";
 
 import { authenticateAdmin } from "~/admin/require-merchant.server";
 import { getEnv } from "~/request-context.server";
-import { persistShopIdentity } from "~/wiring.server";
+import { persistShopIdentity, shopTimeZone } from "~/wiring.server";
+import { TimeZoneProvider } from "~/i18n/useTimeZone";
 import { thrownResponseHtml } from "~/lib/thrown-response";
 
 /**
@@ -29,11 +30,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // merchant picked in the Shopify admin, automatically. Do NOT add a language
   // switcher to this surface — the app would then be able to disagree with the
   // admin around it.
-  return { apiKey: env.SHOPIFY_API_KEY || "" };
+  return { apiKey: env.SHOPIFY_API_KEY || "", timeZone: await shopTimeZone(admin, session.shop) };
 };
 
 export default function App() {
-  const { apiKey } = useLoaderData<typeof loader>();
+  const { apiKey, timeZone } = useLoaderData<typeof loader>();
   const { t } = useTranslation("admin");
 
   return (
@@ -43,7 +44,9 @@ export default function App() {
         <s-link href="/app/billing">{t("nav.billing")}</s-link>
         <s-link href="/app/support">{t("nav.support")}</s-link>
       </s-app-nav>
-      <Outlet />
+      <TimeZoneProvider value={timeZone}>
+        <Outlet />
+      </TimeZoneProvider>
     </AppProvider>
   );
 }

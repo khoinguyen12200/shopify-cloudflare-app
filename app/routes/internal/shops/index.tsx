@@ -21,6 +21,7 @@ import { Store } from "lucide-react";
 import { requireAdminUser } from "~/services/admin-auth.server";
 import { adminUsers } from "~/wiring.server";
 import { formatDate } from "~/i18n/format";
+import { UTC } from "~/i18n/time-zone";
 import type { Locale } from "~/i18n/config";
 import { listShopsDirectory } from "~/services/internal-admin/ops.server";
 
@@ -119,7 +120,7 @@ export default function Shops() {
                     </TableCell>
                     <TableCell>{shop.planName}</TableCell>
                     <TableCell className="text-muted-foreground">
-                      {formatDate(LOCALE, shop.installedAt)}
+                      {formatDate(LOCALE, shop.installedAt, UTC)}
                     </TableCell>
                   </TableRow>
                 ))}
