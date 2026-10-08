@@ -30,12 +30,17 @@ async function receive(request: Request): Promise<Response> {
     return new Response("Invalid compliance payload", { status: 400 });
   }
 
+  const startedAt = Date.now();
   const outcome = await handleCompliance(topic, {
     shop,
     payload: parsed.data,
   }, {
     tenantPurge: tenantPurgeDependencies(),
   });
+
+  // Shopify allows 5 s for the whole response (https://shopify.dev/docs/apps/build/webhooks/verify-deliveries). The
+  // purge runs inside the request so a 200 means the erasure happened; this duration says when that stops being safe.
+  await shopLog("compliance.handled", shop, { topic, durationMs: Date.now() - startedAt });
 
   if (!outcome) {
     // Unknown topic: acknowledge so Shopify stops retrying, but it is logged as
