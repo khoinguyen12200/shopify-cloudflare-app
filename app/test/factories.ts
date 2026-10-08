@@ -30,7 +30,7 @@ async function hmacSha256Base64(secret: string, body: string): Promise<string> {
 }
 
 /**
- * A `Request` that `authenticate.webhook` will accept as genuinely from
+ * A `Request` that `verifyShopifyWebhook` will accept as genuinely from
  * Shopify — signed with the same secret the test env's Worker uses
  * (`SHOPIFY_API_SECRET` in `vitest.config.ts`), unless `badHmac` asks for a
  * deliberately wrong signature.

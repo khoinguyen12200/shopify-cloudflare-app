@@ -1,10 +1,11 @@
 import type { ActionFunctionArgs } from "react-router";
-import { createShopify } from "~/shopify.server";
+import { verifyShopifyWebhook } from "~/adapters/shopify-webhook.server";
 import { getEnv } from "~/request-context.server";
 import { compliancePayloadSchema } from "~/schemas/compliance-webhook";
 import { handleCompliance } from "~/services/compliance.server";
 import { tenantPurgeDependencies } from "~/wiring.server";
 import { shopLog } from "~/observability/shop-log";
+import { withWebhookFailureLog } from "~/services/webhook-logging";
 
 /**
  * The three MANDATORY compliance webhooks share this one endpoint, matching the
@@ -14,15 +15,15 @@ import { shopLog } from "~/observability/shop-log";
  * (https://shopify.dev/docs/apps/build/compliance/privacy-law-compliance):
  *  • Handles POST with a JSON body.
  *  • An invalid Shopify HMAC header returns 401 Unauthorized —
- *    `authenticate.webhook` throws exactly that Response, so it must NOT be
+ *    `verifyShopifyWebhook` throws exactly that Response, so it must NOT be
  *    caught and turned into a 200. Swallowing it would fail app review.
  *  • Returns a 2xx to confirm receipt.
  */
-export const action = async ({ request }: ActionFunctionArgs) => {
-  const shopify = createShopify(getEnv());
+export const action = ({ request }: ActionFunctionArgs) => withWebhookFailureLog(request, () => receive(request));
 
+async function receive(request: Request): Promise<Response> {
   // Throws a 401 Response on a bad HMAC. Deliberately unguarded.
-  const { topic, shop, payload } = await shopify.authenticate.webhook(request);
+  const { topic, shop, payload } = await verifyShopifyWebhook(request, getEnv().SHOPIFY_API_SECRET);
   const parsed = compliancePayloadSchema.safeParse(payload);
   if (!parsed.success) {
     await shopLog("compliance.invalid_payload", shop, { topic });
@@ -43,7 +44,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   return new Response(null, { status: 200 });
-};
+}
 
 /**
  * Shopify only ever POSTs here. A GET is a misconfiguration (or a probe) — say

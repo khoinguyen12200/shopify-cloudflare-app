@@ -8,6 +8,7 @@ import { runScheduledSweeps } from "../app/services/scheduled.server";
 import { scheduledDependencies, webhookConsumer } from "../app/wiring.server";
 import { consumeWebhook } from "../app/services/webhook-consumer";
 import { handleWebhookQueueBatch } from "../app/services/webhook-queue";
+import { webhookLogLevel } from "../app/services/webhook-logging";
 
 /**
  * With `future.v8_middleware`, a loader/action's `context` is a
@@ -52,7 +53,7 @@ export default {
         log: async (entry) => {
           const digest = entry.shop ? await crypto.subtle.digest("SHA-256", new TextEncoder().encode(entry.shop)) : undefined;
           const shopHash = digest ? `sha256:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")}` : undefined;
-          console.error(JSON.stringify({
+          console[webhookLogLevel(entry.outcome)](JSON.stringify({
             id: entry.id,
             shop: shopHash,
             topic: entry.topic,

@@ -1,3 +1,5 @@
+import { hashShop } from "~/observability/shop-log";
+
 export interface WebhookLogInput {
   readonly deliveryId: string;
   readonly topic: string;
@@ -25,4 +27,30 @@ export async function formatWebhookLog(input: WebhookLogInput): Promise<Record<s
     latencyMs: input.latencyMs,
   };
 }
-import { hashShop } from "~/observability/shop-log";
+
+/**
+ * Run a webhook entry and record why it failed before the 5xx reaches Shopify. A thrown `Response` (the bad-HMAC
+ * 401 from `verifyShopifyWebhook`) is a deliberate answer and passes through unrecorded. Only the error's type and
+ * message are logged — never the payload — keyed by the shop hash.
+ */
+export async function withWebhookFailureLog<T>(request: Request, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    if (error instanceof Response) throw error;
+    const shop = request.headers.get("x-shopify-shop-domain") ?? "";
+    console.error(JSON.stringify({
+      event: "webhook.entry_failed",
+      topic: request.headers.get("x-shopify-topic") ?? "",
+      shopHash: shop === "" ? null : await hashShop(shop),
+      errorName: error instanceof Error ? error.name : typeof error,
+      error: error instanceof Error ? error.message : String(error),
+    }));
+    throw error;
+  }
+}
+
+/** A webhook that was handled, or safely ignored, is routine; only a failure belongs at error level. */
+export function webhookLogLevel(outcome: string): "log" | "error" {
+  return outcome === "processed" || outcome === "duplicate" || outcome === "discarded" || outcome === "unsupported" ? "log" : "error";
+}

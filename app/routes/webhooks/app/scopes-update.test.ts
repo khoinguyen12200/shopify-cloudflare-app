@@ -63,7 +63,7 @@ describe("app/scopes_update webhook", () => {
     const storage = new KVSessionStorage(env.SESSION);
     await storage.storeSession(offlineSession(shop, { scope: "read_products" }));
 
-    // `current` missing entirely — a shape authenticate.webhook would never
+    // `current` missing entirely — a shape Shopify would never
     // reject (it only checks the HMAC), so the route itself must guard it.
     const request = await signedWebhookRequest({
       url: WEBHOOK_URL,

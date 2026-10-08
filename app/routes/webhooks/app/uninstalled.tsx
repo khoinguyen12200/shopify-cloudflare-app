@@ -1,13 +1,14 @@
 import type { ActionFunctionArgs } from "react-router";
-import { createShopify } from "~/shopify.server";
+import { verifyShopifyWebhook } from "~/adapters/shopify-webhook.server";
 import { getEnv } from "~/request-context.server";
 import { webhookDeliveries } from "~/wiring.server";
 import { ingestWebhook, sha256Json } from "~/services/webhook-ingest";
-import { formatWebhookLog, writeWebhookLog } from "~/services/webhook-logging";
+import { formatWebhookLog, withWebhookFailureLog, writeWebhookLog } from "~/services/webhook-logging";
 
-export const action = async ({ request }: ActionFunctionArgs) => {
-  const shopify = createShopify(getEnv());
-  const authenticated = await shopify.authenticate.webhook(request);
+export const action = ({ request }: ActionFunctionArgs) => withWebhookFailureLog(request, () => receive(request));
+
+async function receive(request: Request): Promise<Response> {
+  const authenticated = await verifyShopifyWebhook(request, getEnv().SHOPIFY_API_SECRET);
   const now = Date.now();
   await ingestWebhook({
     deliveries: webhookDeliveries(),
@@ -26,4 +27,4 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   });
 
   return new Response(null, { status: 200 });
-};
+}

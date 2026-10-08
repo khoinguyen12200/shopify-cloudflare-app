@@ -41,6 +41,17 @@ describe("app/uninstalled webhook", () => {
     await expect(post(request)).rejects.toMatchObject({ status: 401 });
   });
 
+  it("accepts the uninstall when the stored offline session has an expired token (Shopify rejects the refresh once uninstalled)", async () => {
+    const shop = "expired-session.myshopify.com";
+    await inRequest(async () => {
+      await new KVSessionStorage(env.SESSION).storeSession(offlineSession(shop, { expires: new Date(Date.now() - 60_000), refreshToken: "revoked-refresh-token" }));
+    });
+    const response = await post(await signedWebhookRequest({ url: WEBHOOK_URL, topic: "app/uninstalled", shop, payload: {}, webhookId: "wh-expired" }));
+    expect(response.status).toBe(200);
+    const delivery = await inRequest(() => new WebhookDeliveryRepo().get(shop, "wh-expired"));
+    expect(delivery).toMatchObject({ topic: "app/uninstalled", status: "queued" });
+  });
+
   it("durably queues uninstall work even when the shop session exists", async () => {
     const shop = "uninstalled.myshopify.com";
     const storage = new KVSessionStorage(env.SESSION);
