@@ -10,8 +10,18 @@ import { i18nServer, getLocale } from "~/i18n/i18n.server";
 import { i18nOptions } from "~/i18n/options";
 import { onPromiseSettled } from "~/lib/promise-settlement";
 import { applySecurityHeaders } from "~/security/response-headers";
+import { describeRequestError } from "~/observability/request-error";
 
 export const streamTimeout = 5000;
+
+/**
+ * React Router's server-side error hook. Logs only what `describeRequestError` returns, so unmatched-path 404s and
+ * aborted requests do not bury real failures, and a request's query string (id_token, hmac) is never logged.
+ */
+export function handleError(error: unknown, { request }: { request: Request }): void {
+  const log = describeRequestError(error, request);
+  if (log !== null) console.error(JSON.stringify(log));
+}
 
 /**
  * Workers entry. The Node template used `renderToPipeableStream` +
