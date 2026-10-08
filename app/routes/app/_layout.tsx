@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { authenticateAdmin } from "~/admin/require-merchant.server";
 import { getEnv } from "~/request-context.server";
 import { persistShopIdentity } from "~/wiring.server";
+import { thrownResponseHtml } from "~/lib/thrown-response";
 
 /**
  * Namespaces for the embedded admin. `public` is deliberately absent — the
@@ -48,9 +49,14 @@ export default function App() {
 }
 
 // Shopify needs React Router to catch some thrown responses so their headers
-// make it into the response.
+// make it into the response. The one that matters on screen is the App Bridge
+// "bounce" page; see `thrownResponseHtml` for why `boundary.error` cannot be
+// used to render it from a minified bundle.
 export function ErrorBoundary() {
-  return boundary.error(useRouteError());
+  const error = useRouteError();
+  const html = thrownResponseHtml(error);
+  if (html !== null) return <div dangerouslySetInnerHTML={{ __html: html }} />;
+  throw error;
 }
 
 export const headers: HeadersFunction = (headersArgs) => {
