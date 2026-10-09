@@ -14,7 +14,7 @@ link.)
 | ---------- | --------------------------------------------------------- |
 | Runtime    | Cloudflare Workers (workerd), via `@cloudflare/vite-plugin` |
 | Framework  | React Router 7 (SSR) + Vite 8, explicit nested route config |
-| Shopify    | `@shopify/shopify-app-react-router` v2, Admin API 2026-10  |
+| Shopify    | `@shopify/shopify-app-react-router` v3, Admin API 2026-10  |
 | Admin UI   | Polaris **web components** + App Bridge (embedded only)    |
 | Public UI  | SCSS design tokens (`app/styles/public/`), dark mode + a11y |
 | Staff console | `/internal` — ngk-dashboard + Tailwind v4, PBKDF2 auth      |

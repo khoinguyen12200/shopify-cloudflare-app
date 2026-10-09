@@ -21,7 +21,7 @@ export const apiVersion = ApiVersion.July26;
  *
  * THIS IS THE ONLY PLACE A `shops` ROW IS EVER CREATED, and it has to be,
  * because this app never runs the OAuth callback. `@shopify/shopify-app-react-router`
- * v2 ships exactly two auth strategies — token exchange and merchant-custom-app
+ * v2 and v3 ship exactly two auth strategies — token exchange and merchant-custom-app
  * — and with `AppDistribution.AppStore` it always picks token exchange
  * (`shopify-app.mjs`). Installation is Shopify-managed and the access token is
  * minted inside `authenticate.admin` on the first embedded page load, so
