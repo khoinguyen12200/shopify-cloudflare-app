@@ -9,6 +9,7 @@ import { AdminUserRepo } from "~/models/admin-users.server";
 import { hashPassword } from "~/lib/password";
 import { ShopRepo } from "~/models/shops.server";
 import { ShopSubscriptionRepo } from "~/models/shop-subscriptions.server";
+import { testRandomBytes } from "~/test/fake-runtime";
 
 setupTestDatabase();
 
@@ -24,7 +25,7 @@ const asActionArgs = (request: Request): ActionFunctionArgs => ({
 describe("MCP HTTP JSON-RPC Server Integration", () => {
   async function createStaffAndToken() {
     const adminRepo = new AdminUserRepo();
-    const pwHash = await hashPassword("Pass12345678!");
+    const pwHash = await hashPassword("Pass12345678!", testRandomBytes);
     const admin = await adminRepo.create({
       id: "admin-mcp-test",
       email: "staff-mcp@example.com",

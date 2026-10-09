@@ -4,6 +4,8 @@ import { runWithRequestContext } from "~/request-context.server";
 import { setupTestDatabase } from "~/test/db";
 import { SupportRepo } from "./support.server";
 import { statusOf } from "~/support/status";
+import { testIds } from "~/test/fake-runtime";
+import { defined } from "~/test/defined";
 
 const SHOP = "alpha.myshopify.com";
 const OTHER = "beta.myshopify.com";
@@ -35,7 +37,7 @@ function open(
 describe("SupportRepo", () => {
   it("lists and deletes only expired pending uploads across shops", async () => {
     await run(async () => {
-      const repo = new SupportRepo();
+      const repo = new SupportRepo(testIds);
       await Promise.all([
         repo.stageUpload({
           id: "expired-alpha", shop: SHOP, ticketId: null,
@@ -75,7 +77,7 @@ describe("SupportRepo", () => {
 
   it("limits an expired-upload sweep to one R2 deletion batch", async () => {
     await run(async () => {
-      const repo = new SupportRepo();
+      const repo = new SupportRepo(testIds);
       await Promise.all(Array.from({ length: 1_001 }, (_, index) => repo.stageUpload({
         id: `expired-${index}`,
         shop: SHOP,
@@ -94,7 +96,7 @@ describe("SupportRepo", () => {
 
   it("stages upload metadata under its owning shop", async () => {
     await run(async () => {
-      const repo = new SupportRepo();
+      const repo = new SupportRepo(testIds);
       await repo.stageUpload({
         id: "upload-alpha",
         shop: SHOP,
@@ -113,7 +115,7 @@ describe("SupportRepo", () => {
 
   it("opens a ticket whose first message is the merchant's, so it reads as open", async () => {
     await run(async () => {
-      const repo = new SupportRepo();
+      const repo = new SupportRepo(testIds);
       const ticket = await open(repo);
 
       const found = await repo.find(SHOP, ticket.id);
@@ -122,7 +124,7 @@ describe("SupportRepo", () => {
       expect(found?.messages).toHaveLength(1);
       expect(found?.messages[0]?.author).toBe("merchant");
       // Derived, not stored — the whole point of the model.
-      expect(statusOf(found!.ticket)).toBe("open");
+      expect(statusOf(defined(found).ticket)).toBe("open");
     });
   });
 
@@ -130,7 +132,7 @@ describe("SupportRepo", () => {
     // The id comes from a URL, so it is attacker-controlled. This is the
     // security test @rules/data.md requires, not a nice-to-have.
     await run(async () => {
-      const repo = new SupportRepo();
+      const repo = new SupportRepo(testIds);
       const ticket = await open(repo, { shop: SHOP });
 
       expect(await repo.find(OTHER, ticket.id)).toBeUndefined();
@@ -139,7 +141,7 @@ describe("SupportRepo", () => {
 
   it("CANNOT reply to another shop's ticket", async () => {
     await run(async () => {
-      const repo = new SupportRepo();
+      const repo = new SupportRepo(testIds);
       const ticket = await open(repo, { shop: SHOP });
 
       const replied = await repo.reply({
@@ -160,7 +162,7 @@ describe("SupportRepo", () => {
 
   it("lists only the asking shop's tickets", async () => {
     await run(async () => {
-      const repo = new SupportRepo();
+      const repo = new SupportRepo(testIds);
       await open(repo, { shop: SHOP, subject: "mine" });
       await open(repo, { shop: OTHER, subject: "theirs" });
 
@@ -171,7 +173,7 @@ describe("SupportRepo", () => {
 
   it("flips to answered when staff reply, and back to open when the merchant does", async () => {
     await run(async () => {
-      const repo = new SupportRepo();
+      const repo = new SupportRepo(testIds);
       const ticket = await open(repo, { at: 1000 });
 
       await repo.reply({
@@ -183,8 +185,8 @@ describe("SupportRepo", () => {
         at: 2000,
       });
       let found = await repo.find(SHOP, ticket.id);
-      expect(statusOf(found!.ticket)).toBe("answered");
-      expect(found!.ticket.lastMessageAt).toBe(2000);
+      expect(statusOf(defined(found).ticket)).toBe("answered");
+      expect(defined(found).ticket.lastMessageAt).toBe(2000);
 
       await repo.reply({
         shop: SHOP,
@@ -195,17 +197,17 @@ describe("SupportRepo", () => {
         at: 3000,
       });
       found = await repo.find(SHOP, ticket.id);
-      expect(statusOf(found!.ticket)).toBe("open");
+      expect(statusOf(defined(found).ticket)).toBe("open");
     });
   });
 
   it("reopens a closed ticket when the merchant replies", async () => {
     // Otherwise a merchant answering "did that fix it?" is never seen again.
     await run(async () => {
-      const repo = new SupportRepo();
+      const repo = new SupportRepo(testIds);
       const ticket = await open(repo, { at: 1000 });
       await repo.closeAsStaff(ticket.id, 2000);
-      expect(statusOf((await repo.find(SHOP, ticket.id))!.ticket)).toBe("closed");
+      expect(statusOf(defined(await repo.find(SHOP, ticket.id)).ticket)).toBe("closed");
 
       await repo.reply({
         shop: SHOP,
@@ -217,15 +219,15 @@ describe("SupportRepo", () => {
       });
 
       const found = await repo.find(SHOP, ticket.id);
-      expect(statusOf(found!.ticket)).toBe("open");
-      expect(found!.ticket.closedAt).toBeNull();
+      expect(statusOf(defined(found).ticket)).toBe("open");
+      expect(defined(found).ticket.closedAt).toBeNull();
     });
   });
 
   it("does not reopen when STAFF reply to a closed ticket", async () => {
     // A closing note should not put the thread back in the queue.
     await run(async () => {
-      const repo = new SupportRepo();
+      const repo = new SupportRepo(testIds);
       const ticket = await open(repo, { at: 1000 });
       await repo.closeAsStaff(ticket.id, 2000);
 
@@ -238,25 +240,25 @@ describe("SupportRepo", () => {
         at: 3000,
       });
 
-      expect(statusOf((await repo.find(SHOP, ticket.id))!.ticket)).toBe("closed");
+      expect(statusOf(defined(await repo.find(SHOP, ticket.id)).ticket)).toBe("closed");
     });
   });
 
   it("records read receipts per side without touching the other", async () => {
     await run(async () => {
-      const repo = new SupportRepo();
+      const repo = new SupportRepo(testIds);
       const ticket = await open(repo, { at: 1000 });
 
       await repo.markRead(SHOP, ticket.id, "staff", 5000);
       const found = await repo.find(SHOP, ticket.id);
-      expect(found!.ticket.staffLastReadAt).toBe(5000);
-      expect(found!.ticket.merchantLastReadAt).toBeNull();
+      expect(defined(found).ticket.staffLastReadAt).toBe(5000);
+      expect(defined(found).ticket.merchantLastReadAt).toBeNull();
     });
   });
 
   it("returns the staff queue newest-first, excluding closed threads", async () => {
     await run(async () => {
-      const repo = new SupportRepo();
+      const repo = new SupportRepo(testIds);
       await open(repo, { shop: SHOP, subject: "older", at: 1000 });
       await open(repo, { shop: OTHER, subject: "newer", at: 2000 });
       const closed = await open(repo, { shop: SHOP, subject: "closed", at: 1500 });
@@ -273,12 +275,12 @@ describe("SupportRepo", () => {
   it("purges every trace of a shop and reports the R2 keys to delete", async () => {
     // shop/redact: the blobs must be named before their rows disappear.
     await run(async () => {
-      const repo = new SupportRepo();
+      const repo = new SupportRepo(testIds);
       const mine = await open(repo, { shop: SHOP });
       const theirs = await open(repo, { shop: OTHER });
       await repo.attachMany([{
         shop: SHOP,
-        messageId: (await repo.find(SHOP, mine.id))!.messages[0]!.id,
+        messageId: defined(defined(await repo.find(SHOP, mine.id)).messages[0]).id,
         id: "att_1",
         r2Key: "support/alpha/x",
         filename: "a.png",
@@ -298,7 +300,7 @@ describe("SupportRepo", () => {
   });
   it("attaches many files in one call across statement chunks, scoped to the shop", async () => {
     await run(async () => {
-      const repo = new SupportRepo();
+      const repo = new SupportRepo(testIds);
       const mine = await open(repo, { shop: SHOP });
       const theirs = await open(repo, { shop: OTHER });
       const mineMessage = (await repo.find(SHOP, mine.id))?.messages[0]?.id ?? "";
@@ -317,7 +319,7 @@ describe("SupportRepo", () => {
 
   it("adopts many staged uploads atomically and refuses another shop's uploads", async () => {
     await run(async () => {
-      const repo = new SupportRepo();
+      const repo = new SupportRepo(testIds);
       const mine = await open(repo, { shop: SHOP });
       const message = (await repo.find(SHOP, mine.id))?.messages[0]?.id ?? "";
       const ids = Array.from({ length: 12 }, (_, n) => `up_${n}`);

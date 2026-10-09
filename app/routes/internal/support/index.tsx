@@ -1,47 +1,25 @@
 import { shopSubscriptions, adminSessionUsers } from "~/wiring.server";
-import { Link, useLoaderData, useNavigation, useSubmit } from "react-router";
+import { Link, useLoaderData } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
 
 export const meta: MetaFunction = () => [
   { title: "Support · Staff Console" },
 ];
-import {
-  Badge,
-  BlockStack,
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  EmptyState,
-  Page,
-  Switch,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-  Text,
-} from "ngk-dashboard";
+import { BlockStack, Button, EmptyState, Page } from "ngk-dashboard";
 import { LifeBuoy } from "lucide-react";
 import { requireAdminUser } from "~/services/admin-auth.server";
 import { adminUsers } from "~/wiring.server";
 import { supportService } from "~/wiring.server";
 import { planForShopifyHandle } from "~/billing/plans";
-import { isUnreadFor, statusOf, type SupportStatus } from "~/support/status";
-import { CATEGORY_LABEL_EN } from "~/support/categories";
-import { formatDateTime } from "~/i18n/format";
-import { UTC } from "~/i18n/time-zone";
-import type { Locale } from "~/i18n/config";
-
-/** The internal console is staff-only and English-only — no i18n here. */
-const LOCALE: Locale = "en";
+import { isUnreadFor, statusOf } from "~/support/status";
+import { Deferred, TableSkeleton } from "~/internal/components";
+import { streamRegion } from "~/internal/stream-region.server";
+import { NotifyCard } from "./index-notify-card";
+import { TicketTable } from "./index-ticket-table";
 
 const PAID_STATUSES = new Set(["ACTIVE", "CANCELLATION_SCHEDULED"]);
 
-export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const actor = await requireAdminUser(request, { users: adminSessionUsers() });
-
+async function loadTicketRows() {
   const tickets = await supportService().listOpenForStaff();
   // Only the shops that have an open ticket, not every subscription in the table.
   const currentSubscriptions = await shopSubscriptions().listCurrentForShops(
@@ -49,26 +27,33 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   );
   const currentByShop = new Map(currentSubscriptions.map((subscription) => [subscription.shop, subscription]));
 
-  return {
-    notifySupport: actor.notifySupport,
-    tickets: tickets.map((ticket) => {
-      const current = currentByShop.get(ticket.shop);
-      const paid = current && PAID_STATUSES.has(current.status) ? current : undefined;
-      return {
-        id: ticket.id,
-        shop: ticket.shop,
-        shopName: ticket.shopName,
-        subject: ticket.subject,
-        category: ticket.category,
-        status: statusOf(ticket),
+  return tickets.map((ticket) => {
+    const current = currentByShop.get(ticket.shop);
+    const paid = current && PAID_STATUSES.has(current.status) ? current : undefined;
+    return {
+      id: ticket.id,
+      shop: ticket.shop,
+      shopName: ticket.shopName,
+      subject: ticket.subject,
+      category: ticket.category,
+      status: statusOf(ticket),
+      lastMessageAt: ticket.lastMessageAt,
+      planName: planForShopifyHandle(paid?.planHandle)?.name ?? (paid?.planHandle ?? "Free"),
+      unread: isUnreadFor({
         lastMessageAt: ticket.lastMessageAt,
-        planName: planForShopifyHandle(paid?.planHandle)?.name ?? (paid?.planHandle ?? "Free"),
-        unread: isUnreadFor({
-          lastMessageAt: ticket.lastMessageAt,
-          lastReadAt: ticket.staffLastReadAt,
-        }),
-      };
-    }),
+        lastReadAt: ticket.staffLastReadAt,
+      }),
+    };
+  });
+}
+
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const actor = await requireAdminUser(request, { users: adminSessionUsers() });
+
+  return {
+    // From the session lookup already awaited above, so the switch paints at once.
+    notifySupport: actor.notifySupport,
+    tickets: streamRegion("support_index", "tickets", loadTicketRows()),
   };
 };
 
@@ -86,24 +71,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   return { saved: true as const };
 };
 
-/** From the STAFF side, "open" is the one that needs work — hence the alarm. */
-const STATUS_TONE: Record<SupportStatus, "default" | "secondary" | "outline"> = {
-  open: "default",
-  answered: "secondary",
-  closed: "outline",
-};
-
-const STATUS_LABEL: Record<SupportStatus, string> = {
-  open: "Needs reply",
-  answered: "Waiting on merchant",
-  closed: "Closed",
-};
-
 export default function InternalSupport() {
   const { tickets, notifySupport } = useLoaderData<typeof loader>();
-  const navigation = useNavigation();
-  const submit = useSubmit();
-  const busy = navigation.state !== "idle";
 
   return (
     <Page
@@ -117,93 +86,19 @@ export default function InternalSupport() {
       }
     >
       <BlockStack gap={4}>
-        <Card>
-          <CardHeader>
-            <Text as="h2" className="font-semibold">
-              Email me about tickets
-            </Text>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-3">
-              {/* One switch for the signed-in person's own preference, so it
-                  submits on change rather than needing a save button. */}
-              <Switch
-                defaultChecked={notifySupport}
-                disabled={busy}
-                onCheckedChange={(checked) => {
-                  void submit(
-                    { notifySupport: checked ? "on" : "off" },
-                    { method: "post" },
-                  );
-                }}
-              />
-              <Text as="p" className="text-sm text-muted-foreground">
-                Send me an email when a merchant opens or replies to a ticket.
-                Only active accounts are ever emailed.
-              </Text>
-            </div>
-          </CardContent>
-        </Card>
+        <NotifyCard notifySupport={notifySupport} />
 
-        {tickets.length === 0 ? (
-          <EmptyState heading="No open tickets" icon={LifeBuoy}>
-            When a merchant files a ticket from their admin, it lands here.
-          </EmptyState>
-        ) : (
-          <Card>
-            <CardContent className="overflow-x-auto p-0">
-              <Table className="[&_th]:h-12 [&_th]:px-4 [&_td]:px-4 [&_td]:py-3">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Subject</TableHead>
-                    <TableHead>Shop</TableHead>
-                    <TableHead>Plan</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Last activity</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {tickets.map((ticket) => (
-                    <TableRow key={ticket.id}>
-                      <TableCell className="font-medium">
-                        <Link
-                          to={`/internal/support/${ticket.id}`}
-                          prefetch="intent"
-                          className="underline"
-                        >
-                          {ticket.subject}
-                        </Link>
-                        {ticket.unread && (
-                          <Badge variant="default" className="ml-2">
-                            New
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {ticket.shopName || ticket.shop}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{ticket.planName}</Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {CATEGORY_LABEL_EN[ticket.category]}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={STATUS_TONE[ticket.status]}>
-                          {STATUS_LABEL[ticket.status]}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {formatDateTime(LOCALE, ticket.lastMessageAt, UTC)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        )}
+        <Deferred resolve={tickets} fallback={<TableSkeleton rows={8} columns={6} />} errorTitle="Open tickets">
+          {(resolved) =>
+            resolved.length === 0 ? (
+              <EmptyState heading="No open tickets" icon={LifeBuoy}>
+                When a merchant files a ticket from their admin, it lands here.
+              </EmptyState>
+            ) : (
+              <TicketTable tickets={resolved} />
+            )
+          }
+        </Deferred>
       </BlockStack>
     </Page>
   );

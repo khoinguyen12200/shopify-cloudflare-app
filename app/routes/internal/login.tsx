@@ -1,7 +1,5 @@
 import {
   redirect,
-  Form,
-  Link,
   useActionData,
   useLoaderData,
   useNavigation,
@@ -12,13 +10,14 @@ import type {
   LoaderFunctionArgs,
   MetaFunction,
 } from "react-router";
-import { Alert, AlertDescription, Button, Input, Label } from "ngk-dashboard";
 import { createAdminSession, getAdminUser, safeRedirectPath, verifyAdminCredentials, HOME_PATH } from "~/services/admin-auth.server";
 import { getEnv } from "~/request-context.server";
-import { adminUsers, authLimiters } from "~/wiring.server";
+import { adminUsers, appRuntime, authLimiters } from "~/wiring.server";
 import { isProductionLike } from "~/lib/deployment";
 import { handleLoginAction } from "./login.server";
-import { INTERNAL_FONT_LINKS, THEME_INIT_SCRIPT } from "~/internal/components";
+import { INTERNAL_FONT_LINKS } from "~/internal/components";
+import { AuthShell, ErrorAlert } from "./auth-shell";
+import { LoginFooter, LoginForm } from "./login-form";
 // Login sits OUTSIDE the /internal layout (see app/routes.ts), so it does not
 // inherit that layout's links() and must load the console stylesheet itself —
 // otherwise it renders completely unstyled.
@@ -58,7 +57,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const users = adminUsers();
   return handleLoginAction(request, {
     limiter: authLimiters().login,
-    verifyCredentials: (email, password) => verifyAdminCredentials(email, password, { users }),
+    verifyCredentials: (email, password) => verifyAdminCredentials(email, password, { users, runtime: appRuntime() }),
     createSession: createAdminSession,
     productionLike: isProductionLike(getEnv().SHOPIFY_APP_URL ?? ""),
   });
@@ -73,72 +72,15 @@ export default function InternalLogin() {
   const error = actionData?.error;
 
   return (
-    <>
-      <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
-      <div className="grid min-h-dvh place-items-center bg-background p-6">
-        <div className="w-full max-w-sm">
-          <div className="mb-8 text-center">
-            <h1 className="text-2xl font-semibold tracking-tight">
-              Sign in
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Internal console
-            </p>
-          </div>
-
-          {error && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertDescription>{LOGIN_ERRORS[error]}</AlertDescription>
-            </Alert>
-          )}
-
-          <Form method="post" className="flex flex-col gap-4">
-            <input type="hidden" name="next" value={next} />
-
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="username"
-                required
-                autoFocus
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
-              />
-            </div>
-
-            <Button type="submit" disabled={submitting}>
-              {submitting ? "Signing in…" : "Sign in"}
-            </Button>
-          </Form>
-
-          <p className="mt-4 text-center text-sm">
-            <Link
-              to="/internal/forgot-password"
-              className="text-muted-foreground underline"
-            >
-              Forgot your password?
-            </Link>
-          </p>
-
-          {showDevHint && (
-            <p className="mt-6 text-center text-xs text-muted-foreground">
-              Development seed: admin@localhost / admin123
-            </p>
-          )}
-        </div>
-      </div>
-    </>
+    <AuthShell
+      title="Sign in"
+      subtitle={
+        <p className="mt-1 text-sm text-muted-foreground">Internal console</p>
+      }
+    >
+      {error && <ErrorAlert message={LOGIN_ERRORS[error]} />}
+      <LoginForm next={next} submitting={submitting} />
+      <LoginFooter showDevHint={showDevHint} />
+    </AuthShell>
   );
 }

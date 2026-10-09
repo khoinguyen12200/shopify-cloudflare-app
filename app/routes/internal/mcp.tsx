@@ -5,18 +5,7 @@ import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react
 export const meta: MetaFunction = () => [
   { title: "MCP & API · Staff Console" },
 ];
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-  Button,
-  Page,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "ngk-dashboard";
-import { Check, Copy, Key } from "lucide-react";
+import { Page } from "ngk-dashboard";
 import { requireAdminUser } from "~/services/admin-auth.server";
 import { adminUsers, adminSessionUsers } from "~/wiring.server";
 import { getEnv } from "~/request-context.server";
@@ -31,12 +20,9 @@ import {
 } from "~/services/mcp/oauth.server";
 import { listRecentAuditLogs } from "~/services/mcp/audit.server";
 import { TOOL_CATALOG } from "~/mcp/catalog";
-import {
-  AuditLogsTab,
-  CatalogTab,
-  QuickConnectTab,
-  TokensClientsTab,
-} from "./mcp/components";
+import { streamRegion } from "~/internal/stream-region.server";
+import { CreatedTokenAlert } from "./mcp/created-token-alert";
+import { McpTabs } from "./mcp/mcp-tabs";
 
 export type ActionData =
   | { ok: false; error: string }
@@ -46,11 +32,6 @@ export type ActionData =
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const user = await requireAdminUser(request, { users: adminSessionUsers() });
-  const [tokens, clients, auditLogs] = await Promise.all([
-    listPersonalAccessTokens(),
-    listOAuthClients(),
-    listRecentAuditLogs(50),
-  ]);
 
   const env = getEnv();
   const url = new URL(request.url);
@@ -58,12 +39,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   return {
     user: { id: user.id, email: user.email, name: user.name },
-    tokens,
-    clients,
-    auditLogs,
     toolCatalog: TOOL_CATALOG,
     appUrl,
     now: Date.now(),
+    // Two independent regions, so a slow audit log never holds up the tokens.
+    // The default tab (Quick Connect) needs neither and paints at once.
+    access: streamRegion(
+      "mcp",
+      "access",
+      Promise.all([listPersonalAccessTokens(), listOAuthClients()]).then(([tokens, clients]) => ({ tokens, clients })),
+    ),
+    auditLogs: streamRegion("mcp", "audit_logs", listRecentAuditLogs(50)),
   };
 };
 
@@ -117,19 +103,24 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   return data<ActionData>({ ok: false, error: "Invalid intent" }, { status: 400 });
 };
 
-export default function McpAdmin() {
-  const { tokens, clients, auditLogs, toolCatalog, appUrl, now } =
-    useLoaderData<typeof loader>();
-  const actionData = useActionData<ActionData>();
-
+function useClipboardCopy() {
   const [copiedText, setCopiedText] = useState<string | null>(null);
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   function copy(text: string) {
     void navigator.clipboard.writeText(text);
     setCopiedText(text);
     setTimeout(() => setCopiedText(null), 2500);
   }
+
+  return { copiedText, copy };
+}
+
+export default function McpAdmin() {
+  const { access, auditLogs, toolCatalog, appUrl, now } =
+    useLoaderData<typeof loader>();
+  const actionData = useActionData<ActionData>();
+  const { copiedText, copy } = useClipboardCopy();
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   const createdToken =
     actionData && actionData.ok && "createdToken" in actionData
@@ -148,69 +139,24 @@ export default function McpAdmin() {
     >
       <div className="flex flex-col gap-6">
         {createdToken && tokenLabel && (
-          <Alert className="border-emerald-500 bg-emerald-50 text-emerald-950 dark:bg-emerald-950/40 dark:text-emerald-100">
-            <Key className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-            <div className="flex-1">
-              <AlertTitle className="font-semibold text-emerald-800 dark:text-emerald-200">
-                Personal Access Token Created: {tokenLabel}
-              </AlertTitle>
-              <AlertDescription className="mt-2 space-y-2">
-                <p className="text-xs">
-                  Copy this token now. For security, it will never be displayed again.
-                </p>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 p-2 bg-background border rounded text-xs select-all font-mono">
-                    {createdToken}
-                  </code>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => copy(createdToken)}
-                  >
-                    {copiedText === createdToken ? (
-                      <Check className="h-4 w-4 text-emerald-600" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-              </AlertDescription>
-            </div>
-          </Alert>
+          <CreatedTokenAlert
+            createdToken={createdToken}
+            tokenLabel={tokenLabel}
+            copiedText={copiedText}
+            onCopy={copy}
+          />
         )}
-
-        <Tabs defaultValue="quick-connect" className="w-full">
-          <TabsList className="mb-4">
-            <TabsTrigger value="quick-connect">Quick Connect</TabsTrigger>
-            <TabsTrigger value="tokens-clients">Access Tokens & Clients</TabsTrigger>
-            <TabsTrigger value="audit-logs">Activity & Audit Logs</TabsTrigger>
-            <TabsTrigger value="catalog">Tool & API Catalog</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="quick-connect" className="space-y-6">
-            <QuickConnectTab appUrl={appUrl} onCopy={copy} copiedText={copiedText} />
-          </TabsContent>
-
-          <TabsContent value="tokens-clients" className="space-y-6">
-            <TokensClientsTab
-              tokens={tokens}
-              clients={clients}
-              isSubmitting={false}
-              dialogOpen={createDialogOpen}
-              setDialogOpen={setCreateDialogOpen}
-              now={now}
-            />
-          </TabsContent>
-
-          <TabsContent value="audit-logs" className="space-y-6">
-            <AuditLogsTab logs={auditLogs} />
-          </TabsContent>
-
-          <TabsContent value="catalog" className="space-y-6">
-            <CatalogTab catalog={toolCatalog} appUrl={appUrl} />
-          </TabsContent>
-        </Tabs>
+        <McpTabs
+          access={access}
+          auditLogs={auditLogs}
+          toolCatalog={toolCatalog}
+          appUrl={appUrl}
+          now={now}
+          onCopy={copy}
+          copiedText={copiedText}
+          dialogOpen={createDialogOpen}
+          setDialogOpen={setCreateDialogOpen}
+        />
       </div>
     </Page>
   );

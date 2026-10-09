@@ -16,83 +16,53 @@ export async function loader({ request }: LoaderFunctionArgs) {
   return new Response("Method Not Allowed", { status: 405, headers: CORS_HEADERS });
 }
 
-export async function action({ request }: ActionFunctionArgs) {
-  if (request.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: CORS_HEADERS });
-  }
-  if (request.method !== "POST") {
-    return new Response("Method Not Allowed", { status: 405, headers: CORS_HEADERS });
-  }
+const JSON_HEADERS = { "Content-Type": "application/json", ...CORS_HEADERS };
+const NO_STORE_JSON_HEADERS = {
+  "Content-Type": "application/json",
+  "Cache-Control": "no-store",
+  Pragma: "no-cache",
+  ...CORS_HEADERS,
+};
 
-  let body: Record<string, string> = {};
+function oauthError(error: string, description: string): Response {
+  return new Response(
+    JSON.stringify({ error, error_description: description }),
+    { status: 400, headers: JSON_HEADERS },
+  );
+}
+
+function stringEntries(entries: Iterable<[string, unknown]>): Record<string, string> {
+  const body: Record<string, string> = {};
+  for (const [k, v] of entries) {
+    if (typeof v === "string") body[k] = v;
+  }
+  return body;
+}
+
+/** The token endpoint accepts JSON or form-encoded bodies; null means malformed JSON. */
+async function readTokenBody(request: Request): Promise<Record<string, string> | null> {
   const contentType = request.headers.get("Content-Type") || "";
-
   if (contentType.includes("application/json")) {
     const parsed = await readJsonObject(request);
-    if (!parsed) {
-      return new Response(
-        JSON.stringify({ error: "invalid_request", error_description: "Malformed JSON payload" }),
-        { status: 400, headers: { "Content-Type": "application/json", ...CORS_HEADERS } },
-      );
-    }
-    for (const [k, v] of Object.entries(parsed)) {
-      if (typeof v === "string") body[k] = v;
-    }
-  } else {
-    try {
-      const formData = await request.formData();
-      for (const [k, v] of formData.entries()) {
-        if (typeof v === "string") body[k] = v;
-      }
-    } catch {
-      body = {};
-    }
+    return parsed ? stringEntries(Object.entries(parsed)) : null;
   }
-
-  const grantType = body.grant_type ?? "";
-  const clientId = body.client_id ?? "";
-  const code = body.code ?? null;
-  const codeVerifier = body.code_verifier ?? null;
-  const redirectUri = body.redirect_uri ?? null;
-  const refreshToken = body.refresh_token ?? null;
-
-  if (!grantType || !clientId) {
-    return new Response(
-      JSON.stringify({
-        error: "invalid_request",
-        error_description: "Missing grant_type or client_id",
-      }),
-      { status: 400, headers: { "Content-Type": "application/json", ...CORS_HEADERS } },
-    );
+  try {
+    const formData = await request.formData();
+    return stringEntries(formData.entries());
+  } catch {
+    return {};
   }
+}
 
-  const result = await exchangeOAuthToken({
-    grantType,
-    clientId,
-    code,
-    codeVerifier,
-    redirectUri,
-    refreshToken,
-  });
+type ExchangeResult = Awaited<ReturnType<typeof exchangeOAuthToken>>;
 
+function tokenResponse(result: ExchangeResult): Response {
   if (!result.ok) {
     return new Response(
-      JSON.stringify({
-        error: result.error,
-        error_description: result.description,
-      }),
-      {
-        status: result.status,
-        headers: {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-store",
-          Pragma: "no-cache",
-          ...CORS_HEADERS,
-        },
-      },
+      JSON.stringify({ error: result.error, error_description: result.description }),
+      { status: result.status, headers: NO_STORE_JSON_HEADERS },
     );
   }
-
   return new Response(
     JSON.stringify({
       access_token: result.accessToken,
@@ -101,14 +71,35 @@ export async function action({ request }: ActionFunctionArgs) {
       refresh_token: result.refreshToken,
       scope: result.scope,
     }),
-    {
-      status: 200,
-      headers: {
-        "Content-Type": "application/json",
-        "Cache-Control": "no-store",
-        Pragma: "no-cache",
-        ...CORS_HEADERS,
-      },
-    },
+    { status: 200, headers: NO_STORE_JSON_HEADERS },
+  );
+}
+
+export async function action({ request }: ActionFunctionArgs) {
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: CORS_HEADERS });
+  }
+  if (request.method !== "POST") {
+    return new Response("Method Not Allowed", { status: 405, headers: CORS_HEADERS });
+  }
+
+  const body = await readTokenBody(request);
+  if (!body) return oauthError("invalid_request", "Malformed JSON payload");
+
+  const grantType = body.grant_type ?? "";
+  const clientId = body.client_id ?? "";
+  if (!grantType || !clientId) {
+    return oauthError("invalid_request", "Missing grant_type or client_id");
+  }
+
+  return tokenResponse(
+    await exchangeOAuthToken({
+      grantType,
+      clientId,
+      code: body.code ?? null,
+      codeVerifier: body.code_verifier ?? null,
+      redirectUri: body.redirect_uri ?? null,
+      refreshToken: body.refresh_token ?? null,
+    }),
   );
 }

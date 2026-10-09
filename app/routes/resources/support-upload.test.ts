@@ -7,6 +7,7 @@ import { AdminUserRepo } from "~/models/admin-users.server";
 import { SupportRepo } from "~/models/support.server";
 import { createAdminSession } from "~/services/admin-auth.server";
 import { action } from "./support-upload";
+import { testIds } from "~/test/fake-runtime";
 
 setupTestDatabase();
 
@@ -48,7 +49,7 @@ async function staffCookie(): Promise<string> {
 }
 
 async function ticketId(): Promise<string> {
-  const ticket = await new SupportRepo().open({
+  const ticket = await new SupportRepo(testIds).open({
     shop: SHOP,
     shopName: "Upload compensation",
     merchantEmail: null,
@@ -113,7 +114,7 @@ describe("support upload staging", () => {
 
         const result = await action(actionArgs(request));
         expect(result).toMatchObject({ data: { error: "too_large" } });
-        const pending = await new SupportRepo().listExpiredUploads(Date.now() + 24 * 60 * 60 * 1000 + 1);
+        const pending = await new SupportRepo(testIds).listExpiredUploads(Date.now() + 24 * 60 * 60 * 1000 + 1);
         expect(pending).toHaveLength(1);
       });
       expect(report).toHaveBeenCalledWith(expect.stringContaining('"event":"support.upload_size_cleanup_failed"'));

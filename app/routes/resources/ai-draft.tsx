@@ -33,6 +33,32 @@ export async function writeDraftStream(
   }
 }
 
+async function loadThread(form: FormData, ticketId: string): Promise<ThreadForPrompt | null> {
+  if (ticketId && ticketId !== "new") {
+    const found = await supportService().findForStaff(ticketId);
+    if (!found) return null;
+    return {
+      subject: found.ticket.subject,
+      shopName: found.ticket.shopName,
+      category: found.ticket.category,
+      messages: found.messages.map((message) => ({
+        author: message.author,
+        authorName: message.authorName,
+        body: message.body,
+      })),
+    };
+  }
+  // New ticket being drafted from internal console
+  const subject = String(form.get("subject") ?? "");
+  const shop = String(form.get("shop") ?? "");
+  return {
+    subject: subject.trim() || "Customer Support",
+    shopName: shop ? shop.replace(".myshopify.com", "") : "Merchant",
+    category: toSupportCategory(String(form.get("category") ?? "question")) ?? "question",
+    messages: [],
+  };
+}
+
 /**
  * Streams a REWRITE of what the staff member has already typed, token by token
  * — or a suggestion when the box is empty.
@@ -58,35 +84,9 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
   const currentText = String(form.get("currentText") ?? "");
   const instruction = String(form.get("instruction") ?? "");
   const tone = toReplyTone(String(form.get("tone") ?? ""));
-  const subject = String(form.get("subject") ?? "");
-  const shop = String(form.get("shop") ?? "");
-  const categoryRaw = String(form.get("category") ?? "question");
 
-  let thread: ThreadForPrompt;
-  if (ticketId && ticketId !== "new") {
-    const support = supportService();
-    const found = await support.findForStaff(ticketId);
-    if (!found) return new Response("Not found", { status: 404 });
-
-    thread = {
-      subject: found.ticket.subject,
-      shopName: found.ticket.shopName,
-      category: found.ticket.category,
-      messages: found.messages.map((message) => ({
-        author: message.author,
-        authorName: message.authorName,
-        body: message.body,
-      })),
-    };
-  } else {
-    // New ticket being drafted from internal console
-    thread = {
-      subject: subject.trim() || "Customer Support",
-      shopName: shop ? shop.replace(".myshopify.com", "") : "Merchant",
-      category: toSupportCategory(categoryRaw) ?? "question",
-      messages: [],
-    };
-  }
+  const thread = await loadThread(form, ticketId);
+  if (!thread) return new Response("Not found", { status: 404 });
 
   const started = await aiService().stream(
     replyTask,

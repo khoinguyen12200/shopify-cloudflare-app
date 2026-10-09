@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import type { TFunction } from "i18next";
 import { addCcEmail, removeCcEmail, type CcFailure } from "~/support/cc-list";
 import { supportErrorKey } from "~/support/error-keys";
@@ -35,22 +35,11 @@ export interface CcLabels {
   readonly error: (reason: CcFailure) => string;
 }
 
-export function CcEmails({
-  id,
-  name,
-  emails,
-  onChange,
-  labels,
-}: {
-  /** Unique on the page — it is the dialog's id, and the button's target. */
-  id: string;
-  /** Form field name. The addresses are submitted comma-separated. */
-  name: string;
-  emails: readonly string[];
-  onChange: (next: string[]) => void;
-  labels: CcLabels;
-}) {
-  const dialogId = `${id}-dialog`;
+type ModalRef = RefObject<HTMLElementTagNameMap["s-modal"] | null>;
+type FieldRef = RefObject<HTMLElementTagNameMap["s-email-field"] | null>;
+
+/** The add-address dialog's state: refs to the modal and field, the last failure, and submit. */
+function useCcDialog(emails: readonly string[], onChange: (next: string[]) => void) {
   const dialog = useRef<HTMLElementTagNameMap["s-modal"]>(null);
   const field = useRef<HTMLElementTagNameMap["s-email-field"]>(null);
   const [failure, setFailure] = useState<CcFailure | null>(null);
@@ -91,6 +80,90 @@ export function CcEmails({
     return () => input.removeEventListener("keydown", onKeyDown);
   });
 
+  return { dialog, field, failure, setFailure, submitAddress };
+}
+
+type CcListProps = {
+  emails: readonly string[];
+  labels: CcLabels;
+  onRemove: (email: string) => void;
+};
+
+function CcList({ emails, labels, onRemove }: CcListProps) {
+  if (emails.length === 0) return <s-text color="subdued">{labels.empty}</s-text>;
+  return (
+    <s-stack direction="block" gap="small-400">
+      {emails.map((email) => (
+        <s-grid key={email} gridTemplateColumns="1fr auto" gap="small-200" alignItems="center">
+          <s-text>{email}</s-text>
+          <s-button
+            type="button"
+            variant="tertiary"
+            icon="x"
+            accessibilityLabel={labels.remove(email)}
+            onClick={() => onRemove(email)}
+          ></s-button>
+        </s-grid>
+      ))}
+    </s-stack>
+  );
+}
+
+type CcDialogProps = {
+  dialogId: string;
+  dialog: ModalRef;
+  field: FieldRef;
+  failure: CcFailure | null;
+  labels: CcLabels;
+  onSubmit: () => void;
+};
+
+function CcDialog({ dialogId, dialog, field, failure, labels, onSubmit }: CcDialogProps) {
+  return (
+    <s-modal
+      ref={dialog}
+      id={dialogId}
+      heading={labels.dialogHeading}
+      accessibilityLabel={labels.dialogHeading}
+    >
+      <s-email-field
+        ref={field}
+        label={labels.field}
+        placeholder={labels.fieldPlaceholder}
+        error={failure ? labels.error(failure) : undefined}
+        autocomplete="email"
+      ></s-email-field>
+
+      <s-button slot="primary-action" type="button" variant="primary" onClick={onSubmit}>
+        {labels.confirm}
+      </s-button>
+      <s-button
+        slot="secondary-actions"
+        type="button"
+        variant="secondary"
+        commandFor={dialogId}
+        command="--hide"
+      >
+        {labels.cancel}
+      </s-button>
+    </s-modal>
+  );
+}
+
+type CcEmailsProps = {
+  /** Unique on the page — it is the dialog's id, and the button's target. */
+  id: string;
+  /** Form field name. The addresses are submitted comma-separated. */
+  name: string;
+  emails: readonly string[];
+  onChange: (next: string[]) => void;
+  labels: CcLabels;
+};
+
+export function CcEmails({ id, name, emails, onChange, labels }: CcEmailsProps) {
+  const dialogId = `${id}-dialog`;
+  const { dialog, field, failure, setFailure, submitAddress } = useCcDialog(emails, onChange);
+
   return (
     <s-stack direction="block" gap="small-200">
       <s-stack direction="block" gap="small-500">
@@ -98,32 +171,14 @@ export function CcEmails({
         <s-text color="subdued">{labels.help}</s-text>
       </s-stack>
 
-      {emails.length === 0 ? (
-        <s-text color="subdued">{labels.empty}</s-text>
-      ) : (
-        <s-stack direction="block" gap="small-400">
-          {emails.map((email) => (
-            <s-grid
-              key={email}
-              gridTemplateColumns="1fr auto"
-              gap="small-200"
-              alignItems="center"
-            >
-              <s-text>{email}</s-text>
-              <s-button
-                type="button"
-                variant="tertiary"
-                icon="x"
-                accessibilityLabel={labels.remove(email)}
-                onClick={() => {
-                  setFailure(null);
-                  onChange(removeCcEmail(emails, email));
-                }}
-              ></s-button>
-            </s-grid>
-          ))}
-        </s-stack>
-      )}
+      <CcList
+        emails={emails}
+        labels={labels}
+        onRemove={(email) => {
+          setFailure(null);
+          onChange(removeCcEmail(emails, email));
+        }}
+      />
 
       <s-stack direction="inline">
         <s-button
@@ -140,38 +195,14 @@ export function CcEmails({
       {/* What the action actually reads. The visible list IS the value. */}
       <input type="hidden" name={name} value={emails.join(",")} />
 
-      <s-modal
-        ref={dialog}
-        id={dialogId}
-        heading={labels.dialogHeading}
-        accessibilityLabel={labels.dialogHeading}
-      >
-        <s-email-field
-          ref={field}
-          label={labels.field}
-          placeholder={labels.fieldPlaceholder}
-          error={failure ? labels.error(failure) : undefined}
-          autocomplete="email"
-        ></s-email-field>
-
-        <s-button
-          slot="primary-action"
-          type="button"
-          variant="primary"
-          onClick={submitAddress}
-        >
-          {labels.confirm}
-        </s-button>
-        <s-button
-          slot="secondary-actions"
-          type="button"
-          variant="secondary"
-          commandFor={dialogId}
-          command="--hide"
-        >
-          {labels.cancel}
-        </s-button>
-      </s-modal>
+      <CcDialog
+        dialogId={dialogId}
+        dialog={dialog}
+        field={field}
+        failure={failure}
+        labels={labels}
+        onSubmit={submitAddress}
+      />
     </s-stack>
   );
 }

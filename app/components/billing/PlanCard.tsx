@@ -127,6 +127,95 @@ function PillIcon({ kind }: { kind: "check" | "star" }) {
   );
 }
 
+type PlanCardProps = {
+  plan: Plan;
+  buildsOn: Plan | null;
+  isCurrent: boolean;
+  isFeatured: boolean;
+  illustrationSrc?: string;
+  illustrationAlt?: string;
+};
+
+/** At most one pill per card, so they never stack or compete. */
+function PlanPill({ isCurrent, isFeatured }: Pick<PlanCardProps, "isCurrent" | "isFeatured">) {
+  const { t } = useTranslation(["admin", "common"]);
+  if (isCurrent) {
+    return (
+      <span className="bp-pill">
+        <PillIcon kind="check" />
+        {t("billing.currentPlanBadge")}
+      </span>
+    );
+  }
+  if (!isFeatured) return null;
+  return (
+    <span className="bp-pill">
+      <PillIcon kind="star" />
+      {t("billing.plans.mostPopular")}
+    </span>
+  );
+}
+
+/**
+ * The annual line earns its place by saying what it saves, worked out
+ * from the two catalogue prices — never a written-down number that
+ * can drift from them.
+ */
+function AnnualLine({ plan }: { plan: Plan }) {
+  const { t } = useTranslation(["admin", "common"]);
+  const locale = useLocale();
+  const savingPercent = annualSavingPercent(plan);
+  const price = formatMoney(locale, plan.priceAnnual);
+
+  if (plan.priceMonthly.amount <= 0) return <>{t("billing.plans.freeForever")}</>;
+  if (savingPercent === null) return <>{t("billing.plans.annual", { price })}</>;
+  return <>{t("billing.plans.annualSaving", { price, percent: savingPercent })}</>;
+}
+
+function PlanHead({ plan }: { plan: Plan }) {
+  const { t } = useTranslation(["admin", "common"]);
+  const locale = useLocale();
+  const isPaid = plan.priceMonthly.amount > 0;
+  return (
+    <div className="bp-head">
+      <div className="bp-name">{plan.name}</div>
+
+      {/* The amount is the hero and carries the weight; the interval sits
+          subdued on its baseline so the two read as one figure. */}
+      <div className="bp-price">
+        <span className="bp-amount">{formatMoney(locale, plan.priceMonthly)}</span>
+        {isPaid && <span className="bp-cycle">{t("billing.plans.perMonth")}</span>}
+      </div>
+
+      <div className="bp-annual">
+        <AnnualLine plan={plan} />
+      </div>
+    </div>
+  );
+}
+
+/** No per-card action: changing plan is one job with one owner, at the top of the page. */
+function PlanFeatures({ plan, buildsOn }: Pick<PlanCardProps, "plan" | "buildsOn">) {
+  const { t } = useTranslation(["admin", "common"]);
+  return (
+    <ul className="bp-features">
+      {buildsOn && (
+        <li className="bp-builds">
+          {t("billing.plans.buildsOn", { plan: buildsOn.name })}
+        </li>
+      )}
+      {plan.featureKeys.map((key) => (
+        <li key={key} className="bp-feature">
+          <span className="bp-check">
+            <PillIcon kind="check" />
+          </span>
+          {t(`common:plans.${key}`)}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /**
  * One plan, as a card. Reading order is the order a merchant decides in:
  * which plan → what it costs → how to get it → what it adds.
@@ -142,38 +231,10 @@ export function PlanCard({
   isFeatured,
   illustrationSrc,
   illustrationAlt,
-}: {
-  plan: Plan;
-  buildsOn: Plan | null;
-  isCurrent: boolean;
-  isFeatured: boolean;
-  illustrationSrc?: string;
-  illustrationAlt?: string;
-}) {
-  const { t } = useTranslation(["admin", "common"]);
-  const locale = useLocale();
-
-  const isPaid = plan.priceMonthly.amount > 0;
-  const savingPercent = annualSavingPercent(plan);
-
+}: PlanCardProps) {
   return (
     <div className={isCurrent ? "bp-card bp-card--current" : "bp-card"}>
-      {/* At most one pill per card, so they never stack or compete. The tinted
-          fill and accent border already mark the current card ambiently; this
-          names it. */}
-      {isCurrent ? (
-        <span className="bp-pill">
-          <PillIcon kind="check" />
-          {t("billing.currentPlanBadge")}
-        </span>
-      ) : (
-        isFeatured && (
-          <span className="bp-pill">
-            <PillIcon kind="star" />
-            {t("billing.plans.mostPopular")}
-          </span>
-        )
-      )}
+      <PlanPill isCurrent={isCurrent} isFeatured={isFeatured} />
 
       {illustrationSrc && illustrationAlt && (
         <s-image
@@ -185,50 +246,8 @@ export function PlanCard({
         ></s-image>
       )}
 
-      <div className="bp-head">
-        <div className="bp-name">{plan.name}</div>
-
-        {/* The amount is the hero and carries the weight; the interval sits
-            subdued on its baseline so the two read as one figure. */}
-        <div className="bp-price">
-          <span className="bp-amount">{formatMoney(locale, plan.priceMonthly)}</span>
-          {isPaid && <span className="bp-cycle">{t("billing.plans.perMonth")}</span>}
-        </div>
-
-        {/* The annual line earns its place by saying what it saves, worked out
-            from the two catalogue prices — never a written-down number that
-            can drift from them. */}
-        <div className="bp-annual">
-          {!isPaid
-            ? t("billing.plans.freeForever")
-            : savingPercent !== null
-              ? t("billing.plans.annualSaving", {
-                  price: formatMoney(locale, plan.priceAnnual),
-                  percent: savingPercent,
-                })
-              : t("billing.plans.annual", {
-                  price: formatMoney(locale, plan.priceAnnual),
-                })}
-        </div>
-      </div>
-
-      {/* No per-card action: changing plan is one job with one owner, and that
-          control lives once at the top of the page. */}
-      <ul className="bp-features">
-        {buildsOn && (
-          <li className="bp-builds">
-            {t("billing.plans.buildsOn", { plan: buildsOn.name })}
-          </li>
-        )}
-        {plan.featureKeys.map((key) => (
-          <li key={key} className="bp-feature">
-            <span className="bp-check">
-              <PillIcon kind="check" />
-            </span>
-            {t(`common:plans.${key}`)}
-          </li>
-        ))}
-      </ul>
+      <PlanHead plan={plan} />
+      <PlanFeatures plan={plan} buildsOn={buildsOn} />
     </div>
   );
 }

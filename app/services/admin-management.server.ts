@@ -2,6 +2,7 @@ import { hashPassword, verifyPassword } from "~/lib/password";
 import { validatePasswordStrength } from "~/lib/password-policy";
 import { normalizeEmail, type AdminUserPort } from "~/ports/admin-users";
 import type { AdminRole, SafeAdminUser } from "~/ports/admin-users";
+import type { Runtime } from "~/ports/runtime";
 
 /**
  * Staff management use cases. Pure decisions plus repo calls — every guard that
@@ -57,7 +58,7 @@ export async function createAdmin(input: {
   email: string;
   password: string;
   role: AdminRole;
-}, deps: { users: Pick<AdminUserPort, "findByEmailWithHash" | "create"> }): Promise<Result<SafeAdminUser>> {
+}, deps: { users: Pick<AdminUserPort, "findByEmailWithHash" | "create">; runtime: Runtime }): Promise<Result<SafeAdminUser>> {
   const name = input.name.trim();
   const email = normalizeEmail(input.email);
 
@@ -74,12 +75,12 @@ export async function createAdmin(input: {
 
   try {
     const user = await repo.create({
-      id: crypto.randomUUID(),
+      id: deps.runtime.ids.uuid(),
       email,
       name,
-      passwordHash: await hashPassword(input.password),
+      passwordHash: await hashPassword(input.password, deps.runtime.randomBytes),
       role: input.role,
-      now: Date.now(),
+      now: deps.runtime.clock.now(),
     });
     return ok(user);
   } catch (error) {
@@ -102,7 +103,7 @@ export async function setAdminStatus(input: {
   actorId: string;
   targetId: string;
   status: "active" | "disabled";
-}, deps: { users: Pick<AdminUserPort, "findById" | "countOtherActiveOwners" | "setStatus"> }): Promise<Result<SafeAdminUser>> {
+}, deps: { users: Pick<AdminUserPort, "findById" | "countOtherActiveOwners" | "setStatus">; runtime: Pick<Runtime, "clock"> }): Promise<Result<SafeAdminUser>> {
   if (input.actorId === input.targetId) return fail("notYourself");
 
   const repo = deps.users;
@@ -114,7 +115,7 @@ export async function setAdminStatus(input: {
     if (others === 0) return fail("lastOwner");
   }
 
-  await repo.setStatus(target.id, input.status, Date.now());
+  await repo.setStatus(target.id, input.status, deps.runtime.clock.now());
   return ok({ ...target, status: input.status });
 }
 
@@ -123,7 +124,7 @@ export async function setAdminRole(input: {
   actorId: string;
   targetId: string;
   role: AdminRole;
-}, deps: { users: Pick<AdminUserPort, "findById" | "countOtherActiveOwners" | "setRole"> }): Promise<Result<SafeAdminUser>> {
+}, deps: { users: Pick<AdminUserPort, "findById" | "countOtherActiveOwners" | "setRole">; runtime: Pick<Runtime, "clock"> }): Promise<Result<SafeAdminUser>> {
   if (input.actorId === input.targetId) return fail("notYourself");
 
   const repo = deps.users;
@@ -135,7 +136,7 @@ export async function setAdminRole(input: {
     if (others === 0) return fail("lastOwner");
   }
 
-  await repo.setRole(target.id, input.role, Date.now());
+  await repo.setRole(target.id, input.role, deps.runtime.clock.now());
   return ok({ ...target, role: input.role });
 }
 
@@ -180,7 +181,7 @@ export async function resetAdminPassword(input: {
   actorId: string;
   targetId: string;
   newPassword: string;
-}, deps: { users: Pick<AdminUserPort, "findById" | "updatePassword"> }): Promise<Result<{ user: SafeAdminUser }>> {
+}, deps: { users: Pick<AdminUserPort, "findById" | "updatePassword">; runtime: Pick<Runtime, "clock" | "randomBytes"> }): Promise<Result<{ user: SafeAdminUser }>> {
   if (input.actorId === input.targetId) return fail("notYourself");
 
   const weak = validatePasswordStrength(input.newPassword);
@@ -192,8 +193,8 @@ export async function resetAdminPassword(input: {
 
   await repo.updatePassword(
     target.id,
-    await hashPassword(input.newPassword),
-    Date.now(),
+    await hashPassword(input.newPassword, deps.runtime.randomBytes),
+    deps.runtime.clock.now(),
   );
   return ok({ user: target });
 }
@@ -201,13 +202,13 @@ export async function resetAdminPassword(input: {
 export async function updateOwnProfile(input: {
   userId: string;
   name: string;
-}, deps: { users: Pick<AdminUserPort, "updateProfile"> }): Promise<Result<null, ProfileErrorReason>> {
+}, deps: { users: Pick<AdminUserPort, "updateProfile">; runtime: Pick<Runtime, "clock"> }): Promise<Result<null, ProfileErrorReason>> {
   const name = input.name.trim();
   if (!name) return fail("nameRequired");
 
   await deps.users.updateProfile(input.userId, {
     name,
-    now: Date.now(),
+    now: deps.runtime.clock.now(),
   });
   return ok(null);
 }
@@ -224,7 +225,7 @@ export async function changeOwnPassword(input: {
   currentPassword: string;
   newPassword: string;
   confirmPassword: string;
-}, deps: { users: Pick<AdminUserPort, "findByIdWithHash" | "updatePassword"> }): Promise<Result<null, ProfileErrorReason>> {
+}, deps: { users: Pick<AdminUserPort, "findByIdWithHash" | "updatePassword">; runtime: Pick<Runtime, "clock" | "randomBytes"> }): Promise<Result<null, ProfileErrorReason>> {
   if (input.newPassword !== input.confirmPassword) return fail("mismatch");
 
   const weak = validatePasswordStrength(input.newPassword);
@@ -242,8 +243,8 @@ export async function changeOwnPassword(input: {
 
   await repo.updatePassword(
     user.id,
-    await hashPassword(input.newPassword),
-    Date.now(),
+    await hashPassword(input.newPassword, deps.runtime.randomBytes),
+    deps.runtime.clock.now(),
   );
   return ok(null);
 }

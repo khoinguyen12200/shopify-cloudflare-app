@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, type ReactNode, type RefObject } from "react";
 import type { UploadController } from "~/routes/app/support/use-pending-uploads";
 
 const MAX_FILES = 10;
@@ -52,6 +52,70 @@ const PICKER_CSS = `
 }
 `;
 
+type StagedFile = UploadController["files"][number];
+
+/** Keyed by the closed kind union, so a new kind fails the build until it has a preview. */
+const PREVIEWS: Record<StagedFile["kind"], (file: StagedFile) => ReactNode> = {
+  file: (file) => (
+    <div className="sup-file--document" title={file.filename}>
+      <span className="sup-file__icon">{fileExtensionLabel(file.filename)}</span>
+      <span className="sup-file__name">{file.filename}</span>
+    </div>
+  ),
+  video: (file) => <video src={file.previewUrl} muted playsInline preload="metadata" />,
+  image: (file) => <img src={file.previewUrl} alt={file.filename} />,
+};
+
+function StagedFileTile({ file, onRemove }: { file: StagedFile; onRemove: () => void }) {
+  return (
+    <div className="sup-file">
+      {PREVIEWS[file.kind](file)}
+      <span className="sup-file__badge">
+        {file.kind === "video" ? "VIDEO" : `${Math.max(1, Math.round(file.sizeBytes / 1024))} KB`}
+      </span>
+      <button
+        type="button"
+        className="sup-file__remove"
+        aria-label={`Remove ${file.filename}`}
+        onClick={onRemove}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
+function FileInput({
+  inputRef,
+  onPick,
+}: {
+  inputRef: RefObject<HTMLInputElement | null>;
+  onPick: (files: FileList | null) => void;
+}) {
+  return (
+    <input
+      ref={inputRef}
+      type="file"
+      accept="image/*,video/*,.csv,.txt,.md,.json,.xml,.pdf,.zip,.gz,.xls,.xlsx,.doc,.docx"
+      multiple
+      hidden
+      onChange={(event) => {
+        onPick(event.currentTarget.files);
+        // Cleared so picking the same file twice still fires a change.
+        event.currentTarget.value = "";
+      }}
+    />
+  );
+}
+
+type AttachmentPickerProps = {
+  label: string;
+  addLabel: string;
+  uploads: UploadController;
+  errorLabel?: (reason: string) => string;
+  limitsLabel: string;
+};
+
 /**
  * The picker: a button, a hidden file input, and a grid of what is staged.
  *
@@ -66,13 +130,7 @@ export function AttachmentPicker({
   uploads,
   errorLabel,
   limitsLabel,
-}: {
-  label: string;
-  addLabel: string;
-  uploads: UploadController;
-  errorLabel?: (reason: string) => string;
-  limitsLabel: string;
-}) {
+}: AttachmentPickerProps) {
   const input = useRef<HTMLInputElement>(null);
 
   return (
@@ -83,48 +141,18 @@ export function AttachmentPicker({
       {uploads.files.length > 0 && (
         <div className="sup-files">
           {uploads.files.map((file) => (
-            <div key={file.uploadId} className="sup-file">
-              {file.kind === "file" ? (
-                <div className="sup-file--document" title={file.filename}>
-                  <span className="sup-file__icon">{fileExtensionLabel(file.filename)}</span>
-                  <span className="sup-file__name">{file.filename}</span>
-                </div>
-              ) : file.kind === "video" ? (
-                <video src={file.previewUrl} muted playsInline preload="metadata" />
-              ) : (
-                <img src={file.previewUrl} alt={file.filename} />
-              )}
-              <span className="sup-file__badge">
-                {file.kind === "video" ? "VIDEO" : `${Math.max(1, Math.round(file.sizeBytes / 1024))} KB`}
-              </span>
-              <button
-                type="button"
-                className="sup-file__remove"
-                aria-label={`Remove ${file.filename}`}
-                onClick={() => uploads.remove(file.uploadId)}
-              >
-                ×
-              </button>
-              {/* What the action needs to write the row. */}
-            </div>
+            <StagedFileTile
+              key={file.uploadId}
+              file={file}
+              onRemove={() => uploads.remove(file.uploadId)}
+            />
           ))}
         </div>
       )}
 
       <input type="hidden" name="uploadIds" value={uploads.files.map((f) => f.uploadId).join(",")} />
 
-      <input
-        ref={input}
-        type="file"
-        accept="image/*,video/*,.csv,.txt,.md,.json,.xml,.pdf,.zip,.gz,.xls,.xlsx,.doc,.docx"
-        multiple
-        hidden
-        onChange={(event) => {
-          void uploads.add(event.currentTarget.files);
-          // Cleared so picking the same file twice still fires a change.
-          event.currentTarget.value = "";
-        }}
-      />
+      <FileInput inputRef={input} onPick={(files) => void uploads.add(files)} />
 
       <s-stack direction="inline" gap="small" alignItems="center">
         <s-button
@@ -137,9 +165,7 @@ export function AttachmentPicker({
         >
           {addLabel}
         </s-button>
-        <s-text color="subdued">
-          {limitsLabel}
-        </s-text>
+        <s-text color="subdued">{limitsLabel}</s-text>
       </s-stack>
 
       {uploads.error && (

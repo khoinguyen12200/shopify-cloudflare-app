@@ -7,6 +7,106 @@ import { attachmentKey, safeFilename, validateUpload } from "~/support/attachmen
 import { getAdminUser } from "~/services/admin-auth.server";
 import { adminUsers } from "~/wiring.server";
 
+const STAGED_UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
+
+type UploadFailure = ReturnType<typeof data<{ error: string }>>;
+
+type StagedUpload = {
+  readonly uploadId: string;
+  readonly shop: string;
+  readonly ticketId: string;
+  readonly key: string;
+  readonly filename: string;
+  readonly contentType: string;
+  readonly sizeBytes: number;
+};
+
+function failure(error: string, status: number): UploadFailure {
+  return data({ error }, { status });
+}
+
+/**
+ * Who the upload belongs to. Staff name the shop (or it is read off the ticket);
+ * a merchant's shop is the authenticated session's, and a ticket id must be theirs.
+ */
+async function resolveUploadShop(
+  request: Request,
+  staff: unknown,
+  ticketId: string,
+): Promise<string | UploadFailure> {
+  const explicitShop = request.headers.get("X-Shop");
+  const shop = staff
+    ? (explicitShop || (ticketId !== "new" ? (await support().findForStaff(ticketId))?.ticket.shop : undefined))
+    : (await authenticateAdmin(request)).session.shop;
+  if (!shop) return failure("not_found", 404);
+  if (!staff && ticketId !== "new" && !(await support().find(shop, ticketId))) {
+    return failure("not_found", 404);
+  }
+  return shop;
+}
+
+async function stageUpload(upload: StagedUpload): Promise<void> {
+  const now = Date.now();
+  await support().stageUpload({
+    id: upload.uploadId,
+    shop: upload.shop,
+    ticketId: upload.ticketId === "new" ? null : upload.ticketId,
+    r2Key: upload.key,
+    filename: upload.filename,
+    contentType: upload.contentType,
+    sizeBytes: upload.sizeBytes,
+    createdAt: now,
+    expiresAt: now + STAGED_UPLOAD_TTL_MS,
+  });
+}
+
+/**
+ * R2 stored more than the declared size allowed. Remove it; when removal fails,
+ * stage the row anyway so the cron sweep can still find and delete the object.
+ */
+async function discardOversized(env: Env, upload: StagedUpload): Promise<void> {
+  try {
+    await env.UPLOADS.delete(upload.key);
+  } catch (cleanupError) {
+    console.error(JSON.stringify({
+      event: "support.upload_size_cleanup_failed",
+      error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+    }));
+    try {
+      await stageUpload(upload);
+    } catch (stagingError) {
+      console.error(JSON.stringify({
+        event: "support.upload_size_staging_failed",
+        error: stagingError instanceof Error ? stagingError.message : String(stagingError),
+      }));
+    }
+  }
+}
+
+/** Cron discovers abandoned objects through D1, so a failed insert compensates immediately. */
+async function stageOrCompensate(env: Env, upload: StagedUpload): Promise<void> {
+  try {
+    await stageUpload(upload);
+  } catch (stagingError) {
+    try {
+      await env.UPLOADS.delete(upload.key);
+    } catch (cleanupError) {
+      console.error(JSON.stringify({
+        event: "support.upload_staging_cleanup_failed",
+        error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+      }));
+    }
+    throw stagingError;
+  }
+}
+
+/** Uploads cost storage, so they share the limiter with ticket writes (fails open when absent). */
+async function isRateLimited(env: Env, shop: string): Promise<boolean> {
+  if (!env.SUPPORT_LIMITER) return false;
+  const { success } = await env.SUPPORT_LIMITER.limit({ key: shop });
+  return !success;
+}
+
 /**
  * One file, streamed straight into R2.
  *
@@ -25,108 +125,45 @@ import { adminUsers } from "~/wiring.server";
 export const action = async ({ request }: ActionFunctionArgs) => {
   const env = getEnv();
 
-  if (request.method !== "POST") {
-    return data({ error: "method_not_allowed" as const }, { status: 405 });
-  }
+  if (request.method !== "POST") return failure("method_not_allowed", 405);
 
   const ticketId = request.headers.get("X-Support-Ticket") ?? "new";
   const staff = await getAdminUser(request, { users: adminUsers() });
-  const explicitShop = request.headers.get("X-Shop");
-  const shop = staff
-    ? (explicitShop || (ticketId !== "new" ? (await support().findForStaff(ticketId))?.ticket.shop : undefined))
-    : (await authenticateAdmin(request)).session.shop;
-  if (!shop) return data({ error: "not_found" as const }, { status: 404 });
-  if (!staff && ticketId !== "new" && !(await support().find(shop, ticketId))) {
-    return data({ error: "not_found" as const }, { status: 404 });
-  }
+  const shop = await resolveUploadShop(request, staff, ticketId);
+  if (typeof shop !== "string") return shop;
 
-  // Uploads cost storage, so they share the limiter with ticket writes. Fails
-  // open when the binding is absent. Staff uploads bypass limiter.
-  if (!staff && env.SUPPORT_LIMITER) {
-    const { success } = await env.SUPPORT_LIMITER.limit({ key: shop });
-    if (!success) return data({ error: "rate_limited" as const }, { status: 429 });
-  }
+  // Staff uploads bypass the limiter.
+  if (!staff && (await isRateLimited(env, shop))) return failure("rate_limited", 429);
+
   const contentType = request.headers.get("Content-Type") ?? "";
   // Content-Length is the client's claim, checked here so an oversized upload
   // is refused before a byte is stored. The real size is verified after the
   // write, from what R2 actually received.
   const declared = Number(request.headers.get("Content-Length") ?? "0");
-
   if (!Number.isFinite(declared) || !Number.isInteger(declared) || declared <= 0) {
-    return data({ error: "empty" as const }, { status: 400 });
+    return failure("empty", 400);
   }
 
   const check = validateUpload({ contentType, sizeBytes: declared });
-  if (!check.ok) {
-    return data({ error: check.reason }, { status: 400 });
-  }
-
-  if (!request.body) {
-    return data({ error: "empty" as const }, { status: 400 });
-  }
+  if (!check.ok) return failure(check.reason, 400);
+  if (!request.body) return failure("empty", 400);
 
   const uploadId = crypto.randomUUID();
   const key = attachmentKey({ shop, ticketId, uploadId });
-  const filename = safeFilename(
-    request.headers.get("X-Support-Filename") ?? "file",
-  );
+  const filename = safeFilename(request.headers.get("X-Support-Filename") ?? "file");
 
-  const object = await env.UPLOADS.put(key, request.body, {
-    httpMetadata: { contentType },
-  });
+  const object = await env.UPLOADS.put(key, request.body, { httpMetadata: { contentType } });
+  const upload: StagedUpload = { uploadId, shop, ticketId, key, filename, contentType, sizeBytes: object.size };
 
   // R2 reports what it actually stored. A client that under-declared its
   // Content-Length to get past the check above is caught here, and the object
   // is removed rather than left paid for.
   if (object.size > check.value.maxBytes) {
-    try {
-      await env.UPLOADS.delete(key);
-    } catch (cleanupError) {
-      console.error(JSON.stringify({
-        event: "support.upload_size_cleanup_failed",
-        error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
-      }));
-      try {
-        await support().stageUpload({
-          id: uploadId, shop, ticketId: ticketId === "new" ? null : ticketId,
-          r2Key: key, filename, contentType, sizeBytes: object.size,
-          createdAt: Date.now(), expiresAt: Date.now() + 24 * 60 * 60 * 1000,
-        });
-      } catch (stagingError) {
-        console.error(JSON.stringify({
-          event: "support.upload_size_staging_failed",
-          error: stagingError instanceof Error ? stagingError.message : String(stagingError),
-        }));
-      }
-    }
-    return data({ error: "too_large" as const }, { status: 413 });
+    await discardOversized(env, upload);
+    return failure("too_large", 413);
   }
 
-  try {
-    await support().stageUpload({
-      id: uploadId, shop, ticketId: ticketId === "new" ? null : ticketId,
-      r2Key: key, filename, contentType, sizeBytes: object.size,
-      createdAt: Date.now(), expiresAt: Date.now() + 24 * 60 * 60 * 1000,
-    });
-  } catch (stagingError) {
-    // Cron discovers abandoned objects through D1, so a failed insert must
-    // compensate immediately rather than leave an unreachable R2 object.
-    try {
-      await env.UPLOADS.delete(key);
-    } catch (cleanupError) {
-      console.error(JSON.stringify({
-        event: "support.upload_staging_cleanup_failed",
-        error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
-      }));
-    }
-    throw stagingError;
-  }
+  await stageOrCompensate(env, upload);
 
-  return data({
-    uploadId,
-    r2Key: key,
-    filename,
-    contentType,
-    sizeBytes: object.size,
-  });
+  return data({ uploadId, r2Key: key, filename, contentType, sizeBytes: object.size });
 };

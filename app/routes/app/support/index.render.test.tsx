@@ -1,14 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { renderToString } from "react-dom/server";
-import {
-  createStaticHandler,
-  createStaticRouter,
-  StaticRouterProvider,
-  type RouteObject,
-} from "react-router";
-import { createInstance } from "i18next";
-import { I18nextProvider, initReactI18next } from "react-i18next";
-import { i18nOptions } from "~/i18n/options";
+import { err, ok } from "~/lib/result";
+import { renderRoute } from "~/test/render-route";
 import SupportIndex from "./index";
 
 type Ticket = {
@@ -38,38 +30,13 @@ const ticket = (over: Partial<Ticket> = {}): Ticket => ({
  * `t()`. Layout is verified by hand (@rules/testing.md).
  */
 async function render(tickets: Ticket[], locale: "en" | "es" = "en") {
-  const instance = createInstance();
-  await instance.use(initReactI18next).init({ ...i18nOptions, lng: locale });
-
-  const routes: RouteObject[] = [
-    {
-      path: "/app/support",
-      Component: SupportIndex,
-      loader: () => ({ tickets }),
-    },
-  ];
-  const handler = createStaticHandler(routes);
-  const context = await handler.query(
-    new Request("https://example.test/app/support"),
-  );
-  if (context instanceof Response) {
-    throw new Error(`Expected a render context, got ${context.status}`);
-  }
-
-  const html = renderToString(
-    <I18nextProvider i18n={instance}>
-      <StaticRouterProvider
-        router={createStaticRouter(routes, context)}
-        context={context}
-      />
-    </I18nextProvider>,
-  );
-
-  expect(
-    html.length,
-    "rendered nothing — assertions would be vacuous",
-  ).toBeGreaterThan(200);
-  return html;
+  return renderRoute({
+    path: "/app/support",
+    Component: SupportIndex,
+    loaderData: { tickets: Promise.resolve(ok(tickets)) },
+    stage: "settled",
+    locale,
+  });
 }
 
 describe("the merchant's ticket list", () => {
@@ -135,5 +102,46 @@ describe("the merchant's ticket list", () => {
 
     expect(html).not.toContain("No tickets yet");
     expect(html).not.toContain("New ticket");
+  });
+});
+
+describe("streaming the ticket list", () => {
+  const never = new Promise<never>(() => undefined);
+
+  it("renders the heading and the New ticket action at once, with a labelled spinner for the list", async () => {
+    const html = await renderRoute({ path: "/app/support", Component: SupportIndex, loaderData: { tickets: never }, stage: "pending" });
+
+    expect(html).toContain('<s-page heading="Support"');
+    expect(html).toContain('slot="primary-action"');
+    expect(html).toContain('accessibilityLabel="Loading your tickets"');
+    // Neither answer is shown before the data arrives.
+    expect(html).not.toContain("No tickets yet");
+    expect(html).not.toContain("<s-table");
+  });
+
+  it("replaces the spinner with the rows once the tickets arrive", async () => {
+    const html = await render([ticket({ subject: "Refund stuck" })]);
+    expect(html).toContain("Refund stuck");
+    expect(html).not.toContain("<s-spinner");
+  });
+
+  it("shows a critical banner, not the empty state, when the tickets could not be loaded", async () => {
+    // "No tickets yet" would be a plausible but wrong answer for a failed read.
+    const html = await renderRoute({
+      path: "/app/support",
+      Component: SupportIndex,
+      loaderData: { tickets: Promise.resolve(err("failed")) },
+      stage: "settled",
+    });
+
+    expect(html).toContain('tone="critical"');
+    expect(html).toContain("We couldn&#x27;t load your tickets");
+    expect(html).not.toContain("No tickets yet");
+    expect(html).toContain('<s-page heading="Support"');
+  });
+
+  it("translates the pending label", async () => {
+    const html = await renderRoute({ path: "/app/support", Component: SupportIndex, loaderData: { tickets: never }, stage: "pending", locale: "es" });
+    expect(html).toContain('accessibilityLabel="Cargando tus tickets"');
   });
 });

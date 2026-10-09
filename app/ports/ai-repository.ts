@@ -5,6 +5,7 @@ export interface AiRepository {
   chainFor(role: ModelRole, now: number): Promise<string[]>;
   markHealth(input: { role: ModelRole; modelId: string; healthy: boolean; at: number }): Promise<void>;
   recordRun(input: {
+    id: string;
     role: ModelRole;
     modelId: string;
     feature: string;

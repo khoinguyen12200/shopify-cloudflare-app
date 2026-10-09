@@ -4,6 +4,7 @@ import { runWithRequestContext } from "~/request-context.server";
 import { setupTestDatabase } from "~/test/db";
 import { PlanGrantsRepo } from "./plan-grants.server";
 import { ShopRepo } from "./shops.server";
+import { defined } from "~/test/defined";
 
 setupTestDatabase();
 
@@ -17,7 +18,7 @@ describe("PlanGrantsRepo persistence", () => {
     const existing = await shopRepo.get(shop);
     if (existing) return existing;
     await shopRepo.recordInstall(shop, Date.now());
-    return (await shopRepo.get(shop))!;
+    return defined(await shopRepo.get(shop));
   }
 
   it("creates, finds, and lists active grants for a shop", async () => {

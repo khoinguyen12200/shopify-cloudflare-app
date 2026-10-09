@@ -12,6 +12,7 @@ describe("processQueuedWebhookMessage", () => {
       body: { shop: "redacted.myshopify.com", id: "d1" }, attempts: 1,
       ack: () => events.push("ack"), retry: () => events.push("retry"),
     }, {
+      now: () => 100,
       consume: async () => ({ outcome: "missing", topic: null }),
       log: (entry) => { events.push(entry.outcome); },
     });
@@ -24,6 +25,7 @@ describe("processQueuedWebhookMessage", () => {
       body: { shop: "shop.myshopify.com", id: "d1" }, attempts: 8,
       ack: () => events.push("ack"), retry: () => events.push("retry"),
     }, {
+      now: () => 100,
       consume: async () => { throw new Error("boom"); },
       log: (entry) => { events.push(entry.outcome); },
     });
@@ -36,6 +38,7 @@ describe("processQueuedWebhookMessage", () => {
       body: { shop: "shop.myshopify.com", id: "d1" }, attempts: 1,
       ack() {}, retry() {},
     }, {
+      now: () => 100,
       consume: async () => ({ outcome: "processed", topic: "app/uninstalled" }),
       log: (entry) => { logged = entry; },
     });
@@ -49,6 +52,7 @@ describe("processQueuedWebhookMessage", () => {
       body: { shop: "shop.myshopify.com", id: "delivery-44" }, attempts: 1,
       ack() {}, retry() {},
     }, {
+      now: () => 100,
       consume: async () => ({ outcome: "processed", topic: "app/uninstalled" }),
       log() {},
     });
@@ -63,6 +67,7 @@ describe("processQueuedWebhookMessage", () => {
       body: { shop: "shop.myshopify.com", id: "d1" }, attempts: 1,
       ack: () => { events.push("ack"); }, retry: () => { events.push("retry"); },
     }, {
+      now: () => 100,
       consume: async () => { events.push("consume"); return { outcome: "processed", topic: "app/uninstalled" }; },
       log: async () => { throw new Error("logger unavailable"); },
     });
@@ -81,6 +86,7 @@ describe("processQueuedWebhookMessage", () => {
       body: { shop: "shop.myshopify.com", id: "d1" }, attempts: 1,
       ack: () => events.push("ack"), retry: () => events.push("retry"),
     }, {
+      now: () => 100,
       consume: async () => ({ outcome: "unavailable", topic: "app/uninstalled" }),
       log: (entry) => { events.push(entry.outcome); },
     });
@@ -95,6 +101,7 @@ describe("processQueuedWebhookMessage", () => {
       body: { shop: "shop.myshopify.com", id: "delivery-42" }, attempts: 3,
       ack() {}, retry() { throw error; },
     }, {
+      now: () => 100,
       consume: async () => ({ outcome: "unavailable", topic: "app/uninstalled" }),
       log() {},
     })).rejects.toBe(error);
@@ -115,6 +122,7 @@ describe("processQueuedWebhookMessage", () => {
       body: { shop: "shop.myshopify.com", id: "delivery-43" }, attempts: 2,
       ack() { throw error; }, retry() {},
     }, {
+      now: () => 100,
       consume: async () => ({ outcome: "processed", topic: "app/uninstalled" }),
       log() {},
     })).rejects.toBe(error);

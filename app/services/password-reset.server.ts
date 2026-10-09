@@ -6,6 +6,7 @@ import { validatePasswordStrength } from "~/lib/password-policy";
 import type { NotifyRequest } from "~/ports/notifier";
 import type { Notifier } from "~/ports/notifier";
 import { absolute, paths } from "~/urls";
+import type { Runtime } from "~/ports/runtime";
 
 /** An unclicked link should not stay valid all day. */
 export const TOKEN_TTL_MS = 60 * 60 * 1000;
@@ -50,19 +51,63 @@ export interface RequestResetOutcome {
   notificationLogId?: string;
 }
 
+type ResetDependencies = {
+  users: Pick<AdminUserPort, "findByEmailWithHash">;
+  tokens: Pick<PasswordResetTokenPort, "countActiveForUser" | "create">;
+  notifier: PasswordResetNotifier;
+  /** Mints the token, the log id (so the caller can name the row before it exists) and reads the time. */
+  runtime: Runtime;
+};
+
+const notQueued = (): RequestResetOutcome => ({ requested: true, queued: false });
+
+/** Mint a token, store only its hash, and return the raw value for the link. */
+async function issueResetToken(deps: ResetDependencies, adminUserId: string, now: number): Promise<string> {
+  const token = generateToken(deps.runtime.randomBytes);
+  await deps.tokens.create({
+    tokenHash: await hashToken(token),
+    adminUserId,
+    expiresAt: now + TOKEN_TTL_MS,
+    now,
+  });
+  return token;
+}
+
+/**
+ * Goes through the notification queue, so the request returns at once and the
+ * send is logged, deduped, retried and rendered from the registered template
+ * like every other notification. The dedupe key is the token's hash: a
+ * redelivered message cannot email the same link twice, while a genuinely new
+ * request has a new token and sends.
+ */
+async function queueResetEmail(
+  deps: ResetDependencies,
+  user: { readonly email: string; readonly name: string },
+  token: string,
+  origin: string,
+): Promise<string> {
+  const notificationLogId = deps.runtime.ids.uuid();
+  await deps.notifier.send({
+    event: "admin_password_reset",
+    to: { email: user.email },
+    dedupeKey: `admin_password_reset:${await hashToken(token)}`,
+    logId: notificationLogId,
+    payload: {
+      recipientName: user.name,
+      resetUrl: absolute(origin, paths.internal.resetPassword(token)),
+      expiresIn: "one hour",
+    },
+  });
+  return notificationLogId;
+}
+
 export async function requestPasswordReset(input: {
   email: string;
   /** Origin of the incoming request, so the link points back at this deployment. */
   origin: string;
-}, deps: {
-  users: Pick<AdminUserPort, "findByEmailWithHash">;
-  tokens: Pick<PasswordResetTokenPort, "countActiveForUser" | "create">;
-  notifier: PasswordResetNotifier;
-  /** Mints the log id, so the caller can name the row before it exists. */
-  newId: () => string;
-}): Promise<RequestResetOutcome> {
+}, deps: ResetDependencies): Promise<RequestResetOutcome> {
   const email = normalizeEmail(input.email);
-  const now = Date.now();
+  const now = deps.runtime.clock.now();
 
   const user = await deps.users.findByEmailWithHash(email);
 
@@ -75,11 +120,10 @@ export async function requestPasswordReset(input: {
         reason: user ? "disabled" : "no_such_account",
       }),
     );
-    return { requested: true, queued: false };
+    return notQueued();
   }
 
-  const tokens = deps.tokens;
-  if ((await tokens.countActiveForUser(user.id, now)) >= MAX_ACTIVE_TOKENS) {
+  if ((await deps.tokens.countActiveForUser(user.id, now)) >= MAX_ACTIVE_TOKENS) {
     console.log(
       JSON.stringify({
         event: "password_reset.throttled",
@@ -87,37 +131,11 @@ export async function requestPasswordReset(input: {
         limit: MAX_ACTIVE_TOKENS,
       }),
     );
-    return { requested: true, queued: false };
+    return notQueued();
   }
 
-  const token = generateToken();
-  await tokens.create({
-    tokenHash: await hashToken(token),
-    adminUserId: user.id,
-    expiresAt: now + TOKEN_TTL_MS,
-    now,
-  });
-
-  // Goes through the notification queue, so the request returns at once and the
-  // send is logged, deduped, retried and rendered from the registered template
-  // like every other notification. The dedupe key is the token's hash: a
-  // redelivered message cannot email the same link twice, while a genuinely new
-  // request has a new token and sends.
-  const notificationLogId = deps.newId();
-  await deps.notifier.send({
-    event: "admin_password_reset",
-    to: { email: user.email },
-    dedupeKey: `admin_password_reset:${await hashToken(token)}`,
-    logId: notificationLogId,
-    payload: {
-      recipientName: user.name,
-      resetUrl: absolute(
-        input.origin,
-        paths.internal.resetPassword(token),
-      ),
-      expiresIn: "one hour",
-    },
-  });
+  const token = await issueResetToken(deps, user.id, now);
+  const notificationLogId = await queueResetEmail(deps, user, token, input.origin);
 
   console.log(
     JSON.stringify({
@@ -144,7 +162,7 @@ export type CompleteResetResult =
 /** Is this token usable? Checked before rendering the form, and again on submit. */
 export async function checkResetToken(
   token: string,
-  deps: { tokens: Pick<PasswordResetTokenPort, "findByHash"> },
+  deps: { tokens: Pick<PasswordResetTokenPort, "findByHash">; runtime: Pick<Runtime, "clock"> },
 ): Promise<{ ok: true; adminUserId: string } | { ok: false; reason: ResetFailure }> {
   const row = await deps.tokens.findByHash(await hashToken(token));
 
@@ -152,7 +170,7 @@ export async function checkResetToken(
   // Used is reported separately from expired so a person who clicks an old link
   // twice gets an accurate message instead of a confusing one.
   if (row.usedAt !== null) return { ok: false, reason: "usedToken" };
-  if (row.expiresAt <= Date.now()) return { ok: false, reason: "expiredToken" };
+  if (row.expiresAt <= deps.runtime.clock.now()) return { ok: false, reason: "expiredToken" };
 
   return { ok: true, adminUserId: row.adminUserId };
 }
@@ -170,6 +188,7 @@ export async function completePasswordReset(input: {
 }, deps: {
   users: Pick<AdminUserPort, "updatePassword">;
   tokens: Pick<PasswordResetTokenPort, "findByHash" | "markUsed" | "invalidateAllForUser">;
+  runtime: Pick<Runtime, "clock" | "randomBytes">;
 }): Promise<CompleteResetResult> {
   if (input.newPassword !== input.confirmPassword) {
     return { ok: false, reason: "mismatch" };
@@ -181,12 +200,12 @@ export async function completePasswordReset(input: {
   const checked = await checkResetToken(input.token, deps);
   if (!checked.ok) return checked;
 
-  const now = Date.now();
+  const now = deps.runtime.clock.now();
   const tokens = deps.tokens;
 
   await deps.users.updatePassword(
     checked.adminUserId,
-    await hashPassword(input.newPassword),
+    await hashPassword(input.newPassword, deps.runtime.randomBytes),
     now,
   );
 

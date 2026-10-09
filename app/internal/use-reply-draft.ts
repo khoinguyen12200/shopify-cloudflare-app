@@ -19,6 +19,81 @@ import type { ReplyTone } from "~/ai/tones";
  */
 export type DraftState = "idle" | "drafting" | "error";
 
+type DraftInput = {
+  ticketId?: string;
+  tone: ReplyTone;
+  instruction: string;
+  subject?: string;
+  shop?: string;
+  category?: string;
+};
+
+type DraftOutcome = { state: "idle" } | { state: "error"; error: string };
+
+const IDLE: DraftOutcome = { state: "idle" };
+
+function failure(error: string): DraftOutcome {
+  return { state: "error", error };
+}
+
+function buildRequestBody(input: DraftInput, currentText: string): FormData {
+  const body = new FormData();
+  body.set("ticketId", input.ticketId ?? "new");
+  body.set("currentText", currentText);
+  body.set("instruction", input.instruction);
+  body.set("tone", input.tone);
+  if (input.subject) body.set("subject", input.subject);
+  if (input.shop) body.set("shop", input.shop);
+  if (input.category) body.set("category", input.category);
+  return body;
+}
+
+/** Writes each chunk into the box by assignment and returns the full draft. */
+async function writeStream(stream: NonNullable<Response["body"]>, target: HTMLTextAreaElement): Promise<string> {
+  let draft = "";
+  const reader = stream.pipeThrough(new TextDecoderStream()).getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    draft += value;
+    // Assignment, never `+=` on the element — see the note above.
+    target.value = draft;
+    target.scrollTop = target.scrollHeight;
+  }
+  return draft;
+}
+
+async function runDraft(
+  target: HTMLTextAreaElement,
+  input: DraftInput,
+  signal: AbortSignal,
+): Promise<DraftOutcome> {
+  // The text being rewritten is read BEFORE the box is cleared.
+  const currentText = target.value;
+  try {
+    const response = await fetch("/internal/ai/draft", {
+      method: "POST",
+      body: buildRequestBody(input, currentText),
+      signal,
+    });
+    if (!response.ok || !response.body) {
+      return failure(messageFor(await response.text().catch(() => "")));
+    }
+    const draft = await writeStream(response.body, target);
+    // A model that returned nothing must not wipe what they wrote.
+    if (draft.trim() === "") {
+      target.value = currentText;
+      return failure("The model returned nothing. Your text is unchanged.");
+    }
+    return IDLE;
+  } catch (cause) {
+    // Restore rather than leave them with a half-written rewrite.
+    target.value = currentText;
+    if (signal.aborted) return IDLE;
+    return failure(cause instanceof Error ? cause.message : "The rewrite could not be written.");
+  }
+}
+
 export function useReplyDraft(textareaId: string) {
   const [state, setState] = useState<DraftState>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -26,14 +101,7 @@ export function useReplyDraft(textareaId: string) {
   const abort = useRef<AbortController | null>(null);
 
   const draft = useCallback(
-    async (input: {
-      ticketId?: string;
-      tone: ReplyTone;
-      instruction: string;
-      subject?: string;
-      shop?: string;
-      category?: string;
-    }) => {
+    async (input: DraftInput) => {
       const target = document.getElementById(textareaId);
       if (!(target instanceof HTMLTextAreaElement)) return;
       // Synchronous, so a second click in the same tick cannot get past it.
@@ -46,61 +114,10 @@ export function useReplyDraft(textareaId: string) {
 
       setState("drafting");
       setError(null);
-
-      // The text being rewritten is read BEFORE the box is cleared.
-      const currentText = target.value;
-
-      const body = new FormData();
-      body.set("ticketId", input.ticketId ?? "new");
-      body.set("currentText", currentText);
-      body.set("instruction", input.instruction);
-      body.set("tone", input.tone);
-      if (input.subject) body.set("subject", input.subject);
-      if (input.shop) body.set("shop", input.shop);
-      if (input.category) body.set("category", input.category);
-
       try {
-        const response = await fetch("/internal/ai/draft", {
-          method: "POST",
-          body,
-          signal: controller.signal,
-        });
-
-        if (!response.ok || !response.body) {
-          setError(messageFor(await response.text().catch(() => "")));
-          setState("error");
-          return;
-        }
-
-        let draft = "";
-        const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          draft += value;
-          // Assignment, never `+=` on the element — see the note above.
-          target.value = draft;
-          target.scrollTop = target.scrollHeight;
-        }
-
-        // A model that returned nothing must not wipe what they wrote.
-        if (draft.trim() === "") {
-          target.value = currentText;
-          setError("The model returned nothing. Your text is unchanged.");
-          setState("error");
-          return;
-        }
-
-        setState("idle");
-      } catch (cause) {
-        // Restore rather than leave them with a half-written rewrite.
-        target.value = currentText;
-        if (controller.signal.aborted) {
-          setState("idle");
-          return;
-        }
-        setError(cause instanceof Error ? cause.message : "The rewrite could not be written.");
-        setState("error");
+        const outcome = await runDraft(target, input, controller.signal);
+        if (outcome.state === "error") setError(outcome.error);
+        setState(outcome.state);
       } finally {
         running.current = false;
       }

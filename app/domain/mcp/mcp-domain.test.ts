@@ -17,6 +17,9 @@ import {
   timingSafeEqualStr,
 } from "./tokens";
 import { computeS256CodeChallenge, verifyCodeChallenge } from "./pkce";
+import { sequentialRandomBytes } from "~/test/fake-runtime";
+
+const randomBytes = sequentialRandomBytes();
 
 describe("MCP Scopes Domain", () => {
   it("validates recognized scopes", () => {
@@ -57,25 +60,34 @@ describe("MCP Tokens Domain", () => {
   });
 
   it("generates correctly prefixed PAT and OAuth tokens", async () => {
-    const pat = await generatePat();
+    const pat = await generatePat(randomBytes);
     expect(pat.raw.startsWith("sc_pat_")).toBe(true);
     expect(pat.prefix.startsWith("sc_pat_")).toBe(true);
     expect(pat.hash.length).toBe(64);
 
-    const access = await generateAccessToken();
+    const access = await generateAccessToken(randomBytes);
     expect(access.raw.startsWith("sc_tok_")).toBe(true);
 
-    const refresh = await generateRefreshToken();
+    const refresh = await generateRefreshToken(randomBytes);
     expect(refresh.raw.startsWith("sc_ref_")).toBe(true);
 
-    const clientId = generateClientId();
+    const clientId = generateClientId(randomBytes);
     expect(clientId.startsWith("mcp_cid_")).toBe(true);
 
-    const secret = await generateClientSecret();
+    const secret = await generateClientSecret(randomBytes);
     expect(secret.raw.startsWith("mcp_sec_")).toBe(true);
 
-    const authCode = await generateAuthCode();
+    const authCode = await generateAuthCode(randomBytes);
     expect(authCode.raw.startsWith("mcp_code_")).toBe(true);
+  });
+
+  it("is deterministic for identical random bytes and distinct for different ones", async () => {
+    const a = await generatePat(sequentialRandomBytes(5));
+    const b = await generatePat(sequentialRandomBytes(5));
+    const c = await generatePat(sequentialRandomBytes(6));
+    expect(a).toEqual(b);
+    expect(a.raw).not.toBe(c.raw);
+    expect(generateClientId(sequentialRandomBytes(5))).toBe(generateClientId(sequentialRandomBytes(5)));
   });
 
   it("checks expiration and revocation", () => {

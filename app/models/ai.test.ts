@@ -4,6 +4,7 @@ import { runWithRequestContext } from "~/request-context.server";
 import { setupTestDatabase } from "~/test/db";
 import { AiRepo } from "./ai.server";
 import { MODEL_RECOVERY_MS } from "~/ai/chain";
+import { testIds } from "~/test/fake-runtime";
 
 setupTestDatabase();
 
@@ -203,6 +204,7 @@ describe("model health", () => {
 
 describe("the run ledger", () => {
   const run = (over: Partial<Parameters<AiRepo["recordRun"]>[0]> = {}) => ({
+    id: testIds.uuid(),
     role: "writing" as const,
     modelId: "@cf/a/b",
     feature: "support.reply_draft",

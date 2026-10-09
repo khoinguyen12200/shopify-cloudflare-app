@@ -12,6 +12,8 @@
  * latency to every click.
  */
 
+import type { RandomBytes } from "~/ports/runtime";
+
 const TOKEN_BYTES = 32; // 256 bits
 
 /** URL-safe base64 — no padding, no characters that need escaping in a path. */
@@ -22,8 +24,8 @@ function toBase64Url(bytes: Uint8Array): string {
 }
 
 /** A fresh token. Return it to the caller once; never store it. */
-export function generateToken(): string {
-  return toBase64Url(crypto.getRandomValues(new Uint8Array(TOKEN_BYTES)));
+export function generateToken(randomBytes: RandomBytes): string {
+  return toBase64Url(randomBytes(TOKEN_BYTES));
 }
 
 /** Hex SHA-256 of a token — what goes in the database. */

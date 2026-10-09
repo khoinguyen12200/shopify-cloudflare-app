@@ -10,6 +10,9 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useTranslation } from "react-i18next";
 
 import { authenticateAdmin } from "~/admin/require-merchant.server";
+import { settle } from "~/admin/settle.server";
+import type { Outcome } from "~/admin/outcome";
+import { Deferred } from "~/components/admin/Deferred";
 import { getLocale } from "~/i18n/i18n.server";
 import { supportService } from "~/wiring.server";
 import {
@@ -43,13 +46,25 @@ const SHOP_CONTACT_QUERY = `#graphql
   }
 `;
 
+type AdminGraphql = (query: string) => Promise<Response>;
+
+async function readContactEmail(graphql: AdminGraphql): Promise<string> {
+  const response = await graphql(SHOP_CONTACT_QUERY);
+  return readShopContact(await response.json()).email;
+}
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin } = await authenticateAdmin(request);
-
-  const response = await admin.graphql(SHOP_CONTACT_QUERY);
-  const contact = readShopContact(await response.json());
-
-  return { shopName: contact.name, defaultEmail: contact.email };
+  // Authentication is awaited. The Admin API round trip only prefills one
+  // field, so the form renders at once and the address streams in; if it
+  // fails the merchant types their own (logged by `settle`).
+  const { admin, session } = await authenticateAdmin(request);
+  return {
+    defaultEmail: settle(readContactEmail((query) => admin.graphql(query)), {
+      event: "admin.support.contact_email.failed",
+      shop: session.shop,
+      route: "app/support/new",
+    }),
+  };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -103,6 +118,134 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   return redirect(`/app/support/${created.value.id}?created=1`);
 };
 
+type FieldErrors = Readonly<Record<string, string>> | undefined;
+
+function TicketDetailsSection({
+  fieldErrors,
+  uploads,
+}: {
+  fieldErrors: FieldErrors;
+  uploads: ReturnType<typeof usePendingUploads>;
+}) {
+  const { t } = useTranslation(["admin", "common"]);
+  return (
+    <s-section heading={t("support.form.heading")}>
+      <s-stack direction="block" gap="base">
+        <s-select
+          label={t("support.form.category")}
+          name="category"
+          value="bug"
+          error={fieldErrors?.category}
+        >
+          {SUPPORT_CATEGORIES.map((category) => (
+            <s-option key={category} value={category}>
+              {t(CATEGORY_LABEL_KEY[category])}
+            </s-option>
+          ))}
+        </s-select>
+
+        <s-text-field
+          label={t("support.form.subject")}
+          name="subject"
+          placeholder={t("support.form.subjectPlaceholder")}
+          maxLength={SUBJECT_MAX}
+          error={fieldErrors?.subject}
+          required
+        ></s-text-field>
+
+        <s-text-area
+          label={t("support.form.body")}
+          name="body"
+          details={t("support.form.bodyHelp")}
+          rows={6}
+          maxLength={BODY_MAX}
+          error={fieldErrors?.body}
+          required
+        ></s-text-area>
+
+        <AttachmentPicker
+          label={t("support.form.attachments")}
+          addLabel={t("support.form.addFiles")}
+          limitsLabel={t("support.form.attachmentLimits")}
+          uploads={uploads}
+          errorLabel={(reason) => t(supportErrorKey(reason))}
+        />
+      </s-stack>
+    </s-section>
+  );
+}
+
+/** The pending twin in `ContactSection` has the same label, so the field does not move when this replaces it. */
+function EmailField({ value, error }: { value?: string; error: string | undefined }) {
+  const { t } = useTranslation(["admin", "common"]);
+  return (
+    <s-email-field
+      label={t("support.form.email")}
+      name="merchantEmail"
+      value={value}
+      details={t("support.form.emailHelp")}
+      error={error}
+    ></s-email-field>
+  );
+}
+
+type ContactSectionProps = {
+  defaultEmail: Promise<Outcome<string>>;
+  fieldErrors: FieldErrors;
+  ccEmails: string[];
+  onCcChange: (emails: string[]) => void;
+};
+
+function ContactSection({ defaultEmail, fieldErrors, ccEmails, onCcChange }: ContactSectionProps) {
+  const { t } = useTranslation(["admin", "common"]);
+  return (
+    <s-section heading={t("support.form.emailHeading")}>
+      <s-stack direction="block" gap="base">
+        {/* Prefilled from Shopify — the merchant should never have to type
+            their own address to get a reply. Clearable, because some
+            merchants only want the in-app thread. */}
+        <Deferred
+          resolve={defaultEmail}
+          pending={
+            <s-email-field
+              label={t("support.form.email")}
+              details={t("support.form.emailLoading")}
+              disabled
+            ></s-email-field>
+          }
+          failed={<EmailField error={fieldErrors?.merchantEmail} />}
+        >
+          {(email) => <EmailField value={email} error={fieldErrors?.merchantEmail} />}
+        </Deferred>
+
+        <s-divider direction="block" />
+
+        <CcEmails
+          id="new-ticket-cc"
+          name="ccEmails"
+          emails={ccEmails}
+          onChange={onCcChange}
+          labels={ccLabels(t, CC_MAX)}
+        />
+      </s-stack>
+    </s-section>
+  );
+}
+
+/*
+ * `data-save-bar` hands saving to the admin's own save bar at the top of
+ * the frame, which is where every other screen in every Shopify app puts
+ * it. That is also why there is no Send button at the bottom of this form:
+ * two save controls on one screen is two competing conventions, and the
+ * one the merchant already knows wins.
+ *
+ * The bar owns the pending state of its own Save button, which is why this
+ * page no longer tracks `navigation.state` for one.
+ *
+ * `data-discard-confirmation` because Discard throws away a written bug
+ * report and any files already uploaded — not something to lose to a
+ * mis-click.
+ */
 export default function NewTicket() {
   const { defaultEmail } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
@@ -119,20 +262,6 @@ export default function NewTicket() {
   useActionToast(actionData, error ? { error: t(supportErrorKey(error)) } : undefined);
 
   return (
-    /*
-     * `data-save-bar` hands saving to the admin's own save bar at the top of
-     * the frame, which is where every other screen in every Shopify app puts
-     * it. That is also why there is no Send button at the bottom of this form:
-     * two save controls on one screen is two competing conventions, and the
-     * one the merchant already knows wins.
-     *
-     * The bar owns the pending state of its own Save button, which is why this
-     * page no longer tracks `navigation.state` for one.
-     *
-     * `data-discard-confirmation` because Discard throws away a written bug
-     * report and any files already uploaded — not something to lose to a
-     * mis-click.
-     */
     <Form
       method="post"
       data-save-bar
@@ -156,74 +285,13 @@ export default function NewTicket() {
           </s-section>
         )}
 
-        <s-section heading={t("support.form.heading")}>
-          <s-stack direction="block" gap="base">
-            <s-select
-              label={t("support.form.category")}
-              name="category"
-              value="bug"
-              error={fieldErrors?.category}
-            >
-              {SUPPORT_CATEGORIES.map((category) => (
-                <s-option key={category} value={category}>
-                  {t(CATEGORY_LABEL_KEY[category])}
-                </s-option>
-              ))}
-            </s-select>
-
-            <s-text-field
-              label={t("support.form.subject")}
-              name="subject"
-              placeholder={t("support.form.subjectPlaceholder")}
-              maxLength={SUBJECT_MAX}
-              error={fieldErrors?.subject}
-              required
-            ></s-text-field>
-
-            <s-text-area
-              label={t("support.form.body")}
-              name="body"
-              details={t("support.form.bodyHelp")}
-              rows={6}
-              maxLength={BODY_MAX}
-              error={fieldErrors?.body}
-              required
-            ></s-text-area>
-
-            <AttachmentPicker
-              label={t("support.form.attachments")}
-              addLabel={t("support.form.addFiles")}
-              limitsLabel={t("support.form.attachmentLimits")}
-              uploads={uploads}
-              errorLabel={(reason) => t(supportErrorKey(reason))}
-            />
-          </s-stack>
-        </s-section>
-
-        <s-section heading={t("support.form.emailHeading")}>
-          <s-stack direction="block" gap="base">
-            {/* Prefilled from Shopify — the merchant should never have to type
-                their own address to get a reply. Clearable, because some
-                merchants only want the in-app thread. */}
-            <s-email-field
-              label={t("support.form.email")}
-              name="merchantEmail"
-              value={defaultEmail}
-              details={t("support.form.emailHelp")}
-              error={fieldErrors?.merchantEmail}
-            ></s-email-field>
-
-            <s-divider direction="block" />
-
-            <CcEmails
-              id="new-ticket-cc"
-              name="ccEmails"
-              emails={ccEmails}
-              onChange={setCcEmails}
-              labels={ccLabels(t, CC_MAX)}
-            />
-          </s-stack>
-        </s-section>
+        <TicketDetailsSection fieldErrors={fieldErrors} uploads={uploads} />
+        <ContactSection
+          defaultEmail={defaultEmail}
+          fieldErrors={fieldErrors}
+          ccEmails={ccEmails}
+          onCcChange={setCcEmails}
+        />
       </s-page>
     </Form>
   );

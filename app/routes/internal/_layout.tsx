@@ -14,17 +14,7 @@ import type {
   LoaderFunctionArgs,
   MetaFunction,
 } from "react-router";
-import {
-  LayoutGrid,
-  Users,
-  Receipt,
-  Store,
-  LifeBuoy,
-  User as UserIcon,
-  Cpu,
-  Bot,
-  LogOut,
-} from "lucide-react";
+import { User as UserIcon, LogOut } from "lucide-react";
 import {
   Avatar,
   AvatarFallback,
@@ -36,15 +26,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   ErrorState,
-  InlineStack,
   SkeletonPage,
   Toaster,
-  type NavGroupData,
   type RenderLinkArgs,
 } from "ngk-dashboard";
+import { INTERNAL_NAV } from "./layout-nav";
 import { requireAdminUser } from "~/services/admin-auth.server";
 import { adminSessionUsers } from "~/wiring.server";
 import {
+  AppLogo,
   INTERNAL_FONT_LINKS,
   ThemeToggle,
   THEME_INIT_SCRIPT,
@@ -166,46 +156,14 @@ export default function InternalLayout() {
   const { pathname } = useLocation();
   const dark = useIsDarkTheme();
 
-  const nav: NavGroupData[] = [
-    {
-      title: "Overview",
-      items: [
-        { title: "Dashboard", href: "/internal/dashboard", icon: LayoutGrid },
-        { title: "Shops", href: "/internal/shops", icon: Store },
-        { title: "Support", href: "/internal/support", icon: LifeBuoy },
-      ],
-    },
-    {
-      title: "Team",
-      items: [
-        { title: "Admins", href: "/internal/admins", icon: Users },
-        { title: "Subscriptions", href: "/internal/subscriptions", icon: Receipt },
-        { title: "AI", href: "/internal/ai", icon: Cpu },
-        { title: "MCP & API", href: "/internal/mcp", icon: Bot },
-      ],
-    },
-    {
-      title: "Account",
-      items: [
-        { title: "Profile", href: "/internal/profile", icon: UserIcon },
-      ],
-    },
-  ];
-
   return (
     <>
       <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       <NavProgress />
       <Toaster theme={dark ? "dark" : "light"} />
       <DashboardLayout
-        nav={nav}
-        logo={
-          <InlineStack gap={2} className="px-1 py-2">
-            <span className="truncate font-semibold group-data-[collapsible=icon]:hidden">
-              Internal console
-            </span>
-          </InlineStack>
-        }
+        nav={INTERNAL_NAV}
+        logo={<AppLogo />}
         currentPath={pathname}
         renderLink={renderLink}
         headerEnd={

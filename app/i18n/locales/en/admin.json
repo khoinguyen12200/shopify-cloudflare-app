@@ -144,6 +144,7 @@
       "levelOneImageAlt": "Illustration for the starter plan",
       "levelTwoImageAlt": "Illustration for the growing plan"
     },
+    "promoBadge": "Promo active ({{days}}d remaining)",
     "planLabel": "Your plan",
     "managedNote": "Plans are managed by Shopify. Use the button above to view available plans, upgrade, or change your subscription.",
     "processing": {
@@ -157,7 +158,12 @@
       "perMonth": "{{price}}/mo",
       "perYear": "{{price}}/yr",
       "flat": "{{price}}"
-    }
+    },
+    "loading": "Loading your plan",
+    "loadFailedHeading": "We couldn't load your plan",
+    "loadFailedBody": "Reload the page to try again. If this keeps happening, contact support.",
+    "planLinkUnavailable": "The plan link is unavailable right now. Reload the page to try again.",
+    "plansLoading": "Loading plans"
   },
   "support": {
     "heading": "Support",
@@ -206,7 +212,8 @@
       "ccDialogHeading": "Copy someone on this ticket",
       "ccField": "Email address",
       "ccFieldPlaceholder": "colleague@example.com",
-      "ccConfirm": "Add"
+      "ccConfirm": "Add",
+      "emailLoading": "Loading your store's contact email"
     },
     "thread": {
       "conversation": "Conversation",
@@ -221,7 +228,11 @@
       "created": "Opened",
       "attachmentCount": "{{count}} attachment",
       "attachmentCount_plural": "{{count}} attachments",
-      "download": "Open file"
+      "download": "Open file",
+      "pageHeading": "Ticket",
+      "loading": "Loading the conversation",
+      "notFoundHeading": "We couldn't find this ticket",
+      "notFoundBody": "It may have been removed. Go back to your tickets to find it."
     },
     "errors": {
       "rate_limited": "You have sent a lot of messages just now. Try again in a minute.",
@@ -239,6 +250,9 @@
       "created": "Ticket sent. We will reply here.",
       "replied": "Reply sent.",
       "ccSaved": "Copy list saved."
-    }
+    },
+    "loading": "Loading your tickets",
+    "loadFailedHeading": "We couldn't load your tickets",
+    "loadFailedBody": "Reload the page to try again. If this keeps happening, contact support."
   }
 }

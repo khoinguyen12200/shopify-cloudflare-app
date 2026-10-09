@@ -138,10 +138,10 @@ export class AiRepo {
   }
 
   /** One row per call. Never batched, never skipped. */
-  async recordRun(input: Omit<AiRun, "id"> & { id?: string }): Promise<void> {
+  async recordRun(input: AiRun): Promise<void> {
     await getDb()
       .insert(aiRuns)
-      .values({ ...input, id: input.id ?? crypto.randomUUID() });
+      .values(input);
   }
 
   async recentRuns(limit = 50): Promise<AiRun[]> {

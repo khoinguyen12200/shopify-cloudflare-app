@@ -18,17 +18,20 @@ import {
 import { hashToken } from "~/lib/token";
 import { verifyPassword } from "~/lib/password";
 import { fakeNotifier } from "~/test/fake-notifier";
+import { fakeRuntime } from "~/test/fake-runtime";
+import { defined } from "~/test/defined";
 
 setupTestDatabase();
 
 const inRequest = <T>(fn: () => Promise<T>) => runWithRequestContext(env, fn);
 const ORIGIN = "https://example.test";
 const OLD_PASSWORD = "the-original-password";
+const runtime = fakeRuntime();
 const resetDeps = {
   users: new AdminUserRepo(),
   tokens: new PasswordResetTokenRepo(),
   notifier: { send: async () => undefined },
-  newId: () => crypto.randomUUID(),
+  runtime,
 };
 
 async function seedUser(email = "user@example.com", status: "active" | "disabled" = "active") {
@@ -40,7 +43,7 @@ async function seedUser(email = "user@example.com", status: "active" | "disabled
   }, resetDeps);
   if (!created.ok) throw new Error(`fixture: ${created.reason}`);
   if (status === "disabled") {
-    await new AdminUserRepo().setStatus(created.value.id, "disabled", Date.now());
+    await new AdminUserRepo().setStatus(created.value.id, "disabled", runtime.clock.now());
   }
   return created.value;
 }
@@ -76,7 +79,7 @@ describe("requestPasswordReset never reveals whether an account exists", () => {
       const result = await requestFor("disabled@example.com");
       const active = await new PasswordResetTokenRepo().countActiveForUser(
         user.id,
-        Date.now(),
+        runtime.clock.now(),
       );
       return { result, active };
     });
@@ -89,7 +92,7 @@ describe("requestPasswordReset never reveals whether an account exists", () => {
     const rows = await inRequest(async () => {
       await requestFor("nobody@example.com");
       const results = await makeDb(env.DB).select({ c: count() }).from(passwordResetTokens);
-      return Number(results[0]!.c);
+      return Number(defined(results[0]).c);
     });
     expect(rows).toBe(0);
   });
@@ -109,7 +112,7 @@ describe("the stored row never contains the token", () => {
       await seedUser();
       const result = await requestFor("user@example.com");
       const results = await makeDb(env.DB).select({ token_hash: passwordResetTokens.tokenHash }).from(passwordResetTokens);
-      return { token: result.token!, stored: results[0]!.token_hash };
+      return { token: defined(result.token), stored: defined(results[0]).token_hash };
     });
 
     expect(outcome.stored).not.toBe(outcome.token);
@@ -129,7 +132,7 @@ describe("throttling", () => {
       }
       const active = await new PasswordResetTokenRepo().countActiveForUser(
         user.id,
-        Date.now(),
+        runtime.clock.now(),
       );
       return { tokens, active };
     });
@@ -150,10 +153,11 @@ describe("checkResetToken", () => {
         findByHash: async (hash) => {
           lookedUpHash = hash;
           return hash === tokenHash
-            ? { tokenHash, adminUserId: "user-1", expiresAt: Date.now() + 60_000, usedAt: null, createdAt: Date.now() }
+            ? { tokenHash, adminUserId: "user-1", expiresAt: runtime.clock.now() + 60_000, usedAt: null, createdAt: runtime.clock.now() }
             : undefined;
         },
       },
+      runtime,
     });
 
     expect(checked).toEqual({ ok: true, adminUserId: "user-1" });
@@ -164,7 +168,7 @@ describe("checkResetToken", () => {
     const checked = await inRequest(async () => {
       await seedUser();
       const { token } = await requestFor("user@example.com");
-      return checkResetToken(token!, resetDeps);
+      return checkResetToken(defined(token), resetDeps);
     });
     expect(checked.ok).toBe(true);
   });
@@ -182,8 +186,8 @@ describe("checkResetToken", () => {
         tokenHash: await hashToken(token),
         adminUserId: user.id,
         // Already past.
-        expiresAt: Date.now() - 1_000,
-        now: Date.now() - TOKEN_TTL_MS,
+        expiresAt: runtime.clock.now() - 1_000,
+        now: runtime.clock.now() - TOKEN_TTL_MS,
       });
       return checkResetToken(token, resetDeps);
     });
@@ -196,11 +200,11 @@ describe("checkResetToken", () => {
       await seedUser();
       const { token } = await requestFor("user@example.com");
       await completePasswordReset({
-        token: token!,
+        token: defined(token),
         newPassword: "a-brand-new-password",
         confirmPassword: "a-brand-new-password",
       }, resetDeps);
-      return checkResetToken(token!, resetDeps);
+      return checkResetToken(defined(token), resetDeps);
     });
     expect(checked).toMatchObject({ ok: false, reason: "usedToken" });
   });
@@ -212,12 +216,12 @@ describe("completePasswordReset", () => {
       const user = await seedUser();
       const { token } = await requestFor("user@example.com");
       const result = await completePasswordReset({
-        token: token!,
+        token: defined(token),
         newPassword: "a-brand-new-password",
         confirmPassword: "a-brand-new-password",
       }, resetDeps);
       const after = await new AdminUserRepo().findByIdWithHash(user.id);
-      return { result, hash: after!.passwordHash };
+      return { result, hash: defined(after).passwordHash };
     });
 
     expect(outcome.result.ok).toBe(true);
@@ -230,12 +234,12 @@ describe("completePasswordReset", () => {
       await seedUser();
       const { token } = await requestFor("user@example.com");
       await completePasswordReset({
-        token: token!,
+        token: defined(token),
         newPassword: "first-new-password",
         confirmPassword: "first-new-password",
       }, resetDeps);
       return completePasswordReset({
-        token: token!,
+        token: defined(token),
         newPassword: "second-new-password",
         confirmPassword: "second-new-password",
       }, resetDeps);
@@ -248,17 +252,17 @@ describe("completePasswordReset", () => {
       const user = await seedUser();
       const { token } = await requestFor("user@example.com");
       await completePasswordReset({
-        token: token!,
+        token: defined(token),
         newPassword: "first-new-password",
         confirmPassword: "first-new-password",
       }, resetDeps);
       await completePasswordReset({
-        token: token!,
+        token: defined(token),
         newPassword: "second-new-password",
         confirmPassword: "second-new-password",
       }, resetDeps);
       const after = await new AdminUserRepo().findByIdWithHash(user.id);
-      return after!.passwordHash;
+      return defined(after).passwordHash;
     });
 
     expect(await verifyPassword("first-new-password", hash)).toBe(true);
@@ -270,8 +274,8 @@ describe("completePasswordReset", () => {
     // email remains a live key to the account.
     const first = await inRequest(async () => {
       await seedUser();
-      const a = (await requestFor("user@example.com")).token!;
-      const b = (await requestFor("user@example.com")).token!;
+      const a = defined((await requestFor("user@example.com")).token);
+      const b = defined((await requestFor("user@example.com")).token);
       await completePasswordReset({
         token: b,
         newPassword: "chosen-new-password",
@@ -289,8 +293,8 @@ describe("completePasswordReset", () => {
       await new PasswordResetTokenRepo().create({
         tokenHash: await hashToken(token),
         adminUserId: user.id,
-        expiresAt: Date.now() - 1,
-        now: Date.now() - TOKEN_TTL_MS,
+        expiresAt: runtime.clock.now() - 1,
+        now: runtime.clock.now() - TOKEN_TTL_MS,
       });
       return completePasswordReset({
         token,
@@ -308,11 +312,11 @@ describe("completePasswordReset", () => {
       await seedUser();
       const { token } = await requestFor("user@example.com");
       await completePasswordReset({
-        token: token!,
+        token: defined(token),
         newPassword: "short",
         confirmPassword: "short",
       }, resetDeps);
-      return checkResetToken(token!, resetDeps);
+      return checkResetToken(defined(token), resetDeps);
     });
     expect(stillValid.ok).toBe(true);
   });
@@ -322,11 +326,11 @@ describe("completePasswordReset", () => {
       await seedUser();
       const { token } = await requestFor("user@example.com");
       const result = await completePasswordReset({
-        token: token!,
+        token: defined(token),
         newPassword: "a-brand-new-password",
         confirmPassword: "a-different-password",
       }, resetDeps);
-      return { result, still: await checkResetToken(token!, resetDeps) };
+      return { result, still: await checkResetToken(defined(token), resetDeps) };
     });
     expect(outcome.result).toMatchObject({ ok: false, reason: "mismatch" });
     expect(outcome.still.ok).toBe(true);
@@ -338,12 +342,12 @@ describe("completePasswordReset", () => {
       const bystander = await seedUser("bystander@example.com");
       const { token } = await requestFor("target@example.com");
       await completePasswordReset({
-        token: token!,
+        token: defined(token),
         newPassword: "a-brand-new-password",
         confirmPassword: "a-brand-new-password",
       }, resetDeps);
       const after = await new AdminUserRepo().findByIdWithHash(bystander.id);
-      return after!.passwordHash;
+      return defined(after).passwordHash;
     });
     expect(await verifyPassword(OLD_PASSWORD, otherHash)).toBe(true);
   });
@@ -357,16 +361,16 @@ describe("cleanup", () => {
       await repo.create({
         tokenHash: await hashToken("old"),
         adminUserId: user.id,
-        expiresAt: Date.now() - 10_000,
-        now: Date.now() - 20_000,
+        expiresAt: runtime.clock.now() - 10_000,
+        now: runtime.clock.now() - 20_000,
       });
       await repo.create({
         tokenHash: await hashToken("current"),
         adminUserId: user.id,
-        expiresAt: Date.now() + TOKEN_TTL_MS,
-        now: Date.now(),
+        expiresAt: runtime.clock.now() + TOKEN_TTL_MS,
+        now: runtime.clock.now(),
       });
-      const deleted = await repo.deleteExpiredBefore(Date.now());
+      const deleted = await repo.deleteExpiredBefore(runtime.clock.now());
       return { deleted, current: await repo.findByHash(await hashToken("current")) };
     });
 
@@ -375,20 +379,41 @@ describe("cleanup", () => {
   });
 });
 
+describe("expiry is decided by the injected clock", () => {
+  it("accepts a token at issue time and rejects it exactly at TTL", async () => {
+    const clockRuntime = fakeRuntime({ start: 2_000_000_000_000 });
+    const deps = { ...resetDeps, runtime: clockRuntime };
+    const result = await inRequest(async () => {
+      await seedUser("clocked@example.com");
+      const outcome = await requestPasswordReset({ email: "clocked@example.com", origin: ORIGIN }, deps);
+      const token = defined(outcome.token);
+      const atIssue = await checkResetToken(token, deps);
+      clockRuntime.clock.advance(TOKEN_TTL_MS - 1);
+      const justBefore = await checkResetToken(token, deps);
+      clockRuntime.clock.advance(1);
+      const atExpiry = await checkResetToken(token, deps);
+      return { atIssue, justBefore, atExpiry };
+    });
+    expect(result.atIssue.ok).toBe(true);
+    expect(result.justBefore.ok).toBe(true);
+    expect(result.atExpiry).toEqual({ ok: false, reason: "expiredToken" });
+  });
+});
+
 describe("the reset email is queued, not sent inline", () => {
   it("hands the notifier one request carrying the pre-minted log id", async () => {
     const notifier = fakeNotifier();
     const outcome = await inRequest(async () => {
       await seedUser("queued@example.com");
-      return requestPasswordReset({ email: "queued@example.com", origin: ORIGIN }, { ...resetDeps, notifier, newId: () => "log-123" });
+      return requestPasswordReset({ email: "queued@example.com", origin: ORIGIN }, { ...resetDeps, notifier, runtime: { ...runtime, ids: { uuid: () => "log-123" } } });
     });
 
     expect(outcome).toMatchObject({ requested: true, queued: true, notificationLogId: "log-123" });
     const request = notifier.onlyFor("admin_password_reset");
     expect(request.logId).toBe("log-123");
     // Keyed by the token's hash, never the token.
-    expect(request.dedupeKey).toBe(`admin_password_reset:${await hashToken(outcome.token!)}`);
-    expect(request.dedupeKey).not.toContain(outcome.token!);
+    expect(request.dedupeKey).toBe(`admin_password_reset:${await hashToken(defined(outcome.token))}`);
+    expect(request.dedupeKey).not.toContain(defined(outcome.token));
   });
 
   it("queues nothing for an unknown address", async () => {

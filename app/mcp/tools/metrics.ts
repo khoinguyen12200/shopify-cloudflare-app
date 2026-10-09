@@ -8,7 +8,7 @@ import {
 } from "~/services/internal-admin/ops.server";
 import { mcpRead, READ_ONLY, type McpActorContext } from "../helpers";
 
-export function registerMetricsTools(server: McpServer, ctx: McpActorContext) {
+function registerGetRevenueAndPlans(server: McpServer, ctx: McpActorContext) {
   server.registerTool(
     "get_revenue_and_plans",
     {
@@ -24,7 +24,9 @@ export function registerMetricsTools(server: McpServer, ctx: McpActorContext) {
       getRevenueAndPlans({ excludeDev: args.excludeDev ?? true }),
     ),
   );
+}
 
+function registerGetChurnAndRetention(server: McpServer, ctx: McpActorContext) {
   server.registerTool(
     "get_churn_and_retention",
     {
@@ -40,7 +42,9 @@ export function registerMetricsTools(server: McpServer, ctx: McpActorContext) {
       getChurnAndRetention({ periodDays: args.periodDays ?? 30 }),
     ),
   );
+}
 
+function registerGetSystemHealth(server: McpServer, ctx: McpActorContext) {
   server.registerTool(
     "get_system_health",
     {
@@ -52,7 +56,9 @@ export function registerMetricsTools(server: McpServer, ctx: McpActorContext) {
     },
     mcpRead("get_system_health", "mcp:read", ctx, async () => getSystemHealth()),
   );
+}
 
+function registerGetAiSpendAndUsage(server: McpServer, ctx: McpActorContext) {
   server.registerTool(
     "get_ai_spend_and_usage",
     {
@@ -68,4 +74,11 @@ export function registerMetricsTools(server: McpServer, ctx: McpActorContext) {
       getAiSpendAndUsage({ sinceDays: args.sinceDays ?? 30 }),
     ),
   );
+}
+
+export function registerMetricsTools(server: McpServer, ctx: McpActorContext) {
+  registerGetRevenueAndPlans(server, ctx);
+  registerGetChurnAndRetention(server, ctx);
+  registerGetSystemHealth(server, ctx);
+  registerGetAiSpendAndUsage(server, ctx);
 }

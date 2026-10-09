@@ -50,3 +50,13 @@ listed CDN URLs.
 | `public/illustrations/catalog.svg`       | https://undraw.co/search/product            | https://cdn.undraw.co/illustration/product-explainer_b7ft.svg | [unDraw license](https://undraw.co/license) |
 | `public/illustrations/analytics.svg`     | https://undraw.co/search/analytics          | https://cdn.undraw.co/illustration/analytics-setup_ptrz.svg   | [unDraw license](https://undraw.co/license) |
 | `public/illustrations/support-empty.svg` | https://undraw.co/search/customer%20support | https://cdn.undraw.co/illustration/faq_pgxi.svg               | [unDraw license](https://undraw.co/license) |
+
+## App mark (placeholder)
+
+The staff console's sidebar and sign-in use the Remix mark as a **placeholder**
+until the app has its own logo (`app/internal/components/AppLogo.tsx`,
+a single 24x24 path drawn with `currentColor`). Source: the `remix` icon from
+[simple-icons](https://github.com/simple-icons/simple-icons) (CC0), fetched
+from the pinned package on jsDelivr. The Remix name and mark are trademarks of
+their owner; replace `LOGO_PATH` before shipping. The product name shown beside
+it is `identity.brandName` in `app/identity.ts`.

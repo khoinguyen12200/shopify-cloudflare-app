@@ -61,6 +61,7 @@ export default {
         return;
       }
       await handleWebhookQueueBatch(batch, {
+        now: Date.now,
         consume: async (work) => {
           // Queue attempts count completed retries; the consumer counts deliveries.
           return consumeWebhook(webhookConsumer(), { ...work, attempts: (work.attempts ?? 0) + 1 });

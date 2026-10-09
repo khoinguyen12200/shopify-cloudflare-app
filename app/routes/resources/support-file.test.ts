@@ -6,6 +6,7 @@ import { setupTestDatabase } from "~/test/db";
 import { SupportRepo } from "~/models/support.server";
 import { signAttachmentToken } from "~/support/file-token";
 import { loader } from "./support-file";
+import { testIds } from "~/test/fake-runtime";
 
 const SHOP = "alpha.myshopify.com";
 const SECRET = "test-attachment-secret"; // matches vitest.config.ts
@@ -16,7 +17,7 @@ const run = <T>(fn: () => Promise<T>) => runWithRequestContext(env, fn);
 
 /** An attachment row whose blob really exists in the test bucket. */
 async function storedAttachment(): Promise<string> {
-  const repo = new SupportRepo();
+  const repo = new SupportRepo(testIds);
   const created = await repo.open({
     shop: SHOP,
     shopName: "Store",
@@ -84,7 +85,7 @@ describe("streaming a support attachment", () => {
 
   it("forces CSV attachments to download instead of rendering inline", async () => {
     await run(async () => {
-      const repo = new SupportRepo();
+      const repo = new SupportRepo(testIds);
       const created = await repo.open({
         shop: SHOP, shopName: "Store", merchantEmail: null, ccEmails: [], category: "bug",
         subject: "Broken", body: "Look at this", authorName: "Store", locale: null, at: 1_000,

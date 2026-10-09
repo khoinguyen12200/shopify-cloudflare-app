@@ -1,27 +1,10 @@
-import { useState } from "react";
 import {
-  Badge,
-  BlockStack,
   Card,
   CardContent,
-  CardHeader,
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
   EmptyState,
-  InlineStack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-  Text,
   type ChartConfig,
 } from "ngk-dashboard";
 import {
@@ -30,25 +13,18 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
   Line,
   LineChart,
-  Pie,
-  PieChart,
   XAxis,
   YAxis,
 } from "recharts";
-import { Inbox, Store } from "lucide-react";
-import { Link } from "react-router";
+import { Inbox } from "lucide-react";
 import type { MerchantMonth } from "~/domain/merchant-trend";
-import {
-  aggregateUninstallReasons,
-  filterMerchantFeedback,
-  formatReason,
-  type RawUninstallFeedback,
-} from "~/domain/uninstall-feedback";
-import { formatDateTime, formatNumber } from "~/i18n/format";
-import { UTC } from "~/i18n/time-zone";
+import type { RawUninstallFeedback } from "~/domain/uninstall-feedback";
+import { formatNumber } from "~/i18n/format";
+import { ChartHeading } from "./ChartHeading";
+import { UninstallFeedbackList } from "./UninstallFeedbackList";
+import { UninstallReasonsChart } from "./UninstallReasonsChart";
 import type { Locale } from "~/i18n/config";
 
 /**
@@ -83,16 +59,6 @@ const UNINSTALLS_CONFIG = {
 const UNINSTALL_TIMELINE_CONFIG = {
   uninstalls: { label: "Uninstalls", color: "var(--chart-uninstalls)" },
 } satisfies ChartConfig;
-
-const PIE_COLORS = [
-  "#2a78d6",
-  "#c2410c",
-  "#0e8f5f",
-  "#8b5cf6",
-  "#f59e0b",
-  "#ec4899",
-  "#64748b",
-];
 
 export default function DashboardCharts({
   trend,
@@ -148,34 +114,6 @@ export default function DashboardCharts({
   );
 }
 
-/** A card header: title and period on the left, the headline figure opposite. */
-function ChartHeading({
-  title,
-  detail,
-  figure,
-}: {
-  title: string;
-  detail: string;
-  figure: string;
-}) {
-  return (
-    <CardHeader>
-      <InlineStack align="start" justify="between" gap={4}>
-        <BlockStack gap={1}>
-          <Text as="h2" className="font-semibold">
-            {title}
-          </Text>
-          <Text as="p" className="text-sm text-muted-foreground">
-            {detail}
-          </Text>
-        </BlockStack>
-        <Text as="p" className="text-2xl font-semibold tabular-nums">
-          {figure}
-        </Text>
-      </InlineStack>
-    </CardHeader>
-  );
-}
 
 /**
  * Net installed shops at the end of each month.
@@ -311,224 +249,6 @@ function UninstallTimelineChart({
           </ChartContainer>
         )}
       </CardContent>
-    </Card>
-  );
-}
-
-/** Pie/Donut chart breaking down merchant uninstall reasons. */
-function UninstallReasonsChart({
-  feedback,
-}: {
-  feedback: readonly RawUninstallFeedback[];
-}) {
-  const reasons = aggregateUninstallReasons(feedback);
-  const total = reasons.reduce((sum, r) => sum + r.count, 0);
-
-  const pieConfig = Object.fromEntries(
-    reasons.map((r, i) => [
-      r.reason,
-      { label: r.label, color: PIE_COLORS[i % PIE_COLORS.length] },
-    ]),
-  ) satisfies ChartConfig;
-
-  return (
-    <Card>
-      <ChartHeading
-        title="Uninstall reasons"
-        detail={total > 0 ? `${total} responses categorized` : "Exit survey breakdown"}
-        figure={String(total)}
-      />
-      <CardContent className="flex min-h-64 flex-col items-center justify-center">
-        {reasons.length === 0 ? (
-          <EmptyState
-            heading="No uninstall reasons recorded"
-            icon={Inbox}
-            className="py-8"
-          >
-            <p className="text-sm text-muted-foreground">
-              No merchants have submitted an exit survey reason yet.
-            </p>
-          </EmptyState>
-        ) : (
-          <div className="flex w-full flex-col gap-6 sm:flex-row sm:items-center">
-            <ChartContainer config={pieConfig} className="mx-auto h-52 w-52 shrink-0">
-              <PieChart>
-                <ChartTooltip
-                  content={
-                    <ChartTooltipContent
-                      formatter={(val, name) =>
-                        `${val} (${reasons.find((r) => r.label === name || r.reason === name)?.percentage ?? 0}%)`
-                      }
-                    />
-                  }
-                />
-                <Pie
-                  data={reasons}
-                  dataKey="count"
-                  nameKey="label"
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={48}
-                  outerRadius={76}
-                  paddingAngle={3}
-                >
-                  {reasons.map((entry, index) => (
-                    <Cell
-                      key={`cell-${entry.reason}`}
-                      fill={PIE_COLORS[index % PIE_COLORS.length]}
-                    />
-                  ))}
-                </Pie>
-              </PieChart>
-            </ChartContainer>
-            <div className="flex flex-1 flex-col gap-2">
-              {reasons.map((r, idx) => (
-                <div key={r.reason} className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="size-3 shrink-0 rounded-full"
-                      style={{ backgroundColor: PIE_COLORS[idx % PIE_COLORS.length] }}
-                    />
-                    <span className="font-medium text-foreground">{r.label}</span>
-                  </div>
-                  <span className="text-muted-foreground tabular-nums">
-                    {r.count} ({r.percentage}%)
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-/** List of written feedback comments left by departing merchants. */
-function UninstallFeedbackList({
-  feedback,
-}: {
-  feedback: readonly RawUninstallFeedback[];
-}) {
-  const [activeItem, setActiveItem] = useState<RawUninstallFeedback | null>(null);
-  const itemsWithText = filterMerchantFeedback(feedback);
-
-  return (
-    <Card>
-      <CardHeader>
-        <InlineStack align="start" justify="between" gap={4}>
-          <BlockStack gap={1}>
-            <Text as="h2" className="font-semibold">
-              Merchant exit comments
-            </Text>
-            <Text as="p" className="text-sm text-muted-foreground">
-              Written feedback submitted by merchants upon uninstalling
-            </Text>
-          </BlockStack>
-          <Text as="p" className="text-2xl font-semibold tabular-nums">
-            {String(itemsWithText.length)}
-          </Text>
-        </InlineStack>
-      </CardHeader>
-      <CardContent className="p-0">
-        <Table className="[&_th]:h-12 [&_th]:px-4 [&_td]:px-4 [&_td]:py-3">
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-1/4">Shop</TableHead>
-              <TableHead className="w-1/6">Reason</TableHead>
-              <TableHead>Feedback</TableHead>
-              <TableHead className="w-40 text-right">Date</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {itemsWithText.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={4} className="h-28 text-center text-muted-foreground">
-                  No merchant exit feedback submitted yet.
-                </TableCell>
-              </TableRow>
-            ) : (
-              itemsWithText.map((item) => (
-                <TableRow key={item.eventId}>
-                  <TableCell className="font-medium">
-                    <div className="flex items-center gap-2">
-                      {item.logoUrl ? (
-                        <img src={item.logoUrl} alt="" className="size-5 rounded object-cover" />
-                      ) : (
-                        <Store className="size-5 shrink-0 text-muted-foreground" />
-                      )}
-                      <Link
-                        to={`/internal/shops/${encodeURIComponent(item.shop)}`}
-                        className="hover:underline"
-                      >
-                        {item.shopName ? `${item.shopName} (${item.shop})` : item.shop}
-                      </Link>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {item.reason ? (
-                      <Badge variant="outline" className="text-xs">
-                        {formatReason(item.reason)}
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="max-w-md">
-                    <div className="flex flex-col gap-1.5">
-                      <p
-                        className="line-clamp-3 text-sm italic text-foreground [overflow-wrap:anywhere] break-words cursor-pointer hover:text-foreground/80"
-                        onClick={() => setActiveItem(item)}
-                        title="Click to view full message"
-                      >
-                        "{item.reasonDescription}"
-                      </p>
-                      {(item.reasonDescription?.length ?? 0) > 80 && (
-                        <button
-                          type="button"
-                          onClick={() => setActiveItem(item)}
-                          className="self-start text-xs font-medium text-primary hover:underline cursor-pointer"
-                        >
-                          View full message
-                        </button>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right text-xs tabular-nums text-muted-foreground whitespace-nowrap">
-                    {formatDateTime(LOCALE, item.occurredAt, UTC)}
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </CardContent>
-
-      <Dialog open={activeItem !== null} onOpenChange={(open) => { if (!open) setActiveItem(null); }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Merchant exit feedback</DialogTitle>
-            {activeItem && (
-              <DialogDescription>
-                {activeItem.shopName ? `${activeItem.shopName} (${activeItem.shop})` : activeItem.shop} · {formatDateTime(LOCALE, activeItem.occurredAt, UTC)}
-              </DialogDescription>
-            )}
-          </DialogHeader>
-          {activeItem && (
-            <div className="flex flex-col gap-4 py-2">
-              {activeItem.reason && (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Reason:</span>
-                  <Badge variant="outline">{formatReason(activeItem.reason)}</Badge>
-                </div>
-              )}
-              <div className="max-h-72 overflow-y-auto rounded-md bg-muted/40 p-4 text-sm leading-relaxed text-foreground [overflow-wrap:anywhere] whitespace-pre-wrap italic">
-                "{activeItem.reasonDescription}"
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </Card>
   );
 }

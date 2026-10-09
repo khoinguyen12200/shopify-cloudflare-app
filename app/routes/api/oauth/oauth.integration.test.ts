@@ -12,6 +12,7 @@ import { createCodeChallenge } from "~/domain/mcp/pkce";
 import { issueAuthorizationCode } from "~/services/mcp/oauth.server";
 import { AdminUserRepo } from "~/models/admin-users.server";
 import { hashPassword } from "~/lib/password";
+import { testRandomBytes } from "~/test/fake-runtime";
 
 setupTestDatabase();
 
@@ -90,7 +91,7 @@ describe("Zero-Touch OAuth 2.0 Integration", () => {
 
       // 2. Setup admin user
       const adminRepo = new AdminUserRepo();
-      const pwHash = await hashPassword("Pass12345678!");
+      const pwHash = await hashPassword("Pass12345678!", testRandomBytes);
       const admin = await adminRepo.create({
         id: "admin-oauth-test",
         email: "staff@example.com",

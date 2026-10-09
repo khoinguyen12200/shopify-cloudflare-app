@@ -1,23 +1,10 @@
-import { data, Form, useActionData, useLoaderData, useNavigation } from "react-router";
+import { data, useActionData, useLoaderData, useNavigation } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
 
 export const meta: MetaFunction = () => [
   { title: "Profile · Staff Console" },
 ];
-import {
-  Alert,
-  AlertDescription,
-  BlockStack,
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  Input,
-  Label,
-  Page,
-  PasswordInput,
-  Text,
-} from "ngk-dashboard";
+import { BlockStack, Page, Text } from "ngk-dashboard";
 import { requireAdminUser } from "~/services/admin-auth.server";
 import {
   changeOwnPassword,
@@ -28,7 +15,12 @@ import { MIN_PASSWORD_LENGTH } from "~/lib/password-policy";
 import { formatDateTime } from "~/i18n/format";
 import { UTC } from "~/i18n/time-zone";
 import type { Locale } from "~/i18n/config";
-import { adminUsers, adminSessionUsers } from "~/wiring.server";
+import { adminUsers, adminSessionUsers, appRuntime } from "~/wiring.server";
+import {
+  ChangePasswordCard,
+  DetailsCard,
+  ProfileAlerts,
+} from "./profile-forms";
 
 const LOCALE: Locale = "en";
 
@@ -63,7 +55,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const result = await updateOwnProfile({
       userId: user.id,
       name: String(form.get("name") ?? ""),
-    }, { users });
+    }, { users, runtime: appRuntime() });
     return result.ok
       ? data({ success: detailsSaved })
       : data({ error: result.reason }, { status: 400 });
@@ -76,7 +68,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       currentPassword: String(form.get("currentPassword") ?? ""),
       newPassword: String(form.get("newPassword") ?? ""),
       confirmPassword: String(form.get("confirmPassword") ?? ""),
-    }, { users });
+    }, { users, runtime: appRuntime() });
     return result.ok
       ? data({ success: passwordChanged })
       : data({ error: result.reason }, { status: 400 });
@@ -92,111 +84,21 @@ export default function Profile() {
   const navigation = useNavigation();
 
   const busy = navigation.state !== "idle";
+  const errorMessage =
+    actionData && "error" in actionData && actionData.error
+      ? PROFILE_ERRORS[actionData.error]
+      : undefined;
+  const successMessage =
+    actionData && "success" in actionData && actionData.success
+      ? PROFILE_SUCCESS[actionData.success]
+      : undefined;
 
   return (
     <Page title="Profile" narrowWidth>
       <BlockStack gap={4}>
-        {actionData && "error" in actionData && actionData.error && (
-          <Alert variant="destructive">
-            <AlertDescription>
-              {PROFILE_ERRORS[actionData.error]}
-            </AlertDescription>
-          </Alert>
-        )}
-        {actionData && "success" in actionData && actionData.success && (
-          <Alert>
-            <AlertDescription>
-              {PROFILE_SUCCESS[actionData.success]}
-            </AlertDescription>
-          </Alert>
-        )}
-
-        <Card>
-          <CardHeader>
-            <Text as="h2" className="font-semibold">
-              Your details
-            </Text>
-          </CardHeader>
-          <CardContent>
-            <Form method="post" className="flex flex-col gap-4">
-              <input type="hidden" name="intent" value="details" />
-
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="name">Name</Label>
-                <Input id="name" name="name" defaultValue={user.name} required />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="email">Email</Label>
-                {/* Read-only on purpose: changing your own sign-in address is an
-                    account-takeover vector, so an owner does it for you. */}
-                <Input id="email" value={user.email} readOnly disabled />
-                <Text as="p" className="text-xs text-muted-foreground">
-                  Ask an owner to change your email address.
-                </Text>
-              </div>
-
-              <div>
-                <Button type="submit" disabled={busy}>
-                  Save
-                </Button>
-              </div>
-            </Form>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <Text as="h2" className="font-semibold">
-              Change password
-            </Text>
-          </CardHeader>
-          <CardContent>
-            <Form method="post" className="flex flex-col gap-4">
-              <input type="hidden" name="intent" value="password" />
-
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="currentPassword">Current password</Label>
-                {/* Required even though the session proves identity: it stops a
-                    hijacked session from locking the real owner out. */}
-                <PasswordInput
-                  id="currentPassword"
-                  name="currentPassword"
-                  autoComplete="current-password"
-                  required
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="newPassword">New password</Label>
-                <PasswordInput
-                  id="newPassword"
-                  name="newPassword"
-                  autoComplete="new-password"
-                  minLength={MIN_PASSWORD_LENGTH}
-                  required
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="confirmPassword">Confirm new password</Label>
-                <PasswordInput
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  autoComplete="new-password"
-                  minLength={MIN_PASSWORD_LENGTH}
-                  required
-                />
-              </div>
-
-              <div>
-                <Button type="submit" disabled={busy}>
-                  Change password
-                </Button>
-              </div>
-            </Form>
-          </CardContent>
-        </Card>
+        <ProfileAlerts errorMessage={errorMessage} successMessage={successMessage} />
+        <DetailsCard user={user} busy={busy} />
+        <ChangePasswordCard busy={busy} />
 
         {user.lastLoginAt && (
           <Text as="p" className="text-xs text-muted-foreground">

@@ -1,27 +1,22 @@
-import { data, Form, Link, useActionData, useLoaderData, useNavigation } from "react-router";
+import { data, useActionData, useLoaderData, useNavigation } from "react-router";
 import type {
   ActionFunctionArgs,
   LinksFunction,
   LoaderFunctionArgs,
   MetaFunction,
 } from "react-router";
-import {
-  Alert,
-  AlertDescription,
-  Button,
-  Label,
-  PasswordInput,
-  Text,
-} from "ngk-dashboard";
+import { Text } from "ngk-dashboard";
 import {
   checkResetToken,
   completePasswordReset,
   type ResetFailure,
 } from "~/services/password-reset.server";
 import { MIN_PASSWORD_LENGTH } from "~/lib/password-policy";
-import { INTERNAL_FONT_LINKS, THEME_INIT_SCRIPT } from "~/internal/components";
+import { INTERNAL_FONT_LINKS } from "~/internal/components";
+import { AuthShell, ErrorAlert } from "./auth-shell";
+import { RequestNewLink, ResetDone, ResetForm } from "./reset-password-parts";
 import internalStyles from "~/styles/internal/internal.tailwind.css?url";
-import { adminUsers, passwordResetTokens } from "~/wiring.server";
+import { adminUsers, appRuntime, passwordResetTokens } from "~/wiring.server";
 
 const RESET_PASSWORD_ERRORS: Record<ResetFailure, string> = {
   invalidToken: "That reset link is not valid. Request a new one.",
@@ -48,7 +43,7 @@ export const meta: MetaFunction = () => [
  */
 export const loader = async ({ params }: LoaderFunctionArgs) => {
   const token = params.token ?? "";
-  const checked = await checkResetToken(token, { tokens: passwordResetTokens() });
+  const checked = await checkResetToken(token, { tokens: passwordResetTokens(), runtime: appRuntime() });
   return { valid: checked.ok, reason: checked.ok ? undefined : checked.reason };
 };
 
@@ -61,7 +56,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     token: params.token ?? "",
     newPassword: String(form.get("newPassword") ?? ""),
     confirmPassword: String(form.get("confirmPassword") ?? ""),
-  }, { users: adminUsers(), tokens: passwordResetTokens() });
+  }, { users: adminUsers(), tokens: passwordResetTokens(), runtime: appRuntime() });
 
   if (!result.ok) {
     return data({ error: result.reason }, { status: 400 });
@@ -87,74 +82,18 @@ export default function ResetPassword() {
     error === "invalidToken" || error === "expiredToken" || error === "usedToken";
 
   return (
-    <>
-      <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
-      <div className="grid min-h-dvh place-items-center bg-background p-6">
-        <div className="w-full max-w-sm">
-          <div className="mb-8 text-center">
-            <h1 className="text-2xl font-semibold tracking-tight">
-              Choose a new password
-            </h1>
-            {valid && !done && (
-              <Text as="p" className="mt-1 text-sm text-muted-foreground">
-                Pick a password you have not used here before.
-              </Text>
-            )}
-          </div>
-
-          {error && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertDescription>{RESET_PASSWORD_ERRORS[error]}</AlertDescription>
-            </Alert>
-          )}
-
-          {done ? (
-            <div className="flex flex-col gap-4">
-              <Alert>
-                <AlertDescription>
-                  Your password was changed. You can sign in now.
-                </AlertDescription>
-              </Alert>
-              <Button asChild>
-                <Link to="/internal/login">Sign in</Link>
-              </Button>
-            </div>
-          ) : deadToken ? (
-            <Button asChild variant="outline" className="w-full">
-              <Link to="/internal/forgot-password">Request a new link</Link>
-            </Button>
-          ) : (
-            <Form method="post" className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="newPassword">New password</Label>
-                <PasswordInput
-                  id="newPassword"
-                  name="newPassword"
-                  autoComplete="new-password"
-                  minLength={MIN_PASSWORD_LENGTH}
-                  required
-                  autoFocus
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="confirmPassword">Confirm new password</Label>
-                <PasswordInput
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  autoComplete="new-password"
-                  minLength={MIN_PASSWORD_LENGTH}
-                  required
-                />
-              </div>
-
-              <Button type="submit" disabled={submitting}>
-                {submitting ? "Saving…" : "Set password"}
-              </Button>
-            </Form>
-          )}
-        </div>
-      </div>
-    </>
+    <AuthShell
+      title="Choose a new password"
+      subtitle={
+        valid && !done && (
+          <Text as="p" className="mt-1 text-sm text-muted-foreground">
+            Pick a password you have not used here before.
+          </Text>
+        )
+      }
+    >
+      {error && <ErrorAlert message={RESET_PASSWORD_ERRORS[error]} />}
+      {done ? <ResetDone /> : deadToken ? <RequestNewLink /> : <ResetForm submitting={submitting} />}
+    </AuthShell>
   );
 }

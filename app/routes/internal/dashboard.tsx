@@ -6,15 +6,16 @@ import type { LoaderFunctionArgs, MetaFunction } from "react-router";
 export const meta: MetaFunction = () => [
   { title: "Dashboard · Staff Console" },
 ];
-import { BlockStack, Card, InlineStack, Page, StatCard } from "ngk-dashboard";
+import { BlockStack, InlineStack, Page, StatCard } from "ngk-dashboard";
 import { CircleDollarSign, Crown, Store, Users } from "lucide-react";
 import { requireAdminUser } from "~/services/admin-auth.server";
 import { adminUsers } from "~/wiring.server";
 import { loadDashboardOverview } from "~/services/internal-admin/ops.server";
 import { PLAN_LIST } from "~/billing/plans";
 import { formatMoney, toCurrency, zero } from "~/money";
-import { formatDateTime } from "~/i18n/format";
-import { UTC } from "~/i18n/time-zone";
+import { ChartsSkeleton, HealthPanel, HealthSkeleton } from "./dashboard-panels";
+import { Deferred, StatRowSkeleton } from "~/internal/components";
+import { streamRegion } from "~/internal/stream-region.server";
 import { unwrap } from "~/lib/result";
 import type { Locale } from "~/i18n/config";
 
@@ -36,99 +37,124 @@ const TREND_MONTHS = 12;
 const DashboardCharts = lazy(() => import("~/internal/components/DashboardCharts"));
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
+  // Only the auth check is awaited. Every region below is a promise, so the
+  // page frame paints at once and each region streams in behind its skeleton.
   const user = await requireAdminUser(request, { users: adminSessionUsers() });
 
-  const [admins, overview, health, uninstallFeedback] = await Promise.all([
-    adminUsers().countAll(),
+  const overview = streamRegion(
+    "dashboard",
+    "overview",
     loadDashboardOverview({ trendMonths: TREND_MONTHS, now: Date.now() }),
-    operationalHealth().read(),
-    shopifyEvents().listAllUninstallFeedback(),
-  ]);
+  );
+  const feedback = streamRegion("dashboard", "uninstall_feedback", shopifyEvents().listAllUninstallFeedback());
 
   return {
     user,
-    admins,
-    stats: overview.stats,
-    trend: overview.trend,
-    health,
-    uninstallFeedback,
+    // Headline numbers: a failure here shows an error, never a plausible zero.
+    headline: Promise.all([streamRegion("dashboard", "admin_count", adminUsers().countAll()), overview]).then(
+      ([admins, loaded]) => ({ admins, stats: loaded.stats }),
+    ),
+    health: streamRegion("dashboard", "health", operationalHealth().read()),
+    charts: Promise.all([overview, feedback]).then(([loaded, uninstallFeedback]) => ({
+      trend: loaded.trend,
+      uninstallFeedback,
+    })),
   };
 };
 
 export default function Dashboard() {
-  const { user, admins, stats, trend, health, uninstallFeedback } = useLoaderData<typeof loader>();
-  const showCharts = useMountedCharts();
+  const { user, headline, health, charts } = useLoaderData<typeof loader>();
 
   return (
     <Page title="Dashboard" subtitle={`Signed in as ${user.name}`} fullWidth>
       <BlockStack gap={4}>
-        <InlineStack gap={4} className="flex-wrap [&>*]:min-w-48 [&>*]:flex-1">
-          <StatCard label="Admin accounts" value={String(admins)} icon={Users} />
-          <StatCard label="Installed shops" value={String(stats.totalShops)} icon={Store} />
-          <StatCard label="Paid shops" value={String(stats.paidShops)} icon={Crown} />
-          <StatCard label="Free shops" value={String(stats.freeShops)} icon={Store} />
-          <StatCard
-            label="Monthly recurring revenue"
-            value={
-              stats.mrrByCurrency.length === 0
-                ? formatMoney(LOCALE, NO_REVENUE)
-                : stats.mrrByCurrency.map((m) => formatMoney(LOCALE, m)).join(" + ")
-            }
-            icon={CircleDollarSign}
-          />
-        </InlineStack>
-
-        <InlineStack gap={4} className="flex-wrap [&>*]:min-w-44 [&>*]:flex-1">
-          {PLAN_LIST.map((plan) => {
-            const count = stats.shopsByPlan?.[plan.handle] ?? 0;
-            const cleanName = plan.name.replace(/^TODO:/i, "");
-            const title = cleanName.charAt(0).toUpperCase() + cleanName.slice(1).toLowerCase();
-            const isPaid = plan.priceMonthly.amount > 0;
-            const pct = stats.totalShops > 0 ? Math.round((count / stats.totalShops) * 100) : 0;
-            return (
-              <StatCard
-                key={plan.handle}
-                label={`${title} plan`}
-                value={String(count)}
-                icon={isPaid ? Crown : Store}
-                helpText={`${pct}% of active stores`}
-              />
-            );
-          })}
-        </InlineStack>
-
-        <Card>
-          <div className="grid gap-4 p-6 sm:grid-cols-2 lg:grid-cols-4">
-            <HealthStat label="Webhook failures" value={health.failedWebhooks} />
-            <HealthStat label="Dead-letter webhooks" value={health.deadLetterWebhooks} />
-            <HealthStat label="Lifecycle events" value={health.lifecycleEvents} />
-            <HealthStat label="Subscription events" value={health.subscriptionEvents} />
-          </div>
-          <div className="border-t px-6 py-4 text-sm text-muted-foreground">
-            Last sync: {health.checkpoint?.lastSucceededAt
-              ? formatDateTime(LOCALE, health.checkpoint.lastSucceededAt, UTC)
-              : "Not yet completed"}
-          </div>
-        </Card>
-
-        {showCharts ? (
-          <Suspense fallback={<ChartsSkeleton />}>
-            <DashboardCharts
-              trend={trend}
-              period={`Last ${TREND_MONTHS} months`}
-              uninstallFeedback={uninstallFeedback}
-            />
-          </Suspense>
-        ) : (
-          <ChartsSkeleton />
-        )}
+        <Deferred resolve={headline} fallback={<HeadlineSkeleton />} errorTitle="Headline numbers">
+          {({ admins, stats }) => (
+            <>
+              <HeadlineStats admins={admins} stats={stats} />
+              <PlanStats stats={stats} />
+            </>
+          )}
+        </Deferred>
+        <Deferred resolve={health} fallback={<HealthSkeleton />} errorTitle="Operational health">
+          {(resolved) => <HealthPanel health={resolved} />}
+        </Deferred>
+        <Deferred resolve={charts} fallback={<ChartsSkeleton />} errorTitle="Charts and exit feedback">
+          {({ trend, uninstallFeedback }) => <ChartsPanel trend={trend} feedback={uninstallFeedback} />}
+        </Deferred>
       </BlockStack>
     </Page>
   );
 }
 
-function HealthStat({ label, value }: { label: string; value: number }) {
-  return <div><div className="text-sm text-muted-foreground">{label}</div><div className="text-2xl font-semibold tabular-nums">{value}</div></div>;
+/** Five headline cards, then one card per plan — the same rows the data fills. */
+function HeadlineSkeleton() {
+  return (
+    <>
+      <StatRowSkeleton count={5} />
+      <StatRowSkeleton count={PLAN_LIST.length} minWidth="min-w-44" />
+    </>
+  );
+}
+
+type Stats = Awaited<ReturnType<typeof loadDashboardOverview>>["stats"];
+
+function HeadlineStats({ admins, stats }: { admins: number; stats: Stats }) {
+  return (
+    <InlineStack gap={4} className="flex-wrap [&>*]:min-w-48 [&>*]:flex-1">
+      <StatCard label="Admin accounts" value={String(admins)} icon={Users} />
+      <StatCard label="Installed shops" value={String(stats.totalShops)} icon={Store} />
+      <StatCard label="Paid shops" value={String(stats.paidShops)} icon={Crown} />
+      <StatCard label="Free shops" value={String(stats.freeShops)} icon={Store} />
+      <StatCard
+        label="Monthly recurring revenue"
+        value={
+          stats.mrrByCurrency.length === 0
+            ? formatMoney(LOCALE, NO_REVENUE)
+            : stats.mrrByCurrency.map((m) => formatMoney(LOCALE, m)).join(" + ")
+        }
+        icon={CircleDollarSign}
+      />
+    </InlineStack>
+  );
+}
+
+function PlanStats({ stats }: { stats: Stats }) {
+  return (
+    <InlineStack gap={4} className="flex-wrap [&>*]:min-w-44 [&>*]:flex-1">
+      {PLAN_LIST.map((plan) => {
+        const count = stats.shopsByPlan?.[plan.handle] ?? 0;
+        const cleanName = plan.name.replace(/^TODO:/i, "");
+        const title = cleanName.charAt(0).toUpperCase() + cleanName.slice(1).toLowerCase();
+        const isPaid = plan.priceMonthly.amount > 0;
+        const pct = stats.totalShops > 0 ? Math.round((count / stats.totalShops) * 100) : 0;
+        return (
+          <StatCard
+            key={plan.handle}
+            label={`${title} plan`}
+            value={String(count)}
+            icon={isPaid ? Crown : Store}
+            helpText={`${pct}% of active stores`}
+          />
+        );
+      })}
+    </InlineStack>
+  );
+}
+
+type ChartsPanelProps = {
+  trend: React.ComponentProps<typeof DashboardCharts>["trend"];
+  feedback: React.ComponentProps<typeof DashboardCharts>["uninstallFeedback"];
+};
+
+function ChartsPanel({ trend, feedback }: ChartsPanelProps) {
+  const showCharts = useMountedCharts();
+  if (!showCharts) return <ChartsSkeleton />;
+  return (
+    <Suspense fallback={<ChartsSkeleton />}>
+      <DashboardCharts trend={trend} period={`Last ${TREND_MONTHS} months`} uninstallFeedback={feedback} />
+    </Suspense>
+  );
 }
 
 /** Never changes, so the subscribe callback is a stable no-op. */
@@ -152,27 +178,5 @@ function useMountedCharts(): boolean {
     neverChanges,
     () => true, // client
     () => false, // server, and the hydrating pass
-  );
-}
-
-/**
- * Placeholders at the exact heights of the charts they stand in for, so the
- * page does not jump when the real ones arrive. `aria-hidden` because they say
- * nothing a screen reader needs; the headings inside the charts do that.
- */
-function ChartsSkeleton() {
-  return (
-    <div aria-hidden className="contents">
-      <Card className="h-96 animate-pulse bg-muted/40" />
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card className="h-80 animate-pulse bg-muted/40" />
-        <Card className="h-80 animate-pulse bg-muted/40" />
-      </div>
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card className="h-80 animate-pulse bg-muted/40" />
-        <Card className="h-80 animate-pulse bg-muted/40" />
-      </div>
-      <Card className="h-64 animate-pulse bg-muted/40" />
-    </div>
   );
 }

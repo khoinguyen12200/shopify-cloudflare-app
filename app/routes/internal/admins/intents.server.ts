@@ -7,7 +7,7 @@ import {
   setAdminStatus,
 } from "~/services/admin-management.server";
 import type { SuccessKey } from "./success-message";
-import { adminUsers } from "~/wiring.server";
+import { adminUsers, appRuntime } from "~/wiring.server";
 
 /**
  * The admin screen's intent dispatch, beside its route.
@@ -32,35 +32,35 @@ export const INTENTS = {
       email: String(form.get("email") ?? ""),
       password: String(form.get("password") ?? ""),
       role: readRole(form),
-    }, { users: adminUsers() });
+    }, { users: adminUsers(), runtime: appRuntime() });
   },
   async disable(form: FormData, actorId: string) {
     return setAdminStatus({
       actorId,
       targetId: String(form.get("id") ?? ""),
       status: "disabled",
-    }, { users: adminUsers() });
+    }, { users: adminUsers(), runtime: appRuntime() });
   },
   async enable(form: FormData, actorId: string) {
     return setAdminStatus({
       actorId,
       targetId: String(form.get("id") ?? ""),
       status: "active",
-    }, { users: adminUsers() });
+    }, { users: adminUsers(), runtime: appRuntime() });
   },
   async makeOwner(form: FormData, actorId: string) {
     return setAdminRole({
       actorId,
       targetId: String(form.get("id") ?? ""),
       role: "owner",
-    }, { users: adminUsers() });
+    }, { users: adminUsers(), runtime: appRuntime() });
   },
   async makeAdmin(form: FormData, actorId: string) {
     return setAdminRole({
       actorId,
       targetId: String(form.get("id") ?? ""),
       role: "admin",
-    }, { users: adminUsers() });
+    }, { users: adminUsers(), runtime: appRuntime() });
   },
   async remove(form: FormData, actorId: string) {
     return removeAdmin({ actorId, targetId: String(form.get("id") ?? "") }, { users: adminUsers() });
@@ -70,7 +70,7 @@ export const INTENTS = {
       actorId,
       targetId: String(form.get("id") ?? ""),
       newPassword: String(form.get("newPassword") ?? ""),
-    }, { users: adminUsers() });
+    }, { users: adminUsers(), runtime: appRuntime() });
     // Normalise to the same { name, role } shape the other intents return, so
     // the action stays a thin dispatch.
     return result.ok

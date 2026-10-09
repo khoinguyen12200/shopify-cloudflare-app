@@ -1,16 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { renderToString } from "react-dom/server";
-import {
-  createStaticHandler,
-  createStaticRouter,
-  StaticRouterProvider,
-  type RouteObject,
-} from "react-router";
-import { createInstance } from "i18next";
-import { I18nextProvider, initReactI18next } from "react-i18next";
-import { i18nOptions } from "~/i18n/options";
 import { fromMinorUnits, toCurrency } from "~/money";
-import { unwrap } from "~/lib/result";
+import { err, ok, unwrap } from "~/lib/result";
+import type { Outcome } from "~/admin/outcome";
+import { renderRoute } from "~/test/render-route";
 import type { BillingStatus } from "~/billing/subscription-status";
 import Billing, {
   parseCurrentAppInstallationHandle,
@@ -81,33 +73,18 @@ const subscribed = (
  * charged is the failure this section's pure helper exists to prevent.
  */
 async function render(status: BillingStatus, locale: "en" | "es" = "en", planHandle: string | null = null) {
-  const instance = createInstance();
-  await instance.use(initReactI18next).init({ ...i18nOptions, lng: locale });
-
-  const routes: RouteObject[] = [
-    {
-      path: "/app/billing",
-      Component: Billing,
-      loader: () => ({ status, planHandle, pricingPlansUrl: "https://admin.shopify.com/plans" }),
-    },
-  ];
-  const handler = createStaticHandler(routes);
-  const context = await handler.query(new Request("https://example.test/app/billing"));
-  if (context instanceof Response) {
-    throw new Error(`Expected a render context, got ${context.status}`);
-  }
-
-  const html = renderToString(
-    <I18nextProvider i18n={instance}>
-      <StaticRouterProvider
-        router={createStaticRouter(routes, context)}
-        context={context}
-      />
-    </I18nextProvider>,
+  return renderBilling(
+    { pricingReturn: false, plan: Promise.resolve(ok({ status, planHandle, promo: null })), planLink: Promise.resolve(ok(PLAN_LINK)) },
+    "settled",
+    locale,
   );
+}
 
-  expect(html.length, "rendered nothing — assertions would be vacuous").toBeGreaterThan(200);
-  return html;
+const PLAN_LINK = "https://admin.shopify.com/plans";
+const FAILED: Outcome<never> = err("failed");
+
+function renderBilling(loaderData: unknown, stage: "pending" | "settled", locale: "en" | "es" = "en") {
+  return renderRoute({ path: "/app/billing", Component: Billing, loaderData, stage, locale });
 }
 
 describe("the current-plan section", () => {
@@ -184,5 +161,55 @@ describe("the current-plan section", () => {
     expect(html).toContain("Tu plan");
     expect(html).not.toContain("Your plan");
     expect(html).not.toContain("Plans are managed by Shopify");
+  });
+});
+
+const settledPlan = Promise.resolve(ok({ status: { kind: "free" } satisfies BillingStatus, planHandle: null, promo: null }));
+const never = new Promise<never>(() => undefined);
+
+describe("streaming the billing page", () => {
+  it("renders the frame and heading at once, with a labelled spinner where the plan will be", async () => {
+    const html = await renderBilling({ pricingReturn: false, plan: never, planLink: never }, "pending");
+
+    expect(html).toContain('<s-page heading="Billing"');
+    expect(html).toContain('accessibilityLabel="Loading your plan"');
+    expect(html).toContain('accessibilityLabel="Loading plans"');
+    // The catalog keeps its own heading while pending, so only its body is missing.
+    expect(html).toContain('heading="Plans"');
+    expect(html).not.toContain("Your plan");
+    expect(html).not.toContain("Plans are managed by Shopify");
+  });
+
+  it("shows a critical banner, never a plausible plan, when the plan failed", async () => {
+    const html = await renderBilling({ pricingReturn: false, plan: Promise.resolve(FAILED), planLink: Promise.resolve(ok(PLAN_LINK)) }, "settled");
+
+    expect(html).toContain('tone="critical"');
+    expect(html).toContain("We couldn&#x27;t load your plan");
+    expect(html).not.toContain("Your plan");
+    expect(html).not.toContain("Upgrade");
+    // The page frame survives, so navigation stays usable.
+    expect(html).toContain('<s-page heading="Billing"');
+  });
+
+  it("keeps the plan and says the link is unavailable when only the plan link failed", async () => {
+    const html = await renderBilling({ pricingReturn: false, plan: settledPlan, planLink: Promise.resolve(FAILED) }, "settled");
+
+    expect(html).toContain("Your plan");
+    expect(html).toContain("The plan link is unavailable right now");
+    expect(html).not.toContain(">Upgrade<");
+  });
+
+  it("translates the pending and failed copy", async () => {
+    const pending = await renderBilling({ pricingReturn: false, plan: never, planLink: never }, "pending", "es");
+    expect(pending).toContain('accessibilityLabel="Cargando tu plan"');
+    expect(pending).not.toContain("Loading your plan");
+
+    const failed = await renderBilling({ pricingReturn: false, plan: Promise.resolve(FAILED), planLink: Promise.resolve(FAILED) }, "settled", "es");
+    expect(failed).toContain("No pudimos cargar tu plan");
+  });
+
+  it("goes straight to the processing screen after hosted plan selection, without waiting on any region", async () => {
+    const html = await renderBilling({ pricingReturn: true }, "pending");
+    expect(html).toContain("s-spinner");
   });
 });

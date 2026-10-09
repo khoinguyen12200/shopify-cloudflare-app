@@ -16,12 +16,15 @@ import {
   HOME_PATH,
   LOGIN_PATH,
 } from "./admin-auth.server";
+import { fakeRuntime } from "~/test/fake-runtime";
+import { defined } from "~/test/defined";
+const runtime = fakeRuntime();
 
 setupTestDatabase();
 
 const inRequest = <T>(fn: () => Promise<T>) => runWithRequestContext(env, fn);
 const PASSWORD = "a-long-enough-password";
-const authDeps = { users: new AdminUserRepo() };
+const authDeps = { users: new AdminUserRepo(), runtime };
 
 async function seed(
   email: string,
@@ -36,7 +39,7 @@ async function seed(
 function cookieFrom(response: Response): string {
   const header = response.headers.get("Set-Cookie");
   if (!header) throw new Error("expected a Set-Cookie header");
-  return header.split(";")[0]!;
+  return defined(header.split(";")[0]);
 }
 
 const request = (path = "/internal/dashboard", cookie?: string) =>
@@ -83,7 +86,7 @@ describe("safeRedirectPath — the open-redirect guard", () => {
 
 describe("verifyAdminCredentials", () => {
   it("records a successful login through its injected user port", async () => {
-    const passwordHash = await hashPassword(PASSWORD);
+    const passwordHash = await hashPassword(PASSWORD, runtime.randomBytes);
     let recorded: { id: string; now: number } | undefined;
     const result = await verifyAdminCredentials("ada@example.org", PASSWORD, {
       users: {
@@ -104,11 +107,12 @@ describe("verifyAdminCredentials", () => {
         },
         updatePassword: async () => {},
       },
+      runtime,
     });
 
     expect(result).toMatchObject({ ok: true, user: { id: "ada" } });
     expect(recorded?.id).toBe("ada");
-    expect(recorded?.now).toBeTypeOf("number");
+    expect(recorded?.now).toBe(runtime.clock.now());
   });
 
   it("accepts the right password", async () => {
@@ -281,12 +285,12 @@ describe("requireAdminUser", () => {
         await requireAdminUser(request("/internal/admins?page=2"), authDeps);
         return null;
       } catch (error) {
-        return error;
+        return error instanceof Response ? error : null;
       }
     });
 
     expect(thrown).toBeInstanceOf(Response);
-    const location = (thrown as Response).headers.get("Location") ?? "";
+    const location = thrown?.headers.get("Location") ?? "";
     expect(location).toContain(LOGIN_PATH);
     // So login can send them back where they meant to go.
     expect(decodeURIComponent(location)).toContain("/internal/admins?page=2");
@@ -301,10 +305,10 @@ describe("requireAdminUser", () => {
         );
         return null;
       } catch (error) {
-        return error as Response;
+        return error instanceof Response ? error : null;
       }
     });
-    expect((thrown as Response).headers.get("Set-Cookie")).toBeTruthy();
+    expect(thrown?.headers.get("Set-Cookie")).toBeTruthy();
   });
 });
 
@@ -335,13 +339,13 @@ describe("requireOwner — the only thing gating staff management", () => {
         await requireOwner(request("/internal/admins", cookie), authDeps);
         return null;
       } catch (error) {
-        return error as Response;
+        return error instanceof Response ? error : null;
       }
     });
 
     expect(thrown).toBeInstanceOf(Response);
     // 403, not a redirect: they ARE signed in, they simply may not do this.
-    expect((thrown as Response).status).toBe(403);
+    expect(thrown?.status).toBe(403);
   });
 
   it("redirects rather than 403s when nobody is signed in", async () => {
@@ -350,9 +354,9 @@ describe("requireOwner — the only thing gating staff management", () => {
         await requireOwner(request("/internal/admins"), authDeps);
         return null;
       } catch (error) {
-        return error as Response;
+        return error instanceof Response ? error : null;
       }
     });
-    expect((thrown as Response).status).toBe(302);
+    expect(thrown?.status).toBe(302);
   });
 });

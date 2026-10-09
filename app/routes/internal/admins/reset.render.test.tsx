@@ -24,7 +24,7 @@ async function render() {
     {
       path: "/internal/admins/:adminId/reset",
       Component: ResetAdminPassword,
-      loader: () => ({ target: TARGET }),
+      loader: () => ({ targetId: "target-id", target: TARGET }),
     },
   ];
 

@@ -144,6 +144,7 @@
       "levelOneImageAlt": "Ilustración del plan inicial",
       "levelTwoImageAlt": "Ilustración del plan de crecimiento"
     },
+    "promoBadge": "Promoción activa (quedan {{days}} d)",
     "planLabel": "Tu plan",
     "managedNote": "Los planes los gestiona Shopify. Usa el botón de arriba para ver los planes disponibles, mejorar tu plan o cambiar tu suscripción.",
     "processing": {
@@ -157,7 +158,12 @@
       "perMonth": "{{price}}/mes",
       "perYear": "{{price}}/año",
       "flat": "{{price}}"
-    }
+    },
+    "loading": "Cargando tu plan",
+    "loadFailedHeading": "No pudimos cargar tu plan",
+    "loadFailedBody": "Vuelve a cargar la página para intentarlo de nuevo. Si sigue ocurriendo, contacta con soporte.",
+    "planLinkUnavailable": "El enlace del plan no está disponible en este momento. Vuelve a cargar la página para intentarlo de nuevo.",
+    "plansLoading": "Cargando planes"
   },
   "support": {
     "heading": "Soporte",
@@ -206,7 +212,8 @@
       "ccDialogHeading": "Poner a alguien en copia",
       "ccField": "Correo electrónico",
       "ccFieldPlaceholder": "colega@ejemplo.com",
-      "ccConfirm": "Añadir"
+      "ccConfirm": "Añadir",
+      "emailLoading": "Cargando el correo de contacto de tu tienda"
     },
     "thread": {
       "conversation": "Conversación",
@@ -221,7 +228,11 @@
       "created": "Abierto",
       "attachmentCount": "{{count}} archivo adjunto",
       "attachmentCount_plural": "{{count}} archivos adjuntos",
-      "download": "Abrir archivo"
+      "download": "Abrir archivo",
+      "pageHeading": "Ticket",
+      "loading": "Cargando la conversación",
+      "notFoundHeading": "No encontramos este ticket",
+      "notFoundBody": "Puede que se haya eliminado. Vuelve a tus tickets para encontrarlo."
     },
     "errors": {
       "rate_limited": "Has enviado muchos mensajes seguidos. Inténtalo de nuevo en un minuto.",
@@ -239,6 +250,9 @@
       "created": "Ticket enviado. Te responderemos aquí.",
       "replied": "Respuesta enviada.",
       "ccSaved": "Lista de copias guardada."
-    }
+    },
+    "loading": "Cargando tus tickets",
+    "loadFailedHeading": "No pudimos cargar tus tickets",
+    "loadFailedBody": "Vuelve a cargar la página para intentarlo de nuevo. Si sigue ocurriendo, contacta con soporte."
   }
 }

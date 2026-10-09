@@ -5,6 +5,7 @@ import { setupTestDatabase } from "~/test/db";
 import { McpAuditLogRepo, McpOAuthRepo, McpTokenRepo } from "./mcp.server";
 import { AdminUserRepo } from "./admin-users.server";
 import { hashPassword } from "~/lib/password";
+import { testRandomBytes } from "~/test/fake-runtime";
 
 setupTestDatabase();
 
@@ -17,7 +18,7 @@ describe("MCP Persistence Layer", () => {
   const auditRepo = new McpAuditLogRepo();
 
   async function createAdmin(email = "staff@example.com") {
-    const passwordHash = await hashPassword("ValidPassword123!");
+    const passwordHash = await hashPassword("ValidPassword123!", testRandomBytes);
     return adminRepo.create({
       id: `admin-${email.replace(/[^a-zA-Z0-9]/g, "_")}`,
       email,

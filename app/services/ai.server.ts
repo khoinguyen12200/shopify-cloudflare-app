@@ -12,6 +12,7 @@ import {
   type TextGenerator,
 } from "~/ports/ai";
 import type { AiRepository } from "~/ports/ai-repository";
+import type { Clock, Ids } from "~/ports/runtime";
 
 /**
  * RUN AN AI TASK. One method for every feature, and two for streaming.
@@ -36,14 +37,12 @@ import type { AiRepository } from "~/ports/ai-repository";
  * looks exactly like a feature nobody used.
  */
 
-interface Clock {
-  now(): number;
-}
-
 export interface AiServiceDependencies {
   readonly repo: AiRepository;
   readonly generator: TextGenerator;
   readonly clock: Clock;
+  /** Names each `ai_runs` row. */
+  readonly ids: Ids;
   readonly gate: AiGate;
 }
 
@@ -55,8 +54,9 @@ export interface AiStream {
 }
 
 export class AiService {
-  constructor({ repo, generator, clock, gate }: AiServiceDependencies) {
+  constructor({ repo, generator, clock, ids, gate }: AiServiceDependencies) {
     this.repo = repo;
+    this.ids = ids;
     this.generator = generator;
     this.clock = clock;
     this.gate = gate;
@@ -65,6 +65,7 @@ export class AiService {
   private readonly repo: AiRepository;
   private readonly generator: TextGenerator;
   private readonly clock: Clock;
+  private readonly ids: Ids;
   private readonly gate: AiGate;
 
   /** Run a task to completion. */
@@ -259,6 +260,7 @@ export class AiService {
     startedAt: number;
   }): Promise<void> {
     await this.repo.recordRun({
+      id: this.ids.uuid(),
       role: input.task.role,
       modelId: input.model,
       feature: input.task.feature,
@@ -309,6 +311,7 @@ export class AiService {
     startedAt: number;
   }): Promise<void> {
     return this.repo.recordRun({
+      id: this.ids.uuid(),
       role: input.task.role,
       modelId: input.model,
       feature: input.task.feature,

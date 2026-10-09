@@ -16,6 +16,36 @@ export async function loader({ request }: LoaderFunctionArgs) {
   return new Response("Method Not Allowed", { status: 405, headers: CORS_HEADERS });
 }
 
+const JSON_HEADERS = { "Content-Type": "application/json", ...CORS_HEADERS };
+
+function oauthError(error: string, description: string): Response {
+  return new Response(
+    JSON.stringify({ error, error_description: description }),
+    { status: 400, headers: JSON_HEADERS },
+  );
+}
+
+/** JSON or form-encoded registration body; null means malformed JSON. */
+async function readRegistrationBody(request: Request): Promise<Record<string, unknown> | null> {
+  const contentType = request.headers.get("Content-Type") || "";
+  if (contentType.includes("application/json")) return (await readJsonObject(request)) ?? null;
+  const body: Record<string, unknown> = {};
+  try {
+    const formData = await request.formData();
+    for (const [k, v] of formData.entries()) {
+      body[k] = v;
+    }
+    return body;
+  } catch {
+    return {};
+  }
+}
+
+function parseRedirectUris(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw.filter((u): u is string => typeof u === "string");
+  return typeof raw === "string" ? [raw] : [];
+}
+
 export async function action({ request }: ActionFunctionArgs) {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
@@ -24,53 +54,16 @@ export async function action({ request }: ActionFunctionArgs) {
     return new Response("Method Not Allowed", { status: 405, headers: CORS_HEADERS });
   }
 
-  let body: Record<string, unknown> = {};
-  const contentType = request.headers.get("Content-Type") || "";
-
-  if (contentType.includes("application/json")) {
-    const parsed = await readJsonObject(request);
-    if (!parsed) {
-      return new Response(
-        JSON.stringify({ error: "invalid_request", error_description: "Malformed JSON" }),
-        { status: 400, headers: { "Content-Type": "application/json", ...CORS_HEADERS } },
-      );
-    }
-    body = parsed;
-  } else {
-    try {
-      const formData = await request.formData();
-      for (const [k, v] of formData.entries()) {
-        body[k] = v;
-      }
-    } catch {
-      body = {};
-    }
-  }
+  const body = await readRegistrationBody(request);
+  if (!body) return oauthError("invalid_request", "Malformed JSON");
 
   const clientName = typeof body.client_name === "string" ? body.client_name : "MCP AI Agent";
-  const redirectUrisRaw = body.redirect_uris;
-
-  let redirectUris: string[] = [];
-  if (Array.isArray(redirectUrisRaw)) {
-    redirectUris = redirectUrisRaw.filter((u): u is string => typeof u === "string");
-  } else if (typeof redirectUrisRaw === "string") {
-    redirectUris = [redirectUrisRaw];
-  }
-
+  const redirectUris = parseRedirectUris(body.redirect_uris);
   if (redirectUris.length === 0) {
-    return new Response(
-      JSON.stringify({
-        error: "invalid_redirect_uri",
-        error_description: "redirect_uris must contain at least one valid URI",
-      }),
-      { status: 400, headers: { "Content-Type": "application/json", ...CORS_HEADERS } },
-    );
+    return oauthError("invalid_redirect_uri", "redirect_uris must contain at least one valid URI");
   }
 
-  const client = await registerDynamicClient({
-    clientName,
-    redirectUris,
-  });
+  const client = await registerDynamicClient({ clientName, redirectUris });
 
   return new Response(
     JSON.stringify({
@@ -83,11 +76,7 @@ export async function action({ request }: ActionFunctionArgs) {
     }),
     {
       status: 201,
-      headers: {
-        "Content-Type": "application/json",
-        "Cache-Control": "no-store",
-        ...CORS_HEADERS,
-      },
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store", ...CORS_HEADERS },
     },
   );
 }

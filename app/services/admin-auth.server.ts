@@ -1,5 +1,5 @@
-import { createCookieSessionStorage, redirect } from "react-router";
-import { getEnv } from "~/request-context.server";
+import { redirect } from "react-router";
+import { adminSessionStorage as sessionStorage } from "~/wiring.server";
 import { normalizeEmail, type AdminUserPort } from "~/ports/admin-users";
 import {
   DEFAULT_ITERATIONS,
@@ -8,44 +8,10 @@ import {
   verifyPassword,
 } from "~/lib/password";
 import type { AdminRole, SafeAdminUser } from "~/ports/admin-users";
+import type { Runtime } from "~/ports/runtime";
 
 export const LOGIN_PATH = "/internal/login";
 export const HOME_PATH = "/internal/dashboard";
-
-/**
- * Session cookie for the internal console.
- *
- * Built per request, not at module load: workerd has no `process.env`, so the
- * signing secret only exists on the `env` binding once a request is in flight.
- */
-function sessionStorage() {
-  const env = getEnv();
-  const secret = env.INTERNAL_SESSION_SECRET;
-
-  // Refuse to run with no secret rather than silently signing with a constant —
-  // an unsigned-in-practice session cookie is forgeable, and a default value
-  // that ships to production is worse than a crash on boot.
-  if (!secret) {
-    throw new Error(
-      "INTERNAL_SESSION_SECRET is not set. Add it to .dev.vars locally, and " +
-        "`wrangler secret put INTERNAL_SESSION_SECRET --env production`.",
-    );
-  }
-
-  return createCookieSessionStorage({
-    cookie: {
-      name: "__internal_session",
-      httpOnly: true,
-      path: "/",
-      sameSite: "lax",
-      secrets: [secret],
-      // Derived from the app URL, NOT process.env.NODE_ENV — that is undefined
-      // on workerd, so the cookie would never be Secure in production.
-      secure: (env.SHOPIFY_APP_URL ?? "").startsWith("https://"),
-      maxAge: 60 * 60 * 24 * 7,
-    },
-  });
-}
 
 const USER_ID_KEY = "adminUserId";
 
@@ -133,7 +99,7 @@ export type LoginResult =
 export async function verifyAdminCredentials(
   email: string,
   password: string,
-  deps: { users: Pick<AdminUserPort, "findByEmailWithHash" | "recordLogin" | "updatePassword"> },
+  deps: { users: Pick<AdminUserPort, "findByEmailWithHash" | "recordLogin" | "updatePassword">; runtime: Runtime },
 ): Promise<LoginResult> {
   const repo = deps.users;
   const user = await repo.findByEmailWithHash(normalizeEmail(email));
@@ -142,7 +108,7 @@ export async function verifyAdminCredentials(
     await verifyPassword(
       password,
       // A real, parseable hash of an unguessable value, so the work is identical.
-      await hashPassword(crypto.randomUUID(), DEFAULT_ITERATIONS),
+      await hashPassword(deps.runtime.ids.uuid(), deps.runtime.randomBytes, DEFAULT_ITERATIONS),
     );
     return { ok: false, reason: "invalidCredentials" };
   }
@@ -154,12 +120,12 @@ export async function verifyAdminCredentials(
   // does not reveal that the account exists.
   if (user.status !== "active") return { ok: false, reason: "disabled" };
 
-  const now = Date.now();
+  const now = deps.runtime.clock.now();
   await repo.recordLogin(user.id, now);
 
   // Upgrade opportunistically: this is the only moment the plaintext exists.
   if (needsRehash(user.passwordHash)) {
-    await repo.updatePassword(user.id, await hashPassword(password), now);
+    await repo.updatePassword(user.id, await hashPassword(password, deps.runtime.randomBytes), now);
   }
 
   const { passwordHash: _ignored, ...safe } = user;

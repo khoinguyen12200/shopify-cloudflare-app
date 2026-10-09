@@ -71,7 +71,23 @@ async function render(data: {
   now?: number;
 }) {
   const routes: RouteObject[] = [
-    { path: "/internal/shops/:shop", Component: ShopDetail, loader: () => data },
+    {
+      path: "/internal/shops/:shop",
+      Component: ShopDetail,
+      // The loader streams the detail as one region; resolved data is passed as
+      // the region's value, defaults filled in as the real loader fills them.
+      loader: () => ({
+        shopDomain: "cool-shop.myshopify.com",
+        detail: {
+          reconciliation: null,
+          promoStatus: { activeGrant: null, history: [] },
+          effective: { planHandle: "free", source: "organic", activePromo: null },
+          promoAvailablePlans: [],
+          now: 0,
+          ...data,
+        },
+      }),
+    },
   ];
   const handler = createStaticHandler(routes);
   const context = await handler.query(

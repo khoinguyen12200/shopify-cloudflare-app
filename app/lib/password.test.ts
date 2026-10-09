@@ -7,42 +7,51 @@ import {
   DEFAULT_ITERATIONS,
   MIN_PASSWORD_LENGTH,
 } from "./password";
+import { sequentialRandomBytes } from "~/test/fake-runtime";
+
+const randomBytes = sequentialRandomBytes();
 
 describe("hashPassword", () => {
   it("produces a self-describing hash", async () => {
-    const hash = await hashPassword("correct horse battery staple");
+    const hash = await hashPassword("correct horse battery staple", randomBytes);
     const [algorithm, digest, iterations] = hash.split("$");
     expect(algorithm).toBe("pbkdf2");
     expect(digest).toBe("sha256");
     expect(Number(iterations)).toBe(DEFAULT_ITERATIONS);
   });
 
+  it("is reproducible when the salt bytes are the same", async () => {
+    const a = await hashPassword("same password", sequentialRandomBytes(3), 1000);
+    const b = await hashPassword("same password", sequentialRandomBytes(3), 1000);
+    expect(a).toBe(b);
+  });
+
   it("salts, so the same password never yields the same hash", async () => {
-    const a = await hashPassword("same password", 1000);
-    const b = await hashPassword("same password", 1000);
+    const a = await hashPassword("same password", randomBytes, 1000);
+    const b = await hashPassword("same password", randomBytes, 1000);
     expect(a).not.toBe(b);
   });
 });
 
 describe("verifyPassword", () => {
   it("accepts the right password", async () => {
-    const hash = await hashPassword("s3cret-passphrase", 1000);
+    const hash = await hashPassword("s3cret-passphrase", randomBytes, 1000);
     expect(await verifyPassword("s3cret-passphrase", hash)).toBe(true);
   });
 
   it("rejects the wrong password", async () => {
-    const hash = await hashPassword("s3cret-passphrase", 1000);
+    const hash = await hashPassword("s3cret-passphrase", randomBytes, 1000);
     expect(await verifyPassword("s3cret-passphras", hash)).toBe(false);
   });
 
   it("is case-sensitive", async () => {
-    const hash = await hashPassword("CaseSensitive", 1000);
+    const hash = await hashPassword("CaseSensitive", randomBytes, 1000);
     expect(await verifyPassword("casesensitive", hash)).toBe(false);
   });
 
   it("verifies a hash made with a different iteration count", async () => {
     // The count lives in the hash, so old rows keep working after a raise.
-    const hash = await hashPassword("portable", 2000);
+    const hash = await hashPassword("portable", randomBytes, 2000);
     expect(await verifyPassword("portable", hash)).toBe(true);
   });
 
@@ -62,19 +71,19 @@ describe("verifyPassword", () => {
   });
 
   it("rejects an empty password against a real hash", async () => {
-    const hash = await hashPassword("nonempty", 1000);
+    const hash = await hashPassword("nonempty", randomBytes, 1000);
     expect(await verifyPassword("", hash)).toBe(false);
   });
 });
 
 describe("needsRehash", () => {
   it("flags a weaker stored hash", async () => {
-    const hash = await hashPassword("old", 1000);
+    const hash = await hashPassword("old", randomBytes, 1000);
     expect(needsRehash(hash, 2000)).toBe(true);
   });
 
   it("leaves a current hash alone", async () => {
-    const hash = await hashPassword("current", 2000);
+    const hash = await hashPassword("current", randomBytes, 2000);
     expect(needsRehash(hash, 2000)).toBe(false);
   });
 
@@ -105,7 +114,7 @@ describe("cost at the real iteration count", () => {
     // parameters are actually usable on workerd. If a future raise makes login
     // slow, this is what notices.
     const started = Date.now();
-    const hash = await hashPassword("realistic-password", DEFAULT_ITERATIONS);
+    const hash = await hashPassword("realistic-password", randomBytes, DEFAULT_ITERATIONS);
     const verified = await verifyPassword("realistic-password", hash);
     const elapsed = Date.now() - started;
 

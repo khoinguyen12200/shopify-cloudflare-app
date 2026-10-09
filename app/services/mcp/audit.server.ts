@@ -1,6 +1,6 @@
-import { nanoid } from "nanoid";
-import { mcpAuditLogs } from "~/wiring.server";
+import { appRuntime, mcpAuditLogs } from "~/wiring.server";
 import type { McpAuditLog } from "~/db/schema/mcp";
+import type { Runtime } from "~/ports/runtime";
 
 export interface RecordAuditInput {
   tokenId?: string | null;
@@ -16,10 +16,10 @@ export interface RecordAuditInput {
   createdAt?: number;
 }
 
-export async function recordAuditLog(input: RecordAuditInput): Promise<void> {
-  const now = input.createdAt ?? Date.now();
+export async function recordAuditLog(input: RecordAuditInput, runtime: Pick<Runtime, "clock" | "ids"> = appRuntime()): Promise<void> {
+  const now = input.createdAt ?? runtime.clock.now();
   await mcpAuditLogs().createLog({
-    id: `aud_${nanoid()}`,
+    id: `aud_${runtime.ids.uuid()}`,
     tokenId: input.tokenId ?? null,
     clientId: input.clientId ?? null,
     actorEmail: input.actorEmail,

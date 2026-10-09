@@ -129,53 +129,122 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   return redirect(redirectUri);
 };
 
+function AuthorizeError({ data }: { data: AuthorizeErrorData }) {
+  return (
+    <main className="min-h-screen flex items-center justify-center p-4 bg-background text-foreground">
+      <Card className="w-full max-w-md shadow-lg border-destructive/20">
+        <CardHeader>
+          <CardTitle className="text-destructive">Authorization Error</CardTitle>
+          <CardDescription>The authorization request could not be processed.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Alert variant="destructive">
+            <AlertDescription>
+              <strong>{data.error}</strong>: {data.description}
+            </AlertDescription>
+          </Alert>
+          <p className="text-xs text-muted-foreground">
+            Please check your client configuration and redirect URI.
+          </p>
+        </CardContent>
+      </Card>
+    </main>
+  );
+}
+
+function ShieldIcon() {
+  return (
+    <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+      <svg className="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+        />
+      </svg>
+    </div>
+  );
+}
+
+function ScopeList({ scopes }: { scopes: McpScope[] }) {
+  return (
+    <div className="space-y-3">
+      <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        Requested Permissions
+      </h4>
+      <div className="space-y-2">
+        {scopes.map((scope) => {
+          const desc = SCOPE_DESCRIPTIONS[scope];
+          return (
+            <div
+              key={scope}
+              className="p-3 rounded-md border border-border bg-card/60 flex flex-col space-y-1"
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-sm text-foreground">{desc?.label ?? scope}</span>
+                <code className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
+                  {scope}
+                </code>
+              </div>
+              {desc?.description && (
+                <p className="text-xs text-muted-foreground">{desc.description}</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ConsentForm({ data, isSubmitting }: { data: AuthorizeSuccessData; isSubmitting: boolean }) {
+  return (
+    <Form method="post" className="space-y-3 pt-2">
+      <input type="hidden" name="client_id" value={data.client.clientId} />
+      <input type="hidden" name="redirect_uri" value={data.redirectUri} />
+      <input type="hidden" name="scope" value={data.scopes.join(" ")} />
+      {data.state && <input type="hidden" name="state" value={data.state} />}
+      <input type="hidden" name="code_challenge" value={data.codeChallenge} />
+      <input type="hidden" name="code_challenge_method" value={data.codeChallengeMethod} />
+
+      <div className="flex flex-col sm:flex-row gap-2">
+        <Button
+          type="submit"
+          name="intent"
+          value="authorize"
+          className="w-full sm:flex-1"
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? "Authorizing..." : "Allow Access"}
+        </Button>
+        <Button
+          type="submit"
+          name="intent"
+          value="deny"
+          variant="outline"
+          className="w-full sm:w-auto"
+          disabled={isSubmitting}
+        >
+          Cancel
+        </Button>
+      </div>
+    </Form>
+  );
+}
+
 export default function AuthorizePage() {
   const data = useLoaderData<typeof loader>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
 
-  if (!data.ok) {
-    return (
-      <main className="min-h-screen flex items-center justify-center p-4 bg-background text-foreground">
-        <Card className="w-full max-w-md shadow-lg border-destructive/20">
-          <CardHeader>
-            <CardTitle className="text-destructive">Authorization Error</CardTitle>
-            <CardDescription>The authorization request could not be processed.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Alert variant="destructive">
-              <AlertDescription>
-                <strong>{data.error}</strong>: {data.description}
-              </AlertDescription>
-            </Alert>
-            <p className="text-xs text-muted-foreground">
-              Please check your client configuration and redirect URI.
-            </p>
-          </CardContent>
-        </Card>
-      </main>
-    );
-  }
+  if (!data.ok) return <AuthorizeError data={data} />;
 
   return (
     <main className="min-h-screen flex items-center justify-center p-4 bg-background text-foreground">
       <Card className="w-full max-w-lg shadow-xl border-border">
         <CardHeader className="text-center pb-2">
-          <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
-            <svg
-              className="w-6 h-6 text-primary"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-              />
-            </svg>
-          </div>
+          <ShieldIcon />
           <CardTitle className="text-xl font-bold">Authorize AI / MCP Agent</CardTitle>
           <CardDescription className="text-sm">
             <strong>{data.client.clientName}</strong> is requesting permission to access the internal admin console.
@@ -188,65 +257,8 @@ export default function AuthorizePage() {
             <span className="font-medium text-foreground">{data.user.email}</span>
           </div>
 
-          <div className="space-y-3">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Requested Permissions
-            </h4>
-            <div className="space-y-2">
-              {data.scopes.map((scope) => {
-                const desc = SCOPE_DESCRIPTIONS[scope];
-                return (
-                  <div
-                    key={scope}
-                    className="p-3 rounded-md border border-border bg-card/60 flex flex-col space-y-1"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium text-sm text-foreground">
-                        {desc?.label ?? scope}
-                      </span>
-                      <code className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
-                        {scope}
-                      </code>
-                    </div>
-                    {desc?.description && (
-                      <p className="text-xs text-muted-foreground">{desc.description}</p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <Form method="post" className="space-y-3 pt-2">
-            <input type="hidden" name="client_id" value={data.client.clientId} />
-            <input type="hidden" name="redirect_uri" value={data.redirectUri} />
-            <input type="hidden" name="scope" value={data.scopes.join(" ")} />
-            {data.state && <input type="hidden" name="state" value={data.state} />}
-            <input type="hidden" name="code_challenge" value={data.codeChallenge} />
-            <input type="hidden" name="code_challenge_method" value={data.codeChallengeMethod} />
-
-            <div className="flex flex-col sm:flex-row gap-2">
-              <Button
-                type="submit"
-                name="intent"
-                value="authorize"
-                className="w-full sm:flex-1"
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? "Authorizing..." : "Allow Access"}
-              </Button>
-              <Button
-                type="submit"
-                name="intent"
-                value="deny"
-                variant="outline"
-                className="w-full sm:w-auto"
-                disabled={isSubmitting}
-              >
-                Cancel
-              </Button>
-            </div>
-          </Form>
+          <ScopeList scopes={data.scopes} />
+          <ConsentForm data={data} isSubmitting={isSubmitting} />
 
           <p className="text-[11px] text-center text-muted-foreground">
             You can review or revoke agent access anytime in the Internal Admin under MCP & API.

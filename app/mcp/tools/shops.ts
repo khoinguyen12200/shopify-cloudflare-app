@@ -10,7 +10,7 @@ import {
 } from "~/services/internal-admin/ops.server";
 import { mcpMutation, mcpRead, MUTATION, READ_ONLY, type McpActorContext } from "../helpers";
 
-export function registerShopTools(server: McpServer, ctx: McpActorContext) {
+function registerListNewStores(server: McpServer, ctx: McpActorContext) {
   server.registerTool(
     "list_new_stores",
     {
@@ -27,7 +27,9 @@ export function registerShopTools(server: McpServer, ctx: McpActorContext) {
       listNewStores({ sinceHours: args.sinceHours ?? 24, type: args.type ?? "all" }),
     ),
   );
+}
 
+function registerListShops(server: McpServer, ctx: McpActorContext) {
   server.registerTool(
     "list_shops",
     {
@@ -51,7 +53,9 @@ export function registerShopTools(server: McpServer, ctx: McpActorContext) {
       }),
     ),
   );
+}
 
+function registerGetShopDossier(server: McpServer, ctx: McpActorContext) {
   server.registerTool(
     "get_shop_dossier",
     {
@@ -69,7 +73,9 @@ export function registerShopTools(server: McpServer, ctx: McpActorContext) {
       return dossier;
     }),
   );
+}
 
+function registerSetShopDevStatus(server: McpServer, ctx: McpActorContext) {
   server.registerTool(
     "set_shop_dev_status",
     {
@@ -88,7 +94,9 @@ export function registerShopTools(server: McpServer, ctx: McpActorContext) {
       return { success: true, shop: args.shop, isDevStore: args.isDevStore };
     }),
   );
+}
 
+function registerGetShopWebhookStatus(server: McpServer, ctx: McpActorContext) {
   server.registerTool(
     "get_shop_webhook_status",
     {
@@ -106,7 +114,9 @@ export function registerShopTools(server: McpServer, ctx: McpActorContext) {
       return status;
     }),
   );
+}
 
+function registerListWebhookFailures(server: McpServer, ctx: McpActorContext) {
   server.registerTool(
     "list_webhook_failures",
     {
@@ -128,4 +138,13 @@ export function registerShopTools(server: McpServer, ctx: McpActorContext) {
       }),
     ),
   );
+}
+
+export function registerShopTools(server: McpServer, ctx: McpActorContext) {
+  registerListNewStores(server, ctx);
+  registerListShops(server, ctx);
+  registerGetShopDossier(server, ctx);
+  registerSetShopDevStatus(server, ctx);
+  registerGetShopWebhookStatus(server, ctx);
+  registerListWebhookFailures(server, ctx);
 }

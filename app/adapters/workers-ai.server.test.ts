@@ -44,12 +44,12 @@ describe("generating text", () => {
   it("sends the system message as a system prompt, not as a user turn", async () => {
     // A system instruction pasted into the user turn is followed far less
     // reliably, and shows up verbatim in the output on some models.
-    let seenPrompt: unknown;
+    let seenRoles: readonly string[] = [];
     const generator = new WorkersAiGenerator({
       languageModel: () =>
         new MockLanguageModelV4({
           doGenerate: async (options) => {
-            seenPrompt = options.prompt;
+            seenRoles = options.prompt.map((message) => message.role);
             return {
               finishReason: { unified: "stop", raw: "stop" },
               usage: { inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 }, outputTokens: { total: 1, text: 1, reasoning: 0 }, totalTokens: 2 },
@@ -62,9 +62,7 @@ describe("generating text", () => {
 
     await generator.generate({ model: "@cf/test/model", messages });
 
-    const prompt = seenPrompt as { role: string }[];
-    expect(prompt[0]?.role).toBe("system");
-    expect(prompt[1]?.role).toBe("user");
+    expect(seenRoles.slice(0, 2)).toEqual(["system", "user"]);
   });
 
 

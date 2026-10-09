@@ -5,6 +5,7 @@ import type { SupportCategory } from "~/support/categories";
 import type { SupportAttachment, SupportAuthor, SupportThread, SupportTicket } from "~/support/types";
 import type { ExpiredUpload } from "~/ports/scheduled";
 import { chunk } from "~/lib/chunk";
+import type { Ids } from "~/ports/runtime";
 
 export type { SupportThread } from "~/support/types";
 
@@ -20,6 +21,8 @@ const ATTACH_CHUNK = 10;
  * `findForStaff` serve the internal console, which is deliberately cross-shop.
  */
 export class SupportRepo {
+  constructor(private readonly ids: Ids) {}
+
   async stageUpload(input: {
     id: string; shop: string; ticketId: string | null; r2Key: string;
     filename: string; contentType: string; sizeBytes: number; createdAt: number; expiresAt: number;
@@ -104,8 +107,8 @@ export class SupportRepo {
     locale: string | null;
     at: number;
   }): Promise<{ id: string; messageId: string }> {
-    const id = crypto.randomUUID();
-    const messageId = crypto.randomUUID();
+    const id = this.ids.uuid();
+    const messageId = this.ids.uuid();
     const db = getDb();
 
     await db.insert(supportTickets).values({
@@ -151,8 +154,8 @@ export class SupportRepo {
     locale?: string | null;
     at: number;
   }): Promise<{ id: string; messageId: string }> {
-    const id = crypto.randomUUID();
-    const messageId = crypto.randomUUID();
+    const id = this.ids.uuid();
+    const messageId = this.ids.uuid();
     const db = getDb();
 
     await db.insert(supportTickets).values({
@@ -335,7 +338,7 @@ export class SupportRepo {
     },
   ): Promise<string> {
     const db = getDb();
-    const messageId = crypto.randomUUID();
+    const messageId = this.ids.uuid();
 
     await db.insert(supportMessages).values({
       id: messageId,

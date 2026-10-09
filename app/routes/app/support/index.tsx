@@ -4,6 +4,8 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useTranslation } from "react-i18next";
 
 import { authenticateAdmin } from "~/admin/require-merchant.server";
+import { settle } from "~/admin/settle.server";
+import { Deferred, FailedSection, PendingSection } from "~/components/admin/Deferred";
 import { useLocale } from "~/i18n/useLocale";
 import { formatDate } from "~/i18n/format";
 import { useTimeZone } from "~/i18n/useTimeZone";
@@ -13,24 +15,31 @@ import { CATEGORY_LABEL_KEY } from "~/support/categories";
 
 export const handle = { i18n: ["common", "admin"] };
 
-export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticateAdmin(request);
-  const tickets = await supportService().listForShop(session.shop);
-
-  // Derived here, not in the component: the row only renders what it is given,
-  // and the status rules live in one pure function (app/support/status.ts).
-  return {
-    tickets: tickets.map((ticket) => ({
-      id: ticket.id,
-      subject: ticket.subject,
-      category: ticket.category,
-      status: statusOf(ticket),
+/** Derived here, not in the component: the row only renders what it is given, and the status rules live in one pure function (app/support/status.ts). */
+async function readTickets(shop: string) {
+  const tickets = await supportService().listForShop(shop);
+  return tickets.map((ticket) => ({
+    id: ticket.id,
+    subject: ticket.subject,
+    category: ticket.category,
+    status: statusOf(ticket),
+    lastMessageAt: ticket.lastMessageAt,
+    unread: isUnreadFor({
       lastMessageAt: ticket.lastMessageAt,
-      unread: isUnreadFor({
-        lastMessageAt: ticket.lastMessageAt,
-        lastReadAt: ticket.merchantLastReadAt,
-      }),
-    })),
+      lastReadAt: ticket.merchantLastReadAt,
+    }),
+  }));
+}
+
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  // Authentication is awaited; the tickets stream so the frame renders at once.
+  const { session } = await authenticateAdmin(request);
+  return {
+    tickets: settle(readTickets(session.shop), {
+      event: "admin.support.tickets.failed",
+      shop: session.shop,
+      route: "app/support",
+    }),
   };
 };
 
@@ -45,11 +54,63 @@ const STATUS_TONE: Record<SupportStatus, "info" | "success" | "neutral"> = {
   closed: "neutral",
 };
 
-export default function SupportIndex() {
-  const { tickets } = useLoaderData<typeof loader>();
+type TicketRows = Awaited<ReturnType<typeof readTickets>>;
+
+/*
+ * `padding="none"` so the table meets the card's edges. A table is a
+ * grid of its own, with its own header rule and row separators, and
+ * inset inside a padded card it reads as a second, smaller box floating
+ * in a bigger one. Full-bleed, the card's edge IS the table's frame.
+ *
+ * Nothing above the table: the page heading already says Support and
+ * the New ticket button already says what to do, so a line of prose
+ * repeating both only pushed the merchant's own tickets further down.
+ */
+function TicketTable({ tickets }: { tickets: TicketRows }) {
   const { t } = useTranslation(["admin", "common"]);
   const locale = useLocale();
   const timeZone = useTimeZone();
+
+  return (
+    <s-section padding="none">
+      <s-table variant="auto">
+        <s-table-header-row>
+          <s-table-header listSlot="primary">{t("support.columns.subject")}</s-table-header>
+          <s-table-header listSlot="labeled">{t("support.columns.category")}</s-table-header>
+          <s-table-header listSlot="inline">{t("support.columns.status")}</s-table-header>
+          <s-table-header listSlot="secondary">{t("support.columns.updated")}</s-table-header>
+        </s-table-header-row>
+        <s-table-body>
+          {tickets.map((ticket) => (
+            // The whole row is clickable, delegated to the subject link so
+            // there is still one real anchor for keyboard and middle-click.
+            <s-table-row key={ticket.id} clickDelegate={`ticket-${ticket.id}`}>
+              <s-table-cell>
+                <s-stack direction="inline" gap="small-300" alignItems="center">
+                  <s-link id={`ticket-${ticket.id}`} href={`/app/support/${ticket.id}`}>
+                    {ticket.subject}
+                  </s-link>
+                  {ticket.unread && <s-badge tone="info">{t("support.unread")}</s-badge>}
+                </s-stack>
+              </s-table-cell>
+              <s-table-cell>{t(CATEGORY_LABEL_KEY[ticket.category])}</s-table-cell>
+              <s-table-cell>
+                <s-badge tone={STATUS_TONE[ticket.status]}>
+                  {t(`support.status.${ticket.status}`)}
+                </s-badge>
+              </s-table-cell>
+              <s-table-cell>{formatDate(locale, ticket.lastMessageAt, timeZone)}</s-table-cell>
+            </s-table-row>
+          ))}
+        </s-table-body>
+      </s-table>
+    </s-section>
+  );
+}
+
+export default function SupportIndex() {
+  const { tickets } = useLoaderData<typeof loader>();
+  const { t } = useTranslation(["admin", "common"]);
 
   return (
     <s-page heading={t("support.heading")}>
@@ -57,77 +118,13 @@ export default function SupportIndex() {
         {t("support.newTicket")}
       </s-button>
 
-      {tickets.length === 0 ? (
-        <EmptyState />
-      ) : (
-        /*
-         * `padding="none"` so the table meets the card's edges. A table is a
-         * grid of its own, with its own header rule and row separators, and
-         * inset inside a padded card it reads as a second, smaller box floating
-         * in a bigger one. Full-bleed, the card's edge IS the table's frame.
-         *
-         * Nothing above the table: the page heading already says Support and
-         * the New ticket button already says what to do, so a line of prose
-         * repeating both only pushed the merchant's own tickets further down.
-         */
-        <s-section padding="none">
-          <s-table variant="auto">
-            <s-table-header-row>
-              <s-table-header listSlot="primary">
-                {t("support.columns.subject")}
-              </s-table-header>
-              <s-table-header listSlot="labeled">
-                {t("support.columns.category")}
-              </s-table-header>
-              <s-table-header listSlot="inline">
-                {t("support.columns.status")}
-              </s-table-header>
-              <s-table-header listSlot="secondary">
-                {t("support.columns.updated")}
-              </s-table-header>
-            </s-table-header-row>
-            <s-table-body>
-              {tickets.map((ticket) => (
-                // The whole row is clickable, delegated to the subject link so
-                // there is still one real anchor for keyboard and middle-click.
-                <s-table-row
-                  key={ticket.id}
-                  clickDelegate={`ticket-${ticket.id}`}
-                >
-                  <s-table-cell>
-                    <s-stack
-                      direction="inline"
-                      gap="small-300"
-                      alignItems="center"
-                    >
-                      <s-link
-                        id={`ticket-${ticket.id}`}
-                        href={`/app/support/${ticket.id}`}
-                      >
-                        {ticket.subject}
-                      </s-link>
-                      {ticket.unread && (
-                        <s-badge tone="info">{t("support.unread")}</s-badge>
-                      )}
-                    </s-stack>
-                  </s-table-cell>
-                  <s-table-cell>
-                    {t(CATEGORY_LABEL_KEY[ticket.category])}
-                  </s-table-cell>
-                  <s-table-cell>
-                    <s-badge tone={STATUS_TONE[ticket.status]}>
-                      {t(`support.status.${ticket.status}`)}
-                    </s-badge>
-                  </s-table-cell>
-                  <s-table-cell>
-                    {formatDate(locale, ticket.lastMessageAt, timeZone)}
-                  </s-table-cell>
-                </s-table-row>
-              ))}
-            </s-table-body>
-          </s-table>
-        </s-section>
-      )}
+      <Deferred
+        resolve={tickets}
+        pending={<PendingSection label={t("support.loading")} />}
+        failed={<FailedSection heading={t("support.loadFailedHeading")} body={t("support.loadFailedBody")} />}
+      >
+        {(rows) => (rows.length === 0 ? <EmptyState /> : <TicketTable tickets={rows} />)}
+      </Deferred>
     </s-page>
   );
 }

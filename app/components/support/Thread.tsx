@@ -1,3 +1,5 @@
+import type { ReactElement } from "react";
+
 /**
  * The conversation itself: one bubble per message, merchant on one side and
  * support on the other.
@@ -76,78 +78,108 @@ export const THREAD_CSS = `
 .sup-msg__download-meta { font-size: 0.75rem; color: var(--sup-meta); }
 `;
 
-export function Thread({
-  messages,
-  youLabel,
-  formatWhen,
-  formatFileSize,
-  downloadLabel,
-}: {
+type ThreadAttachment = ThreadMessage["attachments"][number];
+
+type AttachmentRenderProps = {
+  file: ThreadAttachment;
+  formatFileSize: (sizeBytes: number) => string;
+  downloadLabel: string;
+};
+
+/** Playable in place: making someone download a screen recording to see it defeats the point of attaching one. */
+function VideoAttachment({ file }: AttachmentRenderProps) {
+  return <video className="sup-msg__file" src={file.url} controls preload="metadata" />;
+}
+
+function ImageAttachment({ file }: AttachmentRenderProps) {
+  return (
+    <a className="sup-msg__file" href={file.url} target="_blank" rel="noreferrer">
+      <img src={file.url} alt={file.filename} loading="lazy" />
+    </a>
+  );
+}
+
+function FileAttachment({ file, formatFileSize, downloadLabel }: AttachmentRenderProps) {
+  return (
+    <a className="sup-msg__download" href={file.url} download={file.filename}>
+      <span className="sup-msg__download-icon">{fileExtensionLabel(file.filename)}</span>
+      <span className="sup-msg__download-copy">
+        <span className="sup-msg__download-name">{file.filename}</span>
+        <span className="sup-msg__download-meta">{formatFileSize(file.sizeBytes)} · {downloadLabel}</span>
+      </span>
+    </a>
+  );
+}
+
+/** Keyed by the closed kind union, so a new kind fails the build until it has a renderer. */
+const ATTACHMENT_RENDERERS: Record<ThreadAttachment["kind"], (props: AttachmentRenderProps) => ReactElement> = {
+  video: VideoAttachment,
+  image: ImageAttachment,
+  file: FileAttachment,
+};
+
+type ThreadProps = {
   messages: readonly ThreadMessage[];
   /** What to call the merchant's own messages — "You", translated. */
   youLabel: string;
   formatWhen: (at: number) => string;
   formatFileSize: (sizeBytes: number) => string;
   downloadLabel: string;
-}) {
+};
+
+function MessageAttachments({
+  attachments,
+  formatFileSize,
+  downloadLabel,
+}: Pick<ThreadProps, "formatFileSize" | "downloadLabel"> & { attachments: readonly ThreadAttachment[] }) {
   return (
-    <div className="sup-thread">
-      {messages.map((message) => {
-        const mine = message.author === "merchant";
+    <div className="sup-msg__files">
+      {attachments.map((file) => {
+        const Render = ATTACHMENT_RENDERERS[file.kind];
         return (
-          <div
-            key={message.id}
-            className={mine ? "sup-msg sup-msg--mine" : "sup-msg"}
-          >
-            <div className="sup-msg__bubble">
-              <div className="sup-msg__head">
-                <span className="sup-msg__who">
-                  {mine ? youLabel : message.authorName}
-                </span>
-                <span>{formatWhen(message.createdAt)}</span>
-              </div>
-
-              {message.body && <div className="sup-msg__body">{message.body}</div>}
-
-              {message.attachments.length > 0 && (
-                <div className="sup-msg__files">
-                  {message.attachments.map((file) =>
-                    file.kind === "video" ? (
-                      // Playable in place: making someone download a screen
-                      // recording to see it defeats the point of attaching one.
-                      <video
-                        key={file.id}
-                        className="sup-msg__file"
-                        src={file.url}
-                        controls
-                        preload="metadata"
-                      />
-                    ) : file.kind === "image" ? (
-                      <a
-                        key={file.id}
-                        className="sup-msg__file"
-                        href={file.url}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        <img src={file.url} alt={file.filename} loading="lazy" />
-                      </a>
-                    ) : (
-                      <a key={file.id} className="sup-msg__download" href={file.url} download={file.filename}>
-                        <span className="sup-msg__download-icon">{fileExtensionLabel(file.filename)}</span>
-                        <span className="sup-msg__download-copy">
-                          <span className="sup-msg__download-name">{file.filename}</span>
-                          <span className="sup-msg__download-meta">{formatFileSize(file.sizeBytes)} · {downloadLabel}</span>
-                        </span>
-                      </a>
-                    ),
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
+          <Render key={file.id} file={file} formatFileSize={formatFileSize} downloadLabel={downloadLabel} />
         );
       })}
+    </div>
+  );
+}
+
+function MessageBubble({
+  message,
+  youLabel,
+  formatWhen,
+  formatFileSize,
+  downloadLabel,
+}: Omit<ThreadProps, "messages"> & { message: ThreadMessage }) {
+  const mine = message.author === "merchant";
+  return (
+    <div className={mine ? "sup-msg sup-msg--mine" : "sup-msg"}>
+      <div className="sup-msg__bubble">
+        <div className="sup-msg__head">
+          <span className="sup-msg__who">{mine ? youLabel : message.authorName}</span>
+          <span>{formatWhen(message.createdAt)}</span>
+        </div>
+
+        {message.body && <div className="sup-msg__body">{message.body}</div>}
+
+        {message.attachments.length > 0 && (
+          <MessageAttachments
+            attachments={message.attachments}
+            formatFileSize={formatFileSize}
+            downloadLabel={downloadLabel}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function Thread({ messages, ...rest }: ThreadProps) {
+  return (
+    <div className="sup-thread">
+      {messages.map((message) => (
+        <MessageBubble key={message.id} message={message} {...rest} />
+      ))}
     </div>
   );
 }

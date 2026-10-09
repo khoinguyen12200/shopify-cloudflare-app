@@ -1,7 +1,6 @@
 import { emailChannel } from "./channels/email/channel.server";
 import type {
   Channel,
-  EmailMessage,
   Message,
   NotificationEvent,
   Policy,
@@ -9,6 +8,7 @@ import type {
   SendOutcome,
 } from "./types";
 import type { NotificationLogsPort } from "~/ports/notification-logs";
+import type { Runtime } from "~/ports/runtime";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ONE way to send a notification: dedupe → policy → reserve → send → settle.
@@ -137,6 +137,7 @@ export async function dispatch(
   meta: DispatchMeta,
   context: SendContext,
   logs: NotificationLogsPort,
+  runtime: Pick<Runtime, "clock" | "ids">,
 ): Promise<DispatchResult> {
 
   // Before anything else: has this already been handled? A skipped duplicate
@@ -148,8 +149,8 @@ export async function dispatch(
     }
   }
 
-  const logId = meta.logId ?? crypto.randomUUID();
-  const now = Date.now();
+  const logId = meta.logId ?? runtime.ids.uuid();
+  const now = runtime.clock.now();
 
   await logs.reserve({
     id: logId,
@@ -170,7 +171,7 @@ export async function dispatch(
     providerStatus: outcome.status === "refused" ? undefined : outcome.providerStatus,
     providerMessageId:
       outcome.status === "sent" ? outcome.providerMessageId : undefined,
-    now: Date.now(),
+    now: runtime.clock.now(),
   });
 
   if (outcome.status === "failed" && outcome.retriable) {
@@ -216,13 +217,4 @@ async function runEntry<M extends Message>(
       detail: error instanceof Error ? error.message : "transport threw",
     };
   }
-}
-
-/** Convenience for the common case. Kept thin — it only builds the message. */
-export async function dispatchEmail(
-  input: Omit<EmailMessage, "kind"> & DispatchMeta,
-  logs: NotificationLogsPort,
-): Promise<DispatchResult> {
-  const { event, dedupeKey, shop, logId, ...email } = input;
-  return dispatch({ kind: "email", ...email }, { event, dedupeKey, shop, logId }, {}, logs);
 }

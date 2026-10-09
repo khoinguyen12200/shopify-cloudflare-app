@@ -9,12 +9,16 @@ import type { PayloadByEvent } from "./payloads";
 import type { ChannelKey, Message, NotificationEvent } from "./types";
 import type { NotificationLogsPort } from "~/ports/notification-logs";
 import type { NotificationSettingsPort } from "~/ports/notification-settings";
+import type { Runtime } from "~/ports/runtime";
 
 const GLOBAL_SCOPE = "global";
 
 export interface NotifyDependencies {
   readonly logs: NotificationLogsPort;
   readonly settings: NotificationSettingsPort;
+  readonly runtime: Pick<Runtime, "clock" | "ids">;
+  /** Channels whose transport is configured right now. */
+  readonly availableChannels: readonly ChannelKey[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -79,35 +83,39 @@ export interface NotifyResult {
   decisions: ChannelDecision[];
 }
 
-export async function notify<E extends NotificationEvent>(
+/**
+ * A pre-minted id names exactly ONE row, whichever outcome writes it first — a
+ * refusal included, so the id a caller was handed always resolves to a row. The
+ * first call yields it; every later call yields undefined.
+ */
+function claimOnce(logId: string | undefined): () => string | undefined {
+  let unspent = logId;
+  return () => {
+    const claimed = unspent;
+    unspent = undefined;
+    return claimed;
+  };
+}
+
+/**
+ * A refusal gets its own `refused` ROW, not just a log line.
+ *
+ * This is the record that answers "why didn't they get it?". A console line is
+ * not that: it is unqueryable, it ages out, and it leaves a suppressed
+ * notification indistinguishable from one that was never requested. The status
+ * is `refused` rather than `failed` because nothing was attempted.
+ */
+async function recordRefusals<E extends NotificationEvent>(
   input: NotifyRequest<E>,
+  decisions: readonly ChannelDecision[],
   dependencies: NotifyDependencies,
-): Promise<NotifyResult> {
-  const context = await loadEligibilityContext({
-    event: input.event,
-    addresses: input.to,
-    scope: input.scope,
-  }, dependencies.settings);
-
-  const eligibility = resolveEligibility(context);
-
-  // A refusal gets its own `refused` ROW, not just a log line.
-  //
-  // This is the record that answers "why didn't they get it?". A console line is
-  // not that: it is unqueryable, it ages out, and it leaves a suppressed
-  // notification indistinguishable from one that was never requested. The status
-  // is `refused` rather than `failed` because nothing was attempted.
-  const logs = dependencies.logs;
-  const now = Date.now();
-  // A pre-minted id names exactly ONE row, whichever outcome writes it first —
-  // a refusal included, so the id a caller was handed always resolves to a row.
-  let unspentLogId = input.logId;
-
-  for (const decision of eligibility.decisions) {
+  claimLogId: () => string | undefined,
+): Promise<void> {
+  const now = dependencies.runtime.clock.now();
+  for (const decision of decisions) {
     if (decision.allowed) continue;
-    const id = unspentLogId ?? crypto.randomUUID();
-    unspentLogId = undefined;
-    await logs.recordSettled({
+    const id = claimLogId() ?? dependencies.runtime.ids.uuid();
+    await dependencies.logs.recordSettled({
       id,
       event: input.event,
       channel: decision.channel,
@@ -121,10 +129,18 @@ export async function notify<E extends NotificationEvent>(
       now,
     });
   }
+}
 
+/** Compose and dispatch on every channel the rules allowed, one row each. */
+async function dispatchAllowed<E extends NotificationEvent>(
+  input: NotifyRequest<E>,
+  channels: readonly ChannelKey[],
+  dependencies: NotifyDependencies,
+  claimLogId: () => string | undefined,
+): Promise<DispatchResult[]> {
   const dispatched: DispatchResult[] = [];
 
-  for (const channel of eligibility.allowed) {
+  for (const channel of channels) {
     // Guaranteed present: `recipientReachable` refused the channel otherwise.
     const to = input.to[channel];
     if (!to) continue;
@@ -142,17 +158,35 @@ export async function notify<E extends NotificationEvent>(
       }),
     );
 
-    const logId = unspentLogId;
-    unspentLogId = undefined;
     dispatched.push(
       await dispatch(message, {
         event: input.event,
         dedupeKey: input.dedupeKey,
         shop: input.scope,
-        logId,
-      }, {}, dependencies.logs),
+        logId: claimLogId(),
+      }, {}, dependencies.logs, dependencies.runtime),
     );
   }
+
+  return dispatched;
+}
+
+export async function notify<E extends NotificationEvent>(
+  input: NotifyRequest<E>,
+  dependencies: NotifyDependencies,
+): Promise<NotifyResult> {
+  const context = await loadEligibilityContext({
+    event: input.event,
+    addresses: input.to,
+    scope: input.scope,
+    availableChannels: dependencies.availableChannels,
+  }, dependencies.settings);
+
+  const eligibility = resolveEligibility(context);
+  const claimLogId = claimOnce(input.logId);
+
+  await recordRefusals(input, eligibility.decisions, dependencies, claimLogId);
+  const dispatched = await dispatchAllowed(input, eligibility.allowed, dependencies, claimLogId);
 
   return {
     event: input.event,

@@ -1,5 +1,6 @@
 import {
   aiRepository,
+  appRuntime,
   operationalHealth,
   shopMetrics,
   supportService,
@@ -113,7 +114,7 @@ export async function getRevenueAndPlans({
 export async function getChurnAndRetention({
   periodDays = 30,
   days,
-  now = Date.now(),
+  now = appRuntime().clock.now(),
 }: {
   periodDays?: number;
   days?: number;
@@ -196,7 +197,7 @@ export async function listWebhookFailures({
 /** Workers AI spend and tokens telemetry. */
 export async function getAiSpendAndUsage({
   sinceDays = 30,
-  now = Date.now(),
+  now = appRuntime().clock.now(),
 }: {
   sinceDays?: number;
   now?: number;

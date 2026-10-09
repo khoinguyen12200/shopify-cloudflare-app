@@ -5,6 +5,7 @@ import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { useTranslation } from "react-i18next";
 
 import { authenticateAdmin } from "~/admin/require-merchant.server";
+import { useNavigationLoading } from "~/admin/use-navigation-loading";
 import { getEnv } from "~/request-context.server";
 import { persistShopIdentity, shopTimeZone } from "~/wiring.server";
 import { TimeZoneProvider } from "~/i18n/useTimeZone";
@@ -55,6 +56,7 @@ export const shouldRevalidate: ShouldRevalidateFunction = ({ formMethod, default
 export default function App() {
   const { apiKey, timeZone } = useLoaderData<typeof loader>();
   const { t } = useTranslation("admin");
+  useNavigationLoading();
 
   return (
     <AppProvider apiKey={apiKey}>

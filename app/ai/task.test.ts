@@ -9,6 +9,7 @@ import { z } from "zod";
 import { defineAiObjectTask, defineAiTask } from "./task";
 import { allowAll, type AiCaller } from "./gate";
 import type { ModelRole } from "./roles";
+import { testIds } from "~/test/fake-runtime";
 
 setupTestDatabase();
 
@@ -35,7 +36,7 @@ const inventedTask = defineAiTask<{ productTitle: string; audience: string }>({
 });
 
 const service = (generator = fakeTextGenerator()) =>
-  new AiService({ repo: new AiRepo(), generator, clock: { now: () => AT }, gate: allowAll });
+  new AiService({ repo: new AiRepo(), generator, clock: { now: () => AT }, ids: testIds, gate: allowAll });
 
 async function chain(role: ModelRole, models: string[]) {
   const repo = new AiRepo();
@@ -108,7 +109,7 @@ describe("adding a new AI feature", () => {
 
     const result = await inRequest(async () => {
       await chain("writing", ["@cf/a/one"]);
-      return new AiService({ repo: new AiRepo(), generator, clock: { now: () => AT }, gate: refuseAll }).run(
+      return new AiService({ repo: new AiRepo(), generator, clock: { now: () => AT }, ids: testIds, gate: refuseAll }).run(
         inventedTask,
         { productTitle: "K", audience: "c" },
         STAFF,
@@ -229,7 +230,7 @@ describe("a task that wants a shape, not prose", () => {
 
     const result = await inRequest(async () => {
       await chain("classification", ["@cf/a/one", "@cf/b/two"]);
-      return new AiService({ repo: new AiRepo(), generator, clock: { now: () => AT }, gate: allowAll }).runObject(
+      return new AiService({ repo: new AiRepo(), generator, clock: { now: () => AT }, ids: testIds, gate: allowAll }).runObject(
         triageTask,
         { subject: "x" },
         STAFF,

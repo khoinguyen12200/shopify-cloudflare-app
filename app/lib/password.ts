@@ -18,6 +18,8 @@
  * migrated.
  */
 
+import type { RandomBytes } from "~/ports/runtime";
+
 const ALGORITHM = "pbkdf2";
 const DIGEST = "sha256";
 /** OWASP's floor for PBKDF2-HMAC-SHA256. Raise it, never lower it. */
@@ -63,9 +65,10 @@ async function derive(
 /** Hash a password for storage. A fresh random salt every time. */
 export async function hashPassword(
   password: string,
+  randomBytes: RandomBytes,
   iterations: number = DEFAULT_ITERATIONS,
 ): Promise<string> {
-  const salt = crypto.getRandomValues(new Uint8Array(SALT_BYTES));
+  const salt = randomBytes(SALT_BYTES);
   const bits = await derive(password, salt, iterations);
   return [
     ALGORITHM,

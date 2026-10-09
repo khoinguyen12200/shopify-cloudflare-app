@@ -12,14 +12,17 @@ import {
   changeOwnPassword,
   updateOwnProfile,
 } from "./admin-management.server";
-import { verifyPassword } from "~/lib/password";
+import { DEFAULT_ITERATIONS, hashPassword, verifyPassword } from "~/lib/password";
+import { fakeRuntime, sequentialRandomBytes } from "~/test/fake-runtime";
+import { defined } from "~/test/defined";
+const runtime = fakeRuntime();
 
 setupTestDatabase();
 
 const inRequest = <T>(fn: () => Promise<T>) => runWithRequestContext(env, fn);
 
 const GOOD_PASSWORD = "a-long-enough-password";
-const adminDeps = { users: new AdminUserRepo() };
+const adminDeps = { users: new AdminUserRepo(), runtime };
 
 /** Create an owner directly, bypassing the use case, as a fixture. */
 async function seedOwner(email = "owner@example.com") {
@@ -49,6 +52,24 @@ describe("createAdmin", () => {
     expect(found?.email).toBe("ada@example.com");
   });
 
+  it("takes the id, the creation time and the salt from the injected runtime", async () => {
+    const own = fakeRuntime({ start: 1_900_000_000_000, idPrefix: "admin", seed: 4 });
+    const created = await inRequest(() => createAdmin({
+      name: "Fixed",
+      email: "fixed@example.com",
+      password: GOOD_PASSWORD,
+      role: "admin",
+    }, { users: new AdminUserRepo(), runtime: own }));
+    if (!created.ok) throw new Error(`fixture failed: ${created.reason}`);
+    expect(created.value).toMatchObject({ id: "admin-1", createdAt: 1_900_000_000_000 });
+
+    const again = await inRequest(async () => {
+      const found = await new AdminUserRepo().findByEmailWithHash("fixed@example.com");
+      return hashPassword(GOOD_PASSWORD, sequentialRandomBytes(4), DEFAULT_ITERATIONS).then((hash) => ({ stored: found?.passwordHash, hash }));
+    });
+    expect(again.stored).toBe(again.hash);
+  });
+
   it("stores a hash, never the password", async () => {
     const found = await inRequest(async () => {
       await createAdmin({
@@ -60,9 +81,9 @@ describe("createAdmin", () => {
       return new AdminUserRepo().findByEmailWithHash("ada@example.com");
     });
 
-    expect(found!.passwordHash).not.toContain(GOOD_PASSWORD);
-    expect(found!.passwordHash.startsWith("pbkdf2$")).toBe(true);
-    expect(await verifyPassword(GOOD_PASSWORD, found!.passwordHash)).toBe(true);
+    expect(defined(found).passwordHash).not.toContain(GOOD_PASSWORD);
+    expect(defined(found).passwordHash.startsWith("pbkdf2$")).toBe(true);
+    expect(await verifyPassword(GOOD_PASSWORD, defined(found).passwordHash)).toBe(true);
   });
 
   it("never returns the hash to the caller", async () => {
@@ -183,7 +204,7 @@ describe("lockout guards — the reason this service exists", () => {
         role: "owner",
       }, adminDeps);
       if (!spare.ok) throw new Error("fixture");
-      await new AdminUserRepo().setStatus(spare.value.id, "disabled", Date.now());
+      await new AdminUserRepo().setStatus(spare.value.id, "disabled", runtime.clock.now());
 
       return removeAdmin({ actorId: "someone-else", targetId: active.id }, adminDeps);
     });
@@ -221,7 +242,7 @@ describe("changeOwnPassword", () => {
         confirmPassword: "a-brand-new-password",
       }, adminDeps);
       const after = await new AdminUserRepo().findByIdWithHash(owner.id);
-      return { result, hash: after!.passwordHash };
+      return { result, hash: defined(after).passwordHash };
     });
 
     expect(outcome.result.ok).toBe(true);
@@ -239,7 +260,7 @@ describe("changeOwnPassword", () => {
         confirmPassword: "a-brand-new-password",
       }, adminDeps);
       const after = await new AdminUserRepo().findByIdWithHash(owner.id);
-      return { result, hash: after!.passwordHash };
+      return { result, hash: defined(after).passwordHash };
     });
 
     expect(outcome.result).toMatchObject({ ok: false, reason: "wrongPassword" });
@@ -287,11 +308,12 @@ describe("updateOwnProfile", () => {
         users: {
           updateProfile: async (id, input) => { saved = { id, ...input }; },
         },
+        runtime,
       },
     );
 
     expect(result).toEqual({ ok: true, value: null });
-    expect(saved).toMatchObject({ id: "user-1", name: "Renamed" });
+    expect(saved).toEqual({ id: "user-1", name: "Renamed", now: runtime.clock.now() });
   });
 
   it("saves a trimmed name", async () => {
@@ -330,7 +352,7 @@ describe("resetAdminPassword — an owner helping someone who is locked out", ()
         newPassword: "a-fresh-temporary-pass",
       }, adminDeps);
       const after = await new AdminUserRepo().findByIdWithHash(created.value.id);
-      return { result, hash: after!.passwordHash };
+      return { result, hash: defined(after).passwordHash };
     });
 
     expect(outcome.result.ok).toBe(true);
@@ -408,7 +430,7 @@ describe("resetAdminPassword — an owner helping someone who is locked out", ()
         newPassword: "short",
       }, adminDeps);
       const after = await new AdminUserRepo().findByIdWithHash(created.value.id);
-      return after!.passwordHash;
+      return defined(after).passwordHash;
     });
     expect(await verifyPassword(GOOD_PASSWORD, hash)).toBe(true);
   });

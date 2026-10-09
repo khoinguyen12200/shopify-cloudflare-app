@@ -19,7 +19,7 @@ const ATTACHMENT_SCHEMA = z.object({
   contentBase64: z.string().min(1).describe("Base64 encoded file data"),
 });
 
-export function registerTicketTools(server: McpServer, ctx: McpActorContext) {
+function registerListTickets(server: McpServer, ctx: McpActorContext) {
   server.registerTool(
     "list_tickets",
     {
@@ -45,7 +45,9 @@ export function registerTicketTools(server: McpServer, ctx: McpActorContext) {
       }),
     ),
   );
+}
 
+function registerGetTicketThread(server: McpServer, ctx: McpActorContext) {
   server.registerTool(
     "get_ticket_thread",
     {
@@ -63,7 +65,9 @@ export function registerTicketTools(server: McpServer, ctx: McpActorContext) {
       return thread;
     }),
   );
+}
 
+function registerReplyToTicket(server: McpServer, ctx: McpActorContext) {
   server.registerTool(
     "reply_to_ticket",
     {
@@ -91,7 +95,9 @@ export function registerTicketTools(server: McpServer, ctx: McpActorContext) {
       return { success: true, ticketId: args.ticketId, messageId: result.value.messageId };
     }),
   );
+}
 
+function registerUpdateTicketStatus(server: McpServer, ctx: McpActorContext) {
   server.registerTool(
     "update_ticket_status",
     {
@@ -112,7 +118,9 @@ export function registerTicketTools(server: McpServer, ctx: McpActorContext) {
       return { success: true, ticketId: args.ticketId, status: "open" };
     }),
   );
+}
 
+function registerCreateTicket(server: McpServer, ctx: McpActorContext) {
   server.registerTool(
     "create_ticket",
     {
@@ -151,7 +159,9 @@ export function registerTicketTools(server: McpServer, ctx: McpActorContext) {
       return { success: true, ticketId: result.value.id };
     }),
   );
+}
 
+function registerUploadSupportAttachment(server: McpServer, ctx: McpActorContext) {
   server.registerTool(
     "upload_support_attachment",
     {
@@ -177,4 +187,13 @@ export function registerTicketTools(server: McpServer, ctx: McpActorContext) {
       return { success: true, ...upload };
     }),
   );
+}
+
+export function registerTicketTools(server: McpServer, ctx: McpActorContext) {
+  registerListTickets(server, ctx);
+  registerGetTicketThread(server, ctx);
+  registerReplyToTicket(server, ctx);
+  registerUpdateTicketStatus(server, ctx);
+  registerCreateTicket(server, ctx);
+  registerUploadSupportAttachment(server, ctx);
 }

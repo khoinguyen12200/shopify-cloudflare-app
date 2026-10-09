@@ -13,6 +13,7 @@ async function receive(request: Request): Promise<Response> {
   await ingestWebhook({
     deliveries: webhookDeliveries(),
     queue: { send: async (message) => { await getEnv().WEBHOOK_QUEUE.send(message); } },
+    now: Date.now,
     hashPayload: sha256Json,
     log: async (webhook, outcome, latencyMs) => writeWebhookLog(await formatWebhookLog({ deliveryId: webhook.webhookId, topic: webhook.topic, shop: webhook.shop, handler: webhook.topic, outcome, attempts: 0, latencyMs })),
   }, {

@@ -1,28 +1,37 @@
 import { describe, it, expect } from "vitest";
 import { generateToken, hashToken } from "./token";
+import { sequentialRandomBytes } from "~/test/fake-runtime";
+
+const randomBytes = sequentialRandomBytes();
+const mint = () => generateToken(randomBytes);
 
 describe("generateToken", () => {
   it("is URL-safe", () => {
     for (let i = 0; i < 50; i += 1) {
       // A '+', '/' or '=' would need escaping inside a URL path.
-      expect(generateToken()).toMatch(/^[A-Za-z0-9_-]+$/);
+      expect(mint()).toMatch(/^[A-Za-z0-9_-]+$/);
     }
   });
 
   it("never repeats", () => {
-    const seen = new Set(Array.from({ length: 200 }, generateToken));
+    const seen = new Set(Array.from({ length: 200 }, mint));
     expect(seen.size).toBe(200);
+  });
+
+  it("is fully determined by the random bytes it is given", () => {
+    expect(generateToken(sequentialRandomBytes(9))).toBe(generateToken(sequentialRandomBytes(9)));
+    expect(generateToken(sequentialRandomBytes(9))).not.toBe(generateToken(sequentialRandomBytes(10)));
   });
 
   it("carries 256 bits of entropy", () => {
     // 32 bytes → 43 base64url characters with padding stripped.
-    expect(generateToken()).toHaveLength(43);
+    expect(mint()).toHaveLength(43);
   });
 });
 
 describe("hashToken", () => {
   it("is deterministic", async () => {
-    const token = generateToken();
+    const token = mint();
     expect(await hashToken(token)).toBe(await hashToken(token));
   });
 
@@ -43,7 +52,7 @@ describe("hashToken", () => {
   });
 
   it("does not contain the token", async () => {
-    const token = generateToken();
+    const token = mint();
     expect(await hashToken(token)).not.toContain(token);
   });
 });

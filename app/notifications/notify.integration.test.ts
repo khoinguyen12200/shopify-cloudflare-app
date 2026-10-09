@@ -19,6 +19,8 @@ import {
 import { createQueuedNotifier } from "~/services/notification-enqueue";
 import { handleNotificationBatch } from "~/services/notification-queue";
 import { fakeNotificationQueue, recordedMessage } from "~/test/fake-notification-queue";
+import { fakeRuntime } from "~/test/fake-runtime";
+import { defined } from "~/test/defined";
 
 setupTestDatabase();
 beforeEach(() => { queue.enqueued.length = 0; });
@@ -26,17 +28,18 @@ beforeEach(() => { queue.enqueued.length = 0; });
 const inRequest = <T>(fn: () => Promise<T>) => runWithRequestContext(env, fn);
 const ORIGIN = "https://example.test";
 const queue = fakeNotificationQueue();
+const runtime = fakeRuntime();
 const resetDeps = {
   users: adminUsers(),
   tokens: passwordResetTokens(),
   notifier: createQueuedNotifier({
     queue,
     logs: notificationLogs(),
-    newId: () => crypto.randomUUID(),
-    now: () => Date.now(),
+    newId: () => runtime.ids.uuid(),
+    now: () => runtime.clock.now(),
     log: () => {},
   }),
-  newId: () => crypto.randomUUID(),
+  runtime,
 };
 
 /** Deliver everything the request enqueued to the real consumer, once each. */
@@ -104,7 +107,7 @@ describe("the admin forgot-password flow reaches the notification system", () =>
       reasonCode: "channel_unavailable",
     });
     // `refused`, not `failed`: nothing was attempted.
-    expect(rows[0]!.status).not.toBe("failed");
+    expect(defined(rows[0]).status).not.toBe("failed");
   });
 
   it("settles the row immediately — nothing is left stuck at queued", async () => {
@@ -114,7 +117,21 @@ describe("the admin forgot-password flow reaches the notification system", () =>
       await drainQueue();
       return new NotificationLogRepo().recent();
     });
-    expect(rows[0]!.settledAt).not.toBeNull();
+    expect(defined(rows[0]).settledAt).not.toBeNull();
+  });
+
+  it("takes the row id and its time from the injected runtime, not the ambient clock", async () => {
+    const fake = fakeRuntime({ start: 1_800_000_000_000, idPrefix: "log" });
+    const rows = await inRequest(async () => {
+      const admin = await seedAdmin("clocked@example.org");
+      await notify({
+        event: "admin_password_reset",
+        to: { email: admin.email },
+        payload: { recipientName: admin.name, resetUrl: `${ORIGIN}/x`, expiresIn: "one hour" },
+      }, { ...notificationDependencies(), runtime: fake });
+      return new NotificationLogRepo().recent();
+    });
+    expect(rows[0]).toMatchObject({ id: "log-1", createdAt: 1_800_000_000_000, status: "refused" });
   });
 
   it("writes NO row for an email with no account", async () => {
@@ -190,7 +207,7 @@ describe("rule ORDER is observable in the record", () => {
       }, notificationDependencies());
       return new NotificationLogRepo().recent();
     });
-    expect(rows[0]!.reasonCode).toBe("channel_unavailable");
+    expect(defined(rows[0]).reasonCode).toBe("channel_unavailable");
   });
 
   it("records the opt-out itself, so it is queryable independently", async () => {

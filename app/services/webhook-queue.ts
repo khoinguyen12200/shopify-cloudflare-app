@@ -25,7 +25,7 @@ export interface QueueLogEntry {
 export interface QueueProcessingDependencies {
   readonly consume: (work: QueuedWebhook) => Promise<"processed" | "unavailable" | "missing" | "duplicate" | "unsupported" | { readonly outcome: "processed" | "unavailable" | "missing" | "duplicate" | "unsupported"; readonly topic: string | null }>;
   readonly log: (entry: QueueLogEntry) => void | Promise<void>;
-  readonly now?: () => number;
+  readonly now: () => number;
 }
 
 export async function handleWebhookQueueBatch(
@@ -41,7 +41,7 @@ export async function processQueuedWebhookMessage(
   message: QueueMessageLike,
   dependencies: QueueProcessingDependencies,
 ): Promise<void> {
-  const started = dependencies.now?.() ?? Date.now();
+  const started = dependencies.now();
   if (!isQueuedWebhook(message.body)) {
     await safeLog(dependencies.log, { event: "webhook.queue", outcome: "invalid" });
     settleMessage(message, "ack");
@@ -52,7 +52,7 @@ export async function processQueuedWebhookMessage(
   try {
     result = await dependencies.consume({ ...work, attempts: message.attempts });
   } catch {
-    await safeLog(dependencies.log, { event: "webhook.queue", id: work.id, shop: work.shop, attempts: message.attempts, outcome: "failed", latencyMs: (dependencies.now?.() ?? Date.now()) - started });
+    await safeLog(dependencies.log, { event: "webhook.queue", id: work.id, shop: work.shop, attempts: message.attempts, outcome: "failed", latencyMs: (dependencies.now()) - started });
     settleMessage(message, "retry", work.id, message.attempts);
     return;
   }
@@ -60,7 +60,7 @@ export async function processQueuedWebhookMessage(
   const outcome = typeof result === "string" ? result : result.outcome;
   const finalOutcome = outcome === "missing" ? "discarded" : outcome;
   const topic = typeof result === "string" ? undefined : result.topic ?? undefined;
-  await safeLog(dependencies.log, { event: "webhook.queue", id: work.id, shop: work.shop, attempts: message.attempts, outcome: finalOutcome, topic, handler: topic, latencyMs: (dependencies.now?.() ?? Date.now()) - started });
+  await safeLog(dependencies.log, { event: "webhook.queue", id: work.id, shop: work.shop, attempts: message.attempts, outcome: finalOutcome, topic, handler: topic, latencyMs: (dependencies.now()) - started });
   if (outcome === "unavailable") {
     settleMessage(message, "retry", work.id, message.attempts);
     return;

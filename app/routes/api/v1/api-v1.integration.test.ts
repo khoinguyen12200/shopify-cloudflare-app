@@ -16,6 +16,7 @@ import { hashPassword } from "~/lib/password";
 import { ShopRepo } from "~/models/shops.server";
 import { ShopSubscriptionRepo } from "~/models/shop-subscriptions.server";
 import { SupportRepo } from "~/models/support.server";
+import { testIds, testRandomBytes } from "~/test/fake-runtime";
 
 setupTestDatabase();
 
@@ -38,7 +39,7 @@ const asLoaderArgs = (request: Request): LoaderFunctionArgs => ({
 describe("Reusable REST API (/api/v1/*) Integration", () => {
   async function createStaffAndToken(scopes = ["mcp:read", "mcp:shops:write", "mcp:tickets:write"]) {
     const adminRepo = new AdminUserRepo();
-    const pwHash = await hashPassword("Pass12345678!");
+    const pwHash = await hashPassword("Pass12345678!", testRandomBytes);
     const admin = await adminRepo.create({
       id: `admin-rest-${Date.now()}`,
       email: `staff-${Date.now()}@example.com`,
@@ -227,7 +228,7 @@ describe("Reusable REST API (/api/v1/*) Integration", () => {
       const ticketId = createJson.value.id;
 
       // Verify the ticket in DB
-      const supportRepo = new SupportRepo();
+      const supportRepo = new SupportRepo(testIds);
       const thread = await supportRepo.findForStaff(ticketId);
       expect(thread).toBeDefined();
       expect(thread?.ticket.lastAuthor).toBe("staff");

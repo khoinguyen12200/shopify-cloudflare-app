@@ -22,6 +22,7 @@ describe("handleWebhookQueueBatch", () => {
         retry: () => events.push("retry"),
       }],
     }, {
+      now: () => 100,
       consume: async () => ({ outcome: "missing", topic: null }),
       log: (entry) => { events.push(entry.outcome); },
     });
@@ -38,6 +39,7 @@ describe("handleWebhookQueueBatch", () => {
         retry: () => events.push("retry"),
       }],
     }, {
+      now: () => 100,
       consume: async () => {
         events.push("dead-letter-persisted");
         throw new Error("broken");
@@ -55,6 +57,7 @@ describe("handleWebhookQueueBatch", () => {
         body: { shop: "redacted.myshopify.com", id: "missing-worker-delivery" }, attempts: 1,
         ack: () => { events.push("ack"); }, retry: () => { events.push("retry"); },
       }] }, {
+        now: () => 100,
         consume: (work) => consumeWebhook({
           deliveries: new WebhookDeliveryRepo(), now: () => 100,
           handlers: { "app/uninstalled": async () => { handlerWrites += 1; }, "app/scopes_update": async () => {}, "customers/data_request": async () => {}, "customers/redact": async () => {}, "shop/redact": async () => {} },
@@ -76,6 +79,7 @@ describe("handleWebhookQueueBatch", () => {
         body: { shop, id }, attempts: 9,
         ack: () => { events.push("ack"); }, retry: () => { events.push("retry"); },
       }] }, {
+        now: () => 100,
         consume: (work) => consumeWebhook({
           deliveries: new WebhookDeliveryRepo(), now: () => 100,
           handlers: { "app/uninstalled": async () => { throw new Error("broken"); }, "app/scopes_update": async () => {}, "customers/data_request": async () => {}, "customers/redact": async () => {}, "shop/redact": async () => {} },
@@ -98,6 +102,7 @@ describe("handleWebhookQueueBatch", () => {
         body: { shop, id }, attempts: 9,
         ack: () => { events.push("ack"); }, retry: () => { events.push("retry"); },
       }] }, {
+        now: () => 100,
         consume: (work) => consumeWebhook({
           deliveries: new WebhookDeliveryRepo(), now: () => 100,
           handlers: { "app/uninstalled": async () => {}, "app/scopes_update": async () => {}, "customers/data_request": async () => {}, "customers/redact": async () => {}, "shop/redact": async () => {} },

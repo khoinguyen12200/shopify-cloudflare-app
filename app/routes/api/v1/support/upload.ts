@@ -18,46 +18,45 @@ export async function loader({ request }: LoaderFunctionArgs) {
   return apiError("method_not_allowed", "Use POST to upload support attachments", 405);
 }
 
-export async function action({ request }: ActionFunctionArgs) {
-  const opt = handleOptions(request);
-  if (opt) return opt;
+type ApiActor = Awaited<ReturnType<typeof authenticateApiRequest>>;
 
-  const actor = await authenticateApiRequest(request, "mcp:tickets:write");
-  const contentTypeHeader = request.headers.get("Content-Type") ?? "";
+/** First of the snake_case / camelCase spellings that is a string, else the fallback. */
+function firstString(body: Record<string, unknown>, keys: readonly string[], fallback: string): string {
+  for (const key of keys) {
+    const value = body[key];
+    if (typeof value === "string") return value;
+  }
+  return fallback;
+}
 
-  // 1. JSON with base64 payload
-  if (contentTypeHeader.includes("application/json")) {
-    const bodyData = await readJsonObject(request);
-    if (!bodyData) return apiError("invalid_request", "Expected valid JSON body", 400);
+/** JSON with a base64 payload. */
+async function uploadFromJson(request: Request, actor: ApiActor): Promise<Response> {
+  const bodyData = await readJsonObject(request);
+  if (!bodyData) return apiError("invalid_request", "Expected valid JSON body", 400);
 
-    const shop = typeof bodyData.shop === "string" ? bodyData.shop.trim() : "";
-    const filename = typeof bodyData.filename === "string" ? bodyData.filename.trim() : "";
-    const contentType = typeof bodyData.content_type === "string" ? bodyData.content_type.trim() : (typeof bodyData.contentType === "string" ? bodyData.contentType.trim() : "");
-    const contentBase64 = typeof bodyData.content_base64 === "string" ? bodyData.content_base64 : (typeof bodyData.contentBase64 === "string" ? bodyData.contentBase64 : "");
-    const ticketId = typeof bodyData.ticket_id === "string" ? bodyData.ticket_id : (typeof bodyData.ticketId === "string" ? bodyData.ticketId : "new");
+  const shop = firstString(bodyData, ["shop"], "").trim();
+  const filename = firstString(bodyData, ["filename"], "").trim();
+  const contentType = firstString(bodyData, ["content_type", "contentType"], "").trim();
+  const contentBase64 = firstString(bodyData, ["content_base64", "contentBase64"], "");
+  const ticketId = firstString(bodyData, ["ticket_id", "ticketId"], "new");
 
-    if (!shop || !filename || !contentType || !contentBase64) {
-      return apiError("invalid_request", "shop, filename, content_type, and content_base64 are required", 400);
-    }
-
-    try {
-      const result = await withApiAudit(actor, "api:upload_attachment", true, async () => {
-        return uploadSupportAttachment({
-          shop,
-          filename,
-          contentType,
-          contentBase64,
-          ticketId,
-        });
-      }, shop);
-
-      return apiJson(result, 201);
-    } catch (e) {
-      return apiError("upload_failed", e instanceof Error ? e.message : "Failed to process attachment", 400);
-    }
+  if (!shop || !filename || !contentType || !contentBase64) {
+    return apiError("invalid_request", "shop, filename, content_type, and content_base64 are required", 400);
   }
 
-  // 2. Binary stream upload with headers
+  try {
+    const result = await withApiAudit(actor, "api:upload_attachment", true, async () => {
+      return uploadSupportAttachment({ shop, filename, contentType, contentBase64, ticketId });
+    }, shop);
+
+    return apiJson(result, 201);
+  } catch (e) {
+    return apiError("upload_failed", e instanceof Error ? e.message : "Failed to process attachment", 400);
+  }
+}
+
+/** Binary stream upload, described by headers. */
+async function uploadFromStream(request: Request, contentTypeHeader: string): Promise<Response> {
   const shop = request.headers.get("X-Shop")?.trim() ?? "";
   const ticketId = request.headers.get("X-Support-Ticket")?.trim() ?? "new";
   const rawFilename = request.headers.get("X-Support-Filename");
@@ -113,4 +112,16 @@ export async function action({ request }: ActionFunctionArgs) {
     sizeBytes: declared,
     size_bytes: declared,
   }, 201);
+}
+
+export async function action({ request }: ActionFunctionArgs) {
+  const opt = handleOptions(request);
+  if (opt) return opt;
+
+  const actor = await authenticateApiRequest(request, "mcp:tickets:write");
+  const contentTypeHeader = request.headers.get("Content-Type") ?? "";
+
+  return contentTypeHeader.includes("application/json")
+    ? uploadFromJson(request, actor)
+    : uploadFromStream(request, contentTypeHeader);
 }

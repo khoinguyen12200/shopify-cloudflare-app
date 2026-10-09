@@ -14,6 +14,9 @@ import {
   requireOwner,
 } from "~/services/admin-auth.server";
 import { cachedAdminLookup, createAdminSessionCache } from "./admin-session-cache.server";
+import { fakeRuntime } from "~/test/fake-runtime";
+
+const runtime = fakeRuntime();
 
 setupTestDatabase();
 
@@ -31,7 +34,7 @@ async function signedIn(role: "owner" | "admin", email: string) {
   const { fresh } = deps();
   const created = await createAdmin(
     { name: "Staff", email, password: "a-long-enough-password", role },
-    { users: fresh },
+    { users: fresh, runtime },
   );
   if (!created.ok) throw new Error(`fixture: ${created.reason}`);
   const response = await createAdminSession(created.value.id, "/internal/dashboard");
@@ -92,7 +95,7 @@ describe("admin session lookup cache", () => {
       const { user, request } = await signedIn("owner", "demoted@workmanjsc.vn");
       await createAdmin(
         { name: "Other", email: "other-owner@workmanjsc.vn", password: "a-long-enough-password", role: "owner" },
-        { users: fresh },
+        { users: fresh, runtime },
       );
       expect((await requireAdminUser(request, { users: sessionUsers })).role).toBe("owner");
 

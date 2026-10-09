@@ -1,11 +1,17 @@
 import { z } from "zod";
 import { shopLog } from "~/observability/shop-log";
-import { shops, support, supportService } from "~/wiring.server";
-import { getEnv } from "~/request-context.server";
+import { appContext, shops, support, supportService } from "~/wiring.server";
+import type { Runtime } from "~/ports/runtime";
 import { attachmentKey, safeFilename, validateUpload } from "~/support/attachment";
 import { createShopify } from "~/shopify.server";
 import { statusOf } from "~/support/status";
 import type { SupportCategory } from "~/support/categories";
+
+/** What the staff support operations read from the outside world, injectable so tests need no clock, id source or bindings of their own. */
+export interface OpsContext {
+  readonly env: Env;
+  readonly runtime: Runtime;
+}
 
 export interface AttachmentInput {
   filename: string;
@@ -30,7 +36,7 @@ const shopContactResponse = z.object({
  * by checking local database shops repository first, then known ticket contacts,
  * falling back to Shopify offline session GraphQL (with auto-backfill to DB).
  */
-export async function resolveShopContact(shop: string): Promise<{
+export async function resolveShopContact(shop: string, context: OpsContext = appContext()): Promise<{
   shopName: string;
   merchantEmail: string | null;
   logoUrl: string | null;
@@ -50,7 +56,7 @@ export async function resolveShopContact(shop: string): Promise<{
 
   if (!merchantEmail) {
     try {
-      const { admin } = await createShopify(getEnv()).unauthenticated.admin(shop);
+      const { admin } = await createShopify(context.env).unauthenticated.admin(shop);
       const res = await admin.graphql(`#graphql
         query ShopContact { shop { id name email contactEmail url } }
       `);
@@ -60,7 +66,7 @@ export async function resolveShopContact(shop: string): Promise<{
         shopName = contact.name || shopName;
         merchantEmail = contact.contactEmail || contact.email || null;
         logoUrl = `https://${shop}/favicon.ico`;
-        await shops().recordAuthenticatedIdentity(shop, contact.id || shopRow?.shopifyShopId || "", Date.now(), {
+        await shops().recordAuthenticatedIdentity(shop, contact.id || shopRow?.shopifyShopId || "", context.runtime.clock.now(), {
           name: contact.name,
           email: contact.email,
           contactEmail: contact.contactEmail,
@@ -95,17 +101,17 @@ export async function uploadSupportAttachment({
   contentType: string;
   contentBase64: string;
   ticketId?: string;
-}) {
+}, context: OpsContext = appContext()) {
   const binary = Uint8Array.from(atob(contentBase64), (c) => c.charCodeAt(0));
   const check = validateUpload({ contentType, sizeBytes: binary.byteLength });
   if (!check.ok) {
     throw new Error(`Invalid attachment: ${check.reason}`);
   }
 
-  const uploadId = crypto.randomUUID();
+  const uploadId = context.runtime.ids.uuid();
   const safeName = safeFilename(filename);
   const r2Key = attachmentKey({ shop, ticketId, uploadId });
-  const env = getEnv();
+  const env = context.env;
 
   if (env.UPLOADS) {
     await env.UPLOADS.put(r2Key, binary, {
@@ -113,7 +119,7 @@ export async function uploadSupportAttachment({
     });
   }
 
-  const now = Date.now();
+  const now = context.runtime.clock.now();
   await support().stageUpload({
     id: uploadId,
     shop,
@@ -146,17 +152,18 @@ export async function attachFilesToMessage(
   ticketId: string,
   uploadIds: readonly string[],
   attachments: readonly AttachmentInput[],
+  context: OpsContext = appContext(),
 ) {
-  const now = Date.now();
+  const now = context.runtime.clock.now();
   if (uploadIds.length > 0) {
     await support().adoptPendingUploads(shop, messageId, uploadIds, now);
   }
 
-  const env = getEnv();
+  const env = context.env;
   const prepared = attachments.flatMap((att) => {
     const binary = Uint8Array.from(atob(att.contentBase64), (c) => c.charCodeAt(0));
     if (!validateUpload({ contentType: att.contentType, sizeBytes: binary.byteLength }).ok) return [];
-    const uploadId = crypto.randomUUID();
+    const uploadId = context.runtime.ids.uuid();
     return [{
       binary,
       contentType: att.contentType,
@@ -279,7 +286,7 @@ export async function replyToTicket({
   staffName?: string;
   uploadIds?: string[];
   attachments?: AttachmentInput[];
-}) {
+}, context: OpsContext = appContext()) {
   const result = await supportService().replyAsStaff({
     ticketId,
     staffName,
@@ -293,6 +300,7 @@ export async function replyToTicket({
       ticketId,
       uploadIds,
       attachments,
+      context,
     );
   }
 
@@ -332,12 +340,12 @@ export async function createTicketOnBehalf({
   staffName?: string;
   uploadIds?: string[];
   attachments?: AttachmentInput[];
-}) {
+}, context: OpsContext = appContext()) {
   let finalShopName = shopName;
   let finalMerchantEmail = merchantEmail;
 
   if (!finalShopName || !finalMerchantEmail) {
-    const resolved = await resolveShopContact(shop);
+    const resolved = await resolveShopContact(shop, context);
     finalShopName = finalShopName || resolved.shopName;
     finalMerchantEmail = finalMerchantEmail !== undefined ? finalMerchantEmail : resolved.merchantEmail;
   }
@@ -360,6 +368,7 @@ export async function createTicketOnBehalf({
       result.value.id,
       uploadIds,
       attachments,
+      context,
     );
   }
 

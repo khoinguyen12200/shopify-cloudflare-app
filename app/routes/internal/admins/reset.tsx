@@ -1,8 +1,6 @@
 import {
   data,
   redirect,
-  Form,
-  Link,
   useActionData,
   useLoaderData,
   useNavigation,
@@ -12,26 +10,18 @@ import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react
 export const meta: MetaFunction = () => [
   { title: "Reset Admin Password · Staff Console" },
 ];
-import {
-  Alert,
-  AlertDescription,
-  BlockStack,
-  Button,
-  Card,
-  CardContent,
-  Label,
-  Page,
-  PasswordInput,
-  Text,
-} from "ngk-dashboard";
+import { Alert, AlertDescription, BlockStack, CardSkeleton, EmptyState, Page, Text } from "ngk-dashboard";
+import { UserX } from "lucide-react";
 import { requireOwner } from "~/services/admin-auth.server";
-import { adminUsers } from "~/wiring.server";
+import { adminUsers, appRuntime } from "~/wiring.server";
 import {
   resetAdminPassword,
   type AdminErrorReason,
 } from "~/services/admin-management.server";
-import { MIN_PASSWORD_LENGTH } from "~/lib/password-policy";
 import { ADMIN_ERRORS } from "~/internal/admin-messages";
+import { Deferred } from "~/internal/components";
+import { streamRegion } from "~/internal/stream-region.server";
+import { ResetPasswordCard } from "./reset-form";
 
 /**
  * An owner resets another admin's password.
@@ -46,16 +36,15 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const actor = await requireOwner(request, { users });
   const targetId = params.adminId ?? "";
 
-  // Resolve the target here so the page can name them, and so a bad id is a 404
-  // rather than a form that fails on submit.
-  const target = await users.findById(targetId);
-  if (!target) throw new Response("Not found", { status: 404 });
-
   // Your own password goes through /internal/profile, which requires the current
-  // one. Redirect rather than render a form that the service would refuse.
-  if (target.id === actor.id) throw redirect("/internal/profile");
+  // one. Redirect rather than render a form that the service would refuse. This
+  // compares ids, so it needs no lookup and still happens before anything renders.
+  if (targetId === actor.id) throw redirect("/internal/profile");
 
-  return { target };
+  // The target is resolved so the page can name them. It streams: the owner
+  // check above is the only thing the frame waits on. An unknown id resolves to
+  // `null`, rendered as a not-found state rather than a form that fails on submit.
+  return { targetId, target: streamRegion("admin_reset", "target", users.findById(targetId).then((found) => found ?? null)) };
 };
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
@@ -76,7 +65,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     actorId: actor.id,
     targetId: params.adminId ?? "",
     newPassword,
-  }, { users });
+  }, { users, runtime: appRuntime() });
 
   if (!result.ok) {
     const reason: AdminErrorReason = result.reason;
@@ -88,7 +77,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 };
 
 export default function ResetAdminPassword() {
-  const { target } = useLoaderData<typeof loader>();
+  const { targetId, target } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
 
@@ -97,7 +86,7 @@ export default function ResetAdminPassword() {
 
   return (
     <Page
-      title={`Reset the password for ${target.name}?`}
+      title="Reset admin password"
       narrowWidth
       backAction={{ label: "Admins", href: "/internal/admins" }}
     >
@@ -112,52 +101,22 @@ export default function ResetAdminPassword() {
           </Alert>
         )}
 
-        <Card>
-          <CardContent className="pt-6">
-            <Form method="post" className="flex flex-col gap-4">
-              <Text as="p" className="text-muted-foreground">
-                Set a new password and give it to them directly. Their
-                current password stops working immediately.
-              </Text>
-
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="newPassword">New password</Label>
-                <PasswordInput
-                  id="newPassword"
-                  name="newPassword"
-                  autoComplete="new-password"
-                  minLength={MIN_PASSWORD_LENGTH}
-                  required
-                  autoFocus
-                />
-                <Text as="p" className="text-xs text-muted-foreground">
-                  At least {MIN_PASSWORD_LENGTH} characters. Ask them to
-                  change it after signing in.
+        <Deferred resolve={target} resetKey={targetId} fallback={<CardSkeleton lines={3} />} errorTitle="This admin">
+          {(loaded) =>
+            loaded ? (
+              <BlockStack gap={4}>
+                <Text as="h2" className="text-lg font-semibold">
+                  {`Reset the password for ${loaded.name}?`}
                 </Text>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="confirmPassword">Confirm new password</Label>
-                <PasswordInput
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  autoComplete="new-password"
-                  minLength={MIN_PASSWORD_LENGTH}
-                  required
-                />
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <Button type="submit" disabled={busy}>
-                  Reset password
-                </Button>
-                <Button asChild variant="outline">
-                  <Link to="/internal/admins">Cancel</Link>
-                </Button>
-              </div>
-            </Form>
-          </CardContent>
-        </Card>
+                <ResetPasswordCard busy={busy} />
+              </BlockStack>
+            ) : (
+              <EmptyState heading="Admin not found" icon={UserX}>
+                That account no longer exists.
+              </EmptyState>
+            )
+          }
+        </Deferred>
       </BlockStack>
     </Page>
   );

@@ -1,4 +1,3 @@
-import { nanoid } from "nanoid";
 import {
   generatePat,
   isTokenExpired,
@@ -6,8 +5,9 @@ import {
   sha256,
 } from "~/domain/mcp/tokens";
 import { parseScopes } from "~/domain/mcp/scopes";
-import { mcpTokens } from "~/wiring.server";
+import { appRuntime, mcpTokens } from "~/wiring.server";
 import type { McpToken } from "~/db/schema/mcp";
+import type { Clock, Runtime } from "~/ports/runtime";
 
 export interface VerifiedActor {
   readonly token: McpToken;
@@ -28,15 +28,15 @@ export async function createPersonalAccessToken({
   adminEmail: string;
   scopes?: readonly string[];
   expiresInDays?: number | null;
-}): Promise<{ rawToken: string; token: McpToken }> {
-  const { raw, hash, prefix } = await generatePat();
-  const now = Date.now();
+}, runtime: Runtime = appRuntime()): Promise<{ rawToken: string; token: McpToken }> {
+  const { raw, hash, prefix } = await generatePat(runtime.randomBytes);
+  const now = runtime.clock.now();
   const expiresAt = expiresInDays ? now + expiresInDays * 24 * 60 * 60 * 1000 : null;
 
   const validScopes = parseScopes(scopes);
 
   const token = await mcpTokens().createToken({
-    id: `pat_${nanoid()}`,
+    id: `pat_${runtime.ids.uuid()}`,
     type: "pat",
     tokenHash: hash,
     tokenPrefix: prefix,
@@ -57,12 +57,13 @@ export async function createPersonalAccessToken({
  */
 export async function verifyBearerToken(
   authHeader: string | null | undefined,
-  now = Date.now(),
+  clock: Clock = appRuntime().clock,
 ): Promise<VerifiedActor | null> {
   if (!authHeader) return null;
   const match = authHeader.match(/^Bearer\s+(.+)$/i);
   if (!match || !match[1]) return null;
 
+  const now = clock.now();
   const rawToken = match[1].trim();
   const tokenHash = await sha256(rawToken);
 
@@ -92,6 +93,6 @@ export async function listPersonalAccessTokens(): Promise<McpToken[]> {
   return all.filter((t) => t.type === "pat");
 }
 
-export async function revokeTokenById(id: string, now = Date.now()): Promise<boolean> {
-  return mcpTokens().revokeToken(id, now);
+export async function revokeTokenById(id: string, clock: Clock = appRuntime().clock): Promise<boolean> {
+  return mcpTokens().revokeToken(id, clock.now());
 }

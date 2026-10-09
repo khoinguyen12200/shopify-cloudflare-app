@@ -8,12 +8,14 @@ import { runWithRequestContext } from "~/request-context.server";
 import { reconcileHeld } from "~/services/entitlement-reconciliation.server";
 import { setupTestDatabase } from "~/test/db";
 import * as wiring from "~/wiring.server";
+import { fakeClock } from "~/test/fake-runtime";
 
+const testClock = fakeClock();
 setupTestDatabase();
 
 async function seedHeld(shop: string) {
   await makeDb(env.DB).insert(schema.shopSubscriptions).values({ shop: shop, subscriptionId: "subscription", status: "ACTIVE", appliedOccurredAt: 1, appliedExternalId: "event", revision: 1 }).run();
-  expect(await new EntitlementRepo().reserve({ shop, key: "exports", operationId: "quota-1", period: "lifetime", amount: 2, maximum: 2, subscriptionRevision: 1 }))
+  expect(await new EntitlementRepo(testClock).reserve({ shop, key: "exports", operationId: "quota-1", period: "lifetime", amount: 2, maximum: 2, subscriptionRevision: 1 }))
     .toMatchObject({ allowed: true, state: "held" });
   await makeDb(env.DB).insert(schema.entitlementAllocations).values({ shop: shop, key: "staff.max", allocationId: "staff-1", operationId: "capacity-op-1", subscriptionRevision: 1, state: "held", createdAt: 1, updatedAt: 1 }).run();
 }
@@ -86,7 +88,7 @@ describe("wired entitlement reconciliation", () => {
       }
       expect((await port.listHeld("reconcile-release")).items).toEqual([]);
       expect(await makeDb(env.DB).select({ committed: schema.entitlementUsage.committed, held: schema.entitlementUsage.held }).from(schema.entitlementUsage).where(eq(schema.entitlementUsage.shop, "reconcile-release")).get()).toEqual({ committed: 0, held: 0 });
-      expect(await new EntitlementRepo().allocate({ shop: "reconcile-release", key: "staff.max", allocationId: "new-resource", operationId: "op-new-resource", maximum: 1, subscriptionRevision: 1 })).toMatchObject({ allowed: true, remaining: 0 });
+      expect(await new EntitlementRepo(testClock).allocate({ shop: "reconcile-release", key: "staff.max", allocationId: "new-resource", operationId: "op-new-resource", maximum: 1, subscriptionRevision: 1 })).toMatchObject({ allowed: true, remaining: 0 });
     });
   });
 });

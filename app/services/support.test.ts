@@ -13,6 +13,7 @@ import { fakeNotifier } from "~/test/fake-notifier";
 import { fakeQueueBinding, recordedMessage } from "~/test/fake-notification-queue";
 import { handleNotificationBatch } from "~/services/notification-queue";
 import { notificationConsumerDependencies } from "~/wiring/notifications.server";
+import { fakeRuntime, testIds } from "~/test/fake-runtime";
 
 setupTestDatabase();
 
@@ -29,7 +30,7 @@ async function recentRows() {
   await handleNotificationBatch({ messages }, notificationConsumerDependencies());
   return new NotificationLogRepo().recent();
 }
-const adminDeps = { users: new AdminUserRepo() };
+const adminDeps = { users: new AdminUserRepo(), runtime: fakeRuntime() };
 
 /**
  * The support service's WIRING, against real D1.
@@ -345,7 +346,7 @@ describe("replying", () => {
     const shop = newShop();
     const { afterStaff, afterMerchant } = await inRequest(async () => {
       const service = supportService();
-      const repo = new SupportRepo();
+      const repo = new SupportRepo(testIds);
       const created = await openTicket(service, shop);
       await repo.closeAsStaff(created.id, 2_000);
 
@@ -430,7 +431,7 @@ describe("attachment URLs", () => {
       const created = await openTicket(service, shop);
       const attachmentId = crypto.randomUUID();
 
-      await new SupportRepo().attachMany([{
+      await new SupportRepo(testIds).attachMany([{
         shop,
         messageId: created.messageId,
         id: attachmentId,
@@ -486,7 +487,7 @@ describe("what the service asks the notifier to send", () => {
   const withFake = () => {
     const notifier = fakeNotifier();
     const service = new SupportService({
-      repo: new SupportRepo(),
+      repo: new SupportRepo(testIds),
       admins: new AdminUserRepo(),
       clock: { now: () => 1_700_000_000_000 },
       notifier,

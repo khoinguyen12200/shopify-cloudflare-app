@@ -10,6 +10,7 @@ import { TenantPurgeRepo } from "~/models/tenant-purge.server";
 import { KVSessionStorage } from "~/session-storage.server";
 import { handleCompliance } from "./compliance.server";
 import { Session } from "@shopify/shopify-api";
+import { testIds } from "~/test/fake-runtime";
 
 const SHOP = "alpha.myshopify.com";
 const OTHER = "beta.myshopify.com";
@@ -22,7 +23,7 @@ const offlineSession = (shop: string) => new Session({ id: `offline_${shop}`, sh
 
 /** A ticket with one attachment whose blob really exists in the test bucket. */
 async function ticketWithFile(shop: string, key: string) {
-  const repo = new SupportRepo();
+  const repo = new SupportRepo(testIds);
   const created = await repo.open({
     shop,
     shopName: "Store",
@@ -68,10 +69,10 @@ describe("shop/redact and support data", () => {
 
       await dispatch(SHOP);
 
-      expect(await new SupportRepo().find(SHOP, targetTicket.id)).toBeUndefined();
+      expect(await new SupportRepo(testIds).find(SHOP, targetTicket.id)).toBeUndefined();
       expect(await env.UPLOADS.head(targetKey)).toBeNull();
       expect(await storage.loadSession(targetSession.id)).toBeUndefined();
-      expect(await new SupportRepo().find(OTHER, otherTicket.id)).toBeDefined();
+      expect(await new SupportRepo(testIds).find(OTHER, otherTicket.id)).toBeDefined();
       expect(await env.UPLOADS.head(otherKey)).not.toBeNull();
       expect(await storage.loadSession(otherSession.id)).toBeDefined();
       expect(await makeDb(env.DB).select({ count: count() }).from(schema.shopifySyncCheckpoints).where(eq(schema.shopifySyncCheckpoints.name, "global")).get()).toMatchObject({ count: 1 });
@@ -88,7 +89,7 @@ describe("shop/redact and support data", () => {
 
       await dispatch(SHOP);
 
-      expect(await new SupportRepo().find(SHOP, created.id)).toBeUndefined();
+      expect(await new SupportRepo(testIds).find(SHOP, created.id)).toBeUndefined();
       expect(await env.UPLOADS.head(key)).toBeNull();
     });
   });
@@ -102,7 +103,7 @@ describe("shop/redact and support data", () => {
 
       await dispatch(SHOP);
 
-      expect(await new SupportRepo().find(OTHER, theirs.id)).toBeDefined();
+      expect(await new SupportRepo(testIds).find(OTHER, theirs.id)).toBeDefined();
       expect(await env.UPLOADS.head(theirsKey)).not.toBeNull();
     });
   });

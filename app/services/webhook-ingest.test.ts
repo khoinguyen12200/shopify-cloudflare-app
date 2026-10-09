@@ -7,6 +7,7 @@ import {
 function dependencies(): WebhookIngestDependencies & { readonly queued: string[] } {
   const queued: string[] = [];
   return {
+    now: () => 1_000,
     deliveries: {
       async claim() {
         return "claimed" as const;

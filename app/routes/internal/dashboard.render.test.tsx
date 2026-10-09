@@ -32,7 +32,14 @@ type LoaderData = {
 };
 
 async function render(data: LoaderData) {
-  const fullData = { uninstallFeedback: [], ...data };
+  // The loader streams three regions; the fixtures below stay in the flat shape
+  // a reader thinks in and are regrouped here exactly as the loader groups them.
+  const fullData = {
+    user: data.user,
+    headline: { admins: data.admins, stats: data.stats },
+    health: data.health,
+    charts: { trend: data.trend, uninstallFeedback: data.uninstallFeedback ?? [] },
+  };
   const routes: RouteObject[] = [
     { path: "/internal/dashboard", Component: Dashboard, loader: () => fullData },
   ];

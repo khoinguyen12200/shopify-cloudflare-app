@@ -21,7 +21,7 @@ export interface FakeTextGenerator extends TextGenerator {
   only(): GenerateRequest;
 }
 
-export function fakeTextGenerator(options: {
+export interface FakeTextGeneratorOptions {
   /** What every call returns. */
   reply?: string;
   /** What `generateObject` returns. Unvalidated, so a test can return a WRONG shape. */
@@ -37,7 +37,18 @@ export function fakeTextGenerator(options: {
   failFor?: Readonly<Record<string, AiFailureReason>>;
   inputTokens?: number;
   outputTokens?: number;
-} = {}): FakeTextGenerator {
+}
+
+/** Throws the failure the options ask for on this model, or returns when the call should succeed. */
+function refusalFor(options: FakeTextGeneratorOptions): (model: string) => void {
+  return (model) => {
+    const perModel = options.failFor?.[model];
+    if (perModel) throw new AiError(perModel, `fake failure for ${model}: ${perModel}`);
+    if (options.fail) throw new AiError(options.fail, `fake failure: ${options.fail}`);
+  };
+}
+
+export function fakeTextGenerator(options: FakeTextGeneratorOptions = {}): FakeTextGenerator {
   const calls: GenerateRequest[] = [];
   const reply = options.reply ?? "A drafted reply.";
   const usage = {
@@ -45,12 +56,7 @@ export function fakeTextGenerator(options: {
     inputTokens: options.inputTokens ?? 10,
     outputTokens: options.outputTokens ?? 20,
   };
-
-  const refuse = (model: string) => {
-    const perModel = options.failFor?.[model];
-    if (perModel) throw new AiError(perModel, `fake failure for ${model}: ${perModel}`);
-    if (options.fail) throw new AiError(options.fail, `fake failure: ${options.fail}`);
-  };
+  const refuse = refusalFor(options);
 
   return {
     calls,

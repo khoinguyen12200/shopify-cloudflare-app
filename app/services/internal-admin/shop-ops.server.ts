@@ -6,10 +6,11 @@ import {
   webhookScopeObservations,
   planGrants,
   invalidateEntitlements,
+  appRuntime,
 } from "~/wiring.server";
+import type { Clock, Runtime } from "~/ports/runtime";
 import { PLAN_LIST, planForShopifyHandle } from "~/billing/plans";
 import { statusOf } from "~/support/status";
-import { nanoid } from "nanoid";
 
 /** Display name for a stored plan handle; no subscription means the free plan. */
 function planNameFor(planHandle: string | null): string {
@@ -33,7 +34,7 @@ function planHandleCandidates(plan: string): string[] {
 export async function listNewStores({
   sinceHours = 24,
   type = "all",
-  now = Date.now(),
+  now = appRuntime().clock.now(),
 }: {
   sinceHours?: number;
   type?: "real" | "dev" | "all";
@@ -179,6 +180,7 @@ export async function grantShopPromoPlan(
     reason: string;
     grantedBy: string;
   },
+  runtime: Runtime = appRuntime(),
 ) {
   const shop = await shops().get(shopDomain);
   if (!shop) throw new Error(`Shop not found: ${shopDomain}`);
@@ -197,11 +199,11 @@ export async function grantShopPromoPlan(
     throw new Error(`A reason is required to grant a promotional plan`);
   }
 
-  const now = Date.now();
+  const now = runtime.clock.now();
   const expiresAt = now + durationDays * 86_400_000;
 
   const grant = await planGrants().createGrant({
-    id: `grant_${nanoid(16)}`,
+    id: `grant_${runtime.ids.uuid()}`,
     shop: shopDomain,
     planHandle,
     reason: trimmedReason,
@@ -221,8 +223,9 @@ export async function revokeShopPromoPlan(
   shopDomain: string,
   grantId: string,
   revokedBy: string,
+  clock: Clock = appRuntime().clock,
 ) {
-  const success = await planGrants().revokeGrant(shopDomain, grantId, revokedBy, Date.now());
+  const success = await planGrants().revokeGrant(shopDomain, grantId, revokedBy, clock.now());
   if (success) {
     await invalidateEntitlements(shopDomain);
   }
@@ -230,7 +233,7 @@ export async function revokeShopPromoPlan(
 }
 
 /** Get active promo grant and history for a shop. */
-export async function getShopPromoStatus(shopDomain: string, now: number = Date.now()) {
+export async function getShopPromoStatus(shopDomain: string, now: number = appRuntime().clock.now()) {
   const [activeGrant, history] = await Promise.all([
     planGrants().findActiveGrant(shopDomain, now),
     planGrants().listGrantsForShop(shopDomain),

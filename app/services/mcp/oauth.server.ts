@@ -1,4 +1,3 @@
-import { nanoid } from "nanoid";
 import {
   generateAccessToken,
   generateAuthCode,
@@ -10,8 +9,9 @@ import {
 } from "~/domain/mcp/tokens";
 import { parseScopes, type McpScope } from "~/domain/mcp/scopes";
 import { verifyCodeChallenge } from "~/domain/mcp/pkce";
-import { mcpOAuth, mcpTokens } from "~/wiring.server";
-import type { McpClient } from "~/db/schema/mcp";
+import { appRuntime, mcpOAuth, mcpTokens } from "~/wiring.server";
+import type { McpAuthorizationCode, McpClient, McpToken } from "~/db/schema/mcp";
+import type { Clock, Runtime } from "~/ports/runtime";
 
 const AUTH_CODE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const ACCESS_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -24,12 +24,12 @@ export async function registerDynamicClient({
 }: {
   clientName: string;
   redirectUris: readonly string[];
-}): Promise<McpClient> {
-  const clientId = generateClientId();
-  const now = Date.now();
+}, runtime: Runtime = appRuntime()): Promise<McpClient> {
+  const clientId = generateClientId(runtime.randomBytes);
+  const now = runtime.clock.now();
 
   return mcpOAuth().createClient({
-    id: `cli_${nanoid()}`,
+    id: `cli_${runtime.ids.uuid()}`,
     clientId,
     clientName: clientName.trim(),
     clientType: "public",
@@ -90,7 +90,6 @@ export async function issueAuthorizationCode({
   resource,
   codeChallenge,
   codeChallengeMethod,
-  now = Date.now(),
 }: {
   clientId: string;
   adminUserId: string;
@@ -99,12 +98,12 @@ export async function issueAuthorizationCode({
   resource?: string | null;
   codeChallenge: string;
   codeChallengeMethod: string;
-  now?: number;
-}): Promise<string> {
-  const { raw, hash } = await generateAuthCode();
+}, runtime: Runtime = appRuntime()): Promise<string> {
+  const { raw, hash } = await generateAuthCode(runtime.randomBytes);
+  const now = runtime.clock.now();
 
   await mcpOAuth().createAuthCode({
-    id: `code_${nanoid()}`,
+    id: `code_${runtime.ids.uuid()}`,
     codeHash: hash,
     clientId,
     adminUserId,
@@ -120,24 +119,18 @@ export async function issueAuthorizationCode({
   return raw;
 }
 
-/** Token exchange for authorization code and refresh token. */
-export async function exchangeOAuthToken({
-  grantType,
-  clientId,
-  code,
-  codeVerifier,
-  redirectUri,
-  refreshToken,
-  now = Date.now(),
-}: {
+interface ExchangeInput {
   grantType: string;
   clientId: string;
   code?: string | null;
   codeVerifier?: string | null;
   redirectUri?: string | null;
   refreshToken?: string | null;
-  now?: number;
-}): Promise<
+}
+
+type ExchangeFailure = { ok: false; error: string; description: string; status: number };
+
+export type ExchangeResult =
   | {
       ok: true;
       accessToken: string;
@@ -146,132 +139,137 @@ export async function exchangeOAuthToken({
       tokenType: "Bearer";
       scope: string;
     }
-  | { ok: false; error: string; description: string; status: number }
-> {
-  if (grantType === "authorization_code") {
-    if (!code || !codeVerifier) {
-      return { ok: false, error: "invalid_request", description: "Missing code or code_verifier", status: 400 };
-    }
+  | ExchangeFailure;
 
-    const codeHash = await sha256(code.trim());
-    const oauthRepo = mcpOAuth();
-    const authCode = await oauthRepo.findAuthCodeByHash(codeHash);
+const invalidGrant = (description: string): ExchangeFailure => ({ ok: false, error: "invalid_grant", description, status: 400 });
+const invalidRequest = (description: string): ExchangeFailure => ({ ok: false, error: "invalid_request", description, status: 400 });
 
-    if (!authCode) {
-      return { ok: false, error: "invalid_grant", description: "Invalid or expired authorization code", status: 400 };
-    }
-    if (authCode.usedAt !== null) {
-      return { ok: false, error: "invalid_grant", description: "Authorization code already used", status: 400 };
-    }
-    if (now >= authCode.expiresAt) {
-      return { ok: false, error: "invalid_grant", description: "Authorization code expired", status: 400 };
-    }
-    if (authCode.clientId !== clientId) {
-      return { ok: false, error: "invalid_grant", description: "client_id mismatch", status: 400 };
-    }
-    if (redirectUri && authCode.redirectUri.replace(/\/$/, "") !== redirectUri.replace(/\/$/, "")) {
-      return { ok: false, error: "invalid_grant", description: "redirect_uri mismatch", status: 400 };
-    }
+const stripTrailingSlash = (uri: string): string => uri.replace(/\/$/, "");
 
-    const validPkce = await verifyCodeChallenge({
-      codeVerifier,
-      codeChallenge: authCode.codeChallenge,
-      method: authCode.codeChallengeMethod,
-    });
-    if (!validPkce) {
-      return { ok: false, error: "invalid_grant", description: "PKCE verification failed", status: 400 };
-    }
+/** Token exchange for authorization code and refresh token. */
+export async function exchangeOAuthToken(input: ExchangeInput, runtime: Runtime = appRuntime()): Promise<ExchangeResult> {
+  if (input.grantType === "authorization_code") return exchangeAuthorizationCode(input, runtime);
+  if (input.grantType === "refresh_token") return exchangeRefreshToken(input, runtime);
+  return { ok: false, error: "unsupported_grant_type", description: `Unsupported grant_type: ${input.grantType}`, status: 400 };
+}
 
-    await oauthRepo.markAuthCodeUsed(authCode.id, now);
+/** Why an authorization code cannot be redeemed, or null when it can. */
+function authCodeRejection(authCode: McpAuthorizationCode, input: ExchangeInput, now: number): ExchangeFailure | null {
+  if (authCode.usedAt !== null) return invalidGrant("Authorization code already used");
+  if (now >= authCode.expiresAt) return invalidGrant("Authorization code expired");
+  if (authCode.clientId !== input.clientId) return invalidGrant("client_id mismatch");
+  if (input.redirectUri && stripTrailingSlash(authCode.redirectUri) !== stripTrailingSlash(input.redirectUri)) {
+    return invalidGrant("redirect_uri mismatch");
+  }
+  return null;
+}
 
-    const tokenRepo = mcpTokens();
-    const { raw: rawRefresh, hash: refreshHash, prefix: refreshPrefix } = await generateRefreshToken();
-    const refreshRow = await tokenRepo.createToken({
-      id: `ref_${nanoid()}`,
-      type: "refresh_token",
-      tokenHash: refreshHash,
-      tokenPrefix: refreshPrefix,
-      clientId,
-      adminUserId: authCode.adminUserId,
-      label: `OAuth Refresh for ${clientId}`,
-      scopes: parseScopes(authCode.scope),
-      expiresAt: now + REFRESH_TOKEN_TTL_MS,
-      createdAt: now,
-    });
+async function exchangeAuthorizationCode(input: ExchangeInput, runtime: Runtime): Promise<ExchangeResult> {
+  const { code, codeVerifier, clientId } = input;
+  if (!code || !codeVerifier) return invalidRequest("Missing code or code_verifier");
 
-    const { raw: rawAccess, hash: accessHash, prefix: accessPrefix } = await generateAccessToken();
-    await tokenRepo.createToken({
-      id: `tok_${nanoid()}`,
-      type: "access_token",
-      tokenHash: accessHash,
-      tokenPrefix: accessPrefix,
-      clientId,
-      adminUserId: authCode.adminUserId,
-      label: `OAuth Access for ${clientId}`,
-      scopes: parseScopes(authCode.scope),
-      parentTokenId: refreshRow.id,
-      expiresAt: now + ACCESS_TOKEN_TTL_MS,
-      createdAt: now,
-    });
+  const now = runtime.clock.now();
+  const oauthRepo = mcpOAuth();
+  const authCode = await oauthRepo.findAuthCodeByHash(await sha256(code.trim()));
+  if (!authCode) return invalidGrant("Invalid or expired authorization code");
 
-    return {
-      ok: true,
-      accessToken: rawAccess,
-      refreshToken: rawRefresh,
-      expiresIn: Math.floor(ACCESS_TOKEN_TTL_MS / 1000),
-      tokenType: "Bearer",
-      scope: authCode.scope,
-    };
+  const rejection = authCodeRejection(authCode, input, now);
+  if (rejection) return rejection;
+
+  const validPkce = await verifyCodeChallenge({
+    codeVerifier,
+    codeChallenge: authCode.codeChallenge,
+    method: authCode.codeChallengeMethod,
+  });
+  if (!validPkce) return invalidGrant("PKCE verification failed");
+
+  await oauthRepo.markAuthCodeUsed(authCode.id, now);
+
+  const refresh = await generateRefreshToken(runtime.randomBytes);
+  const refreshRow = await mcpTokens().createToken({
+    id: `ref_${runtime.ids.uuid()}`,
+    type: "refresh_token",
+    tokenHash: refresh.hash,
+    tokenPrefix: refresh.prefix,
+    clientId,
+    adminUserId: authCode.adminUserId,
+    label: `OAuth Refresh for ${clientId}`,
+    scopes: parseScopes(authCode.scope),
+    expiresAt: now + REFRESH_TOKEN_TTL_MS,
+    createdAt: now,
+  });
+
+  const rawAccess = await createAccessToken(runtime, {
+    clientId,
+    adminUserId: authCode.adminUserId,
+    label: `OAuth Access for ${clientId}`,
+    scopes: parseScopes(authCode.scope),
+    parentTokenId: refreshRow.id,
+  });
+
+  return bearerGrant(rawAccess, refresh.raw, authCode.scope);
+}
+
+async function exchangeRefreshToken(input: ExchangeInput, runtime: Runtime): Promise<ExchangeResult> {
+  const { refreshToken } = input;
+  if (!refreshToken) return invalidRequest("Missing refresh_token");
+
+  const now = runtime.clock.now();
+  const refreshRow = await mcpTokens().findByHash(await sha256(refreshToken.trim()));
+  if (!refreshRow || refreshRow.type !== "refresh_token") return invalidGrant("Invalid refresh token");
+  if (isTokenRevoked(refreshRow.revokedAt) || isTokenExpired(refreshRow.expiresAt, now)) {
+    return invalidGrant("Refresh token revoked or expired");
   }
 
-  if (grantType === "refresh_token") {
-    if (!refreshToken) {
-      return { ok: false, error: "invalid_request", description: "Missing refresh_token", status: 400 };
-    }
+  const rawAccess = await createAccessToken(runtime, {
+    clientId: refreshRow.clientId,
+    adminUserId: refreshRow.adminUserId,
+    label: `OAuth Access for ${refreshRow.clientId ?? "client"}`,
+    scopes: refreshRow.scopes,
+    parentTokenId: refreshRow.id,
+  });
 
-    const refreshHash = await sha256(refreshToken.trim());
-    const tokenRepo = mcpTokens();
-    const refreshRow = await tokenRepo.findByHash(refreshHash);
+  return bearerGrant(rawAccess, refreshToken, refreshRow.scopes.join(" "));
+}
 
-    if (!refreshRow || refreshRow.type !== "refresh_token") {
-      return { ok: false, error: "invalid_grant", description: "Invalid refresh token", status: 400 };
-    }
-    if (isTokenRevoked(refreshRow.revokedAt) || isTokenExpired(refreshRow.expiresAt, now)) {
-      return { ok: false, error: "invalid_grant", description: "Refresh token revoked or expired", status: 400 };
-    }
+/** Mint and persist an access token under a refresh token; returns the raw value. */
+async function createAccessToken(
+  runtime: Runtime,
+  owner: Pick<McpToken, "clientId" | "adminUserId" | "label" | "scopes"> & { parentTokenId: string },
+): Promise<string> {
+  const now = runtime.clock.now();
+  const access = await generateAccessToken(runtime.randomBytes);
+  await mcpTokens().createToken({
+    id: `tok_${runtime.ids.uuid()}`,
+    type: "access_token",
+    tokenHash: access.hash,
+    tokenPrefix: access.prefix,
+    clientId: owner.clientId,
+    adminUserId: owner.adminUserId,
+    label: owner.label,
+    scopes: owner.scopes,
+    parentTokenId: owner.parentTokenId,
+    expiresAt: now + ACCESS_TOKEN_TTL_MS,
+    createdAt: now,
+  });
+  return access.raw;
+}
 
-    const { raw: rawAccess, hash: accessHash, prefix: accessPrefix } = await generateAccessToken();
-    await tokenRepo.createToken({
-      id: `tok_${nanoid()}`,
-      type: "access_token",
-      tokenHash: accessHash,
-      tokenPrefix: accessPrefix,
-      clientId: refreshRow.clientId,
-      adminUserId: refreshRow.adminUserId,
-      label: `OAuth Access for ${refreshRow.clientId ?? "client"}`,
-      scopes: refreshRow.scopes,
-      parentTokenId: refreshRow.id,
-      expiresAt: now + ACCESS_TOKEN_TTL_MS,
-      createdAt: now,
-    });
-
-    return {
-      ok: true,
-      accessToken: rawAccess,
-      refreshToken,
-      expiresIn: Math.floor(ACCESS_TOKEN_TTL_MS / 1000),
-      tokenType: "Bearer",
-      scope: refreshRow.scopes.join(" "),
-    };
-  }
-
-  return { ok: false, error: "unsupported_grant_type", description: `Unsupported grant_type: ${grantType}`, status: 400 };
+function bearerGrant(accessToken: string, refreshToken: string, scope: string): ExchangeResult {
+  return {
+    ok: true,
+    accessToken,
+    refreshToken,
+    expiresIn: Math.floor(ACCESS_TOKEN_TTL_MS / 1000),
+    tokenType: "Bearer",
+    scope,
+  };
 }
 
 export async function listOAuthClients(): Promise<McpClient[]> {
   return mcpOAuth().listClients();
 }
 
-export async function revokeOAuthClientById(id: string, now = Date.now()): Promise<boolean> {
-  return mcpOAuth().revokeClient(id, now);
+export async function revokeOAuthClientById(id: string, clock: Clock = appRuntime().clock): Promise<boolean> {
+  return mcpOAuth().revokeClient(id, clock.now());
 }
