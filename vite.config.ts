@@ -51,15 +51,35 @@ export default defineConfig(({ command }) => ({
     ...(host !== "localhost" ? { allowedHosts: [host] } : {}),
     ...(process.env.PORT ? { port: Number(process.env.PORT) } : {}),
   },
-  // Browser (client environment) dependency pre-bundling. ngk-dashboard, recharts
-  // and lucide-react are large and are first imported by the /internal routes
-  // (recharts only after the dashboard's lazy chunk loads), so Vite would not
-  // discover them at startup: the first visit to that route would trigger a
-  // re-optimisation and a full page reload in dev. Listing them here pre-bundles
-  // them up front. This does not touch the Worker (`ssr`) environment, which the
-  // Cloudflare plugin configures itself.
+  // Browser (client environment) dependency pre-bundling.
+  //
+  // Vite only discovers a dependency when it first sees an import of it. Left to
+  // itself it finds the admin's (`react-i18next`, `zod`,
+  // `@shopify/shopify-app-react-router/react`, ...) and the console's
+  // (`ngk-dashboard`, `recharts`, `lucide-react`) only when you first visit a
+  // route that imports them. Each discovery re-optimises, reloads the page, and
+  // leaves the browser holding dependency URLs with an outdated `?v=` hash that
+  // answer 504 — the slow, error-filled first navigation in dev. Listing every
+  // browser-side package here bundles them all before the first request.
+  // Add a package here when a client route starts importing a new one: the
+  // symptom is "new dependencies found ... reloading" in `DEBUG=vite:deps`.
+  // This does not touch the Worker (`ssr`) environment, which the Cloudflare
+  // plugin configures itself.
   optimizeDeps: {
-    include: ["ngk-dashboard", "recharts", "lucide-react"],
+    include: [
+      "react",
+      "react-dom/client",
+      "react-router",
+      "react-router/dom",
+      "react-i18next",
+      "i18next",
+      "zod",
+      "ngk-dashboard",
+      "recharts",
+      "lucide-react",
+      "@shopify/shopify-app-react-router/react",
+      "@shopify/app-bridge-types",
+    ],
   },
   plugins: [
     // Runs the app in the Workers runtime (workerd) during dev, matching
