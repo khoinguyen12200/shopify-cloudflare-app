@@ -115,6 +115,7 @@
     },
     "@shopify/graphql-codegen": {
       "lodash": "^4.18.1"
-    }
+    },
+    "undici": "^7.29.1"
   }
 }
