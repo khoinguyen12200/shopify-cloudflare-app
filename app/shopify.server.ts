@@ -4,17 +4,16 @@ import { redactionGuard, shops } from "~/wiring.server";
 import "@shopify/shopify-api/adapters/cf-worker";
 
 import {
-  ApiVersion,
   AppDistribution,
   shopifyApp,
 } from "@shopify/shopify-app-react-router/server";
 
+import { apiVersion } from "./shopify-api-version";
 import { KVSessionStorage } from "./session-storage.server";
 import { persistShopIdentity, refreshShopSubscription } from "~/wiring.server";
 import { getEnv } from "~/request-context.server";
 import { hashShop, shopLog } from "~/observability/shop-log";
 
-export const apiVersion = ApiVersion.July26;
 
 /**
  * Record (or revive) an install the moment a shop gets a session.

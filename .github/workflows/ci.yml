@@ -5,13 +5,25 @@ on:
     branches: [main]
   pull_request:
 
+# Least privilege: this workflow only reads the repository.
+permissions:
+  contents: read
+
+# A newer push to the same ref supersedes an older run still in flight.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v5
+      # Node comes from .nvmrc (24 = the current Active LTS line). package.json
+      # `engines` is the minimum a dependency needs; .nvmrc is what CI runs.
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -19,7 +31,7 @@ jobs:
       - run: npm ci
 
       # typecheck + lint + tests. Tests run against real workerd via
-      # @cloudflare/vitest-pool-workers, with outbound network blocked.
+      # @cloudflare/vitest-plugin, with outbound network blocked.
       - run: npm run verify
 
       # Prove the production build works — it is where the environment gets

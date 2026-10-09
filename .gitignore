@@ -62,3 +62,6 @@ database.sqlite
 
 # GraphQL codegen output
 app/types/
+
+# wrangler check startup output
+*.cpuprofile

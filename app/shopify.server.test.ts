@@ -3,7 +3,8 @@ import { env } from "cloudflare:test";
 import { runWithRequestContext } from "~/request-context.server";
 import { setupTestDatabase } from "~/test/db";
 import { ShopRepo } from "~/models/shops.server";
-import { afterAuth, apiVersion } from "./shopify.server";
+import { afterAuth } from "./shopify.server";
+import { apiVersion } from "./shopify-api-version";
 
 setupTestDatabase();
 
@@ -21,7 +22,7 @@ const authOf = (shop: string) => ({ session: { shop } });
  */
 describe("recording an install when a session is minted", () => {
   it("pins Shopify Admin API calls to the current stable release", () => {
-    expect(apiVersion).toBe("2026-07");
+    expect(apiVersion).toBe("2026-10");
   });
 
   it("writes a shops row for the shop the session belongs to", async () => {

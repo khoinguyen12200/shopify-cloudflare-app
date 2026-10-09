@@ -1,0 +1,26 @@
+# Weekly dependency PRs. Minor and patch updates arrive as ONE grouped PR per
+# ecosystem so the weekly review is a single `npm run verify`; a major arrives
+# on its own so a breaking change is never hidden in a batch.
+#
+# Check the peer ranges before merging a major (see docs/UPGRADING.md): several
+# are pinned together (react-router with @shopify/shopify-app-react-router and
+# remix-i18next; vitest with @cloudflare/vitest-plugin; typescript with
+# typescript-eslint and @react-router/dev).
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

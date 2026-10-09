@@ -24,9 +24,19 @@
     "strict": true,
     "skipLibCheck": true,
     "isolatedModules": true,
+    // Zero-cost strictness: the codebase already satisfies all four. Not on
+    // yet (existing violations): noUncheckedIndexedAccess (15) and
+    // exactOptionalPropertyTypes (69) — see docs/UPGRADING.md.
+    "verbatimModuleSyntax": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,
+    // Lets vitest.config.ts import with an explicit .ts extension, which Vite's
+    // native config loader requires (legal because noEmit is on).
+    "allowImportingTsExtensions": true,
     "allowJs": true,
     "resolveJsonModule": true,
     "jsx": "react-jsx",
@@ -42,7 +52,7 @@
     "types": [
       "vite/client",
       "@shopify/polaris-types",
-      "@cloudflare/vitest-pool-workers/types"
+      "@cloudflare/vitest-plugin/types"
     ],
     "rootDirs": [".", "./.react-router/types"]
   }

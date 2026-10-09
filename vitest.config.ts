@@ -1,9 +1,9 @@
 import { generateSQLiteDrizzleJson, generateSQLiteMigration } from "drizzle-kit/api";
-import { fkParent, fkChild } from "./app/test/cleanup-schema";
+import { fkParent, fkChild } from "./app/test/cleanup-schema.ts";
 import {
   cloudflareTest,
   readD1Migrations,
-} from "@cloudflare/vitest-pool-workers";
+} from "@cloudflare/vitest-plugin";
 import { defineConfig } from "vitest/config";
 import path from "node:path";
 import { readdirSync, readFileSync } from "node:fs";

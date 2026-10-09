@@ -27,8 +27,8 @@ function validFiles() {
       ...structuredClone(production),
       env: { production },
     },
-    productionToml: 'client_id = "client-key"\napplication_url = "https://app.example.org"\n[webhooks]\napi_version = "2026-07"\n[access_scopes]\nscopes = ""\n[auth]\nredirect_urls = [ "https://app.example.org/auth/callback" ]',
-    developmentToml: 'client_id = "dev-key"\napplication_url = "https://dev.example.org"\n[webhooks]\napi_version = "2026-07"\n[access_scopes]\nscopes = ""\n[auth]\nredirect_urls = [ "https://dev.example.org/auth/callback" ]',
+    productionToml: 'client_id = "client-key"\napplication_url = "https://app.example.org"\n[webhooks]\napi_version = "2026-10"\n[access_scopes]\nscopes = ""\n[auth]\nredirect_urls = [ "https://app.example.org/auth/callback" ]',
+    developmentToml: 'client_id = "dev-key"\napplication_url = "https://dev.example.org"\n[webhooks]\napi_version = "2026-10"\n[access_scopes]\nscopes = ""\n[auth]\nredirect_urls = [ "https://dev.example.org/auth/callback" ]',
     legal: 'export const APP_NAME = "Useful App";\nexport const COMPANY_NAME = "Example LLC";\nexport const CONTACT_EMAIL = "privacy@example.org";\nexport const COMPANY_ADDRESS = "1 Main Street";\nexport const LAST_UPDATED = "2026-09-01";',
     identity: 'name: "Useful App", companyName: "Example LLC", supportEmail: "support@example.org", privacyEmail: "privacy@example.org", address: "1 Main Street", effectiveDate: "2026-09-01"',
     plans: 'handle: "free"\nhandle: "pro"',
@@ -52,7 +52,7 @@ test("requires the hourly uninstall-probe cron and a daily cron in production", 
 
 test("rejects a webhook API version that is not the template release", () => {
   const files = validFiles();
-  files.productionToml = files.productionToml.replace('api_version = "2026-07"', 'api_version = "2026-10"');
+  files.productionToml = files.productionToml.replace('api_version = "2026-10"', 'api_version = "2026-07"');
   const issues = validateLaunchContract(files).join("\n");
   assert.match(issues, /webhook API version/i);
 });
@@ -150,4 +150,10 @@ test("rejects an impossible policy date", () => {
   const files = validFiles();
   files.identity = files.identity.replace("2026-09-01", "2026-02-30");
   assert.match(validateLaunchContract(files).join("\n"), /legal identity\/contact\/date/);
+});
+
+test("rejects a Partner API version that is not the template's Partner release", () => {
+  const files = validFiles();
+  files.wrangler.env.production.vars.SHOPIFY_PARTNER_API_VERSION = "2026-10";
+  assert.match(validateLaunchContract(files).join("\n"), /SHOPIFY_PARTNER_API_VERSION must be 2026-07/);
 });

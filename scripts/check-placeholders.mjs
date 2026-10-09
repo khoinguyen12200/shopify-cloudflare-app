@@ -241,12 +241,16 @@ export function validateLaunchContract(files) {
   }
   const productionWebhookVersion = tomlSectionString(files.productionToml, "webhooks", "api_version");
   const developmentWebhookVersion = tomlSectionString(files.developmentToml, "webhooks", "api_version");
-  const supportedShopifyVersion = "2026-07";
-  if (productionWebhookVersion !== supportedShopifyVersion || developmentWebhookVersion !== supportedShopifyVersion) {
-    issues.push(`webhook API version must be ${supportedShopifyVersion} in both Shopify app configs`);
+  // Two tracks. The Admin API / webhook version is ONE decision (ApiVersion in
+  // app/shopify.server.ts and both tomls). The Partner API is versioned
+  // separately and its newest published version lags the Admin API.
+  const supportedWebhookVersion = "2026-10";
+  const supportedPartnerVersion = "2026-07";
+  if (productionWebhookVersion !== supportedWebhookVersion || developmentWebhookVersion !== supportedWebhookVersion) {
+    issues.push(`webhook API version must be ${supportedWebhookVersion} in both Shopify app configs`);
   }
-  if (vars.SHOPIFY_PARTNER_API_VERSION !== supportedShopifyVersion) {
-    issues.push(`SHOPIFY_PARTNER_API_VERSION must be ${supportedShopifyVersion}`);
+  if (vars.SHOPIFY_PARTNER_API_VERSION !== supportedPartnerVersion) {
+    issues.push(`SHOPIFY_PARTNER_API_VERSION must be ${supportedPartnerVersion}`);
   }
   const identitySource = files.identity ?? "";
   const requiredIdentity = ["name", "companyName", "supportEmail", "privacyEmail", "address"];

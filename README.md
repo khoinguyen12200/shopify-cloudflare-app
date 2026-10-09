@@ -12,7 +12,7 @@ link.)
 
 | Layer      | Choice                                                    |
 | ---------- | --------------------------------------------------------- |
-| Runtime    | Cloudflare Workers (workerd), via `@cloudflare/vite-plugin` |
+| Runtime    | Cloudflare Workers (workerd), via `@cloudflare/vite-plugin`; tooling on Node 24 LTS (`.nvmrc`, `engines >=24.15`) |
 | Framework  | React Router 7 (SSR) + Vite 8, explicit nested route config |
 | Shopify    | `@shopify/shopify-app-react-router` v3, Admin API 2026-10  |
 | Admin UI   | Polaris **web components** + App Bridge (embedded only)    |
@@ -22,7 +22,7 @@ link.)
 | Money      | integer minor units + currency (`app/money/`), never a float |
 | State      | D1 + Drizzle (`app/db/`, queried only in `app/models/`)   |
 | Sessions   | Workers KV (`app/session-storage.server.ts`)              |
-| Tests      | Vitest + `@cloudflare/vitest-pool-workers` (real workerd) |
+| Tests      | Vitest 5 + `@cloudflare/vitest-plugin` (real workerd) |
 
 Dev runs in workerd with real D1/KV bindings under Miniflare, so local
 behaviour matches production.

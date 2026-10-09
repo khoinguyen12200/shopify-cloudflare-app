@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "shopify-cloudflare-app",
   "main": "./workers/app.ts",
-  "compatibility_date": "2026-08-01",
+  "compatibility_date": "2026-10-06",
   // nodejs_compat: the Shopify libraries reach for a few Node built-ins, and
   // app/request-context.server.ts uses node:async_hooks (AsyncLocalStorage).
   "compatibility_flags": ["nodejs_compat"],
@@ -13,7 +13,15 @@
     // this Worker and loop.
     "binding": "ASSETS"
   },
-  "observability": { "enabled": true },
+  // enabled + an explicit head_sampling_rate (1 = every request, the default,
+  // written out so lowering it is a visible decision). redact_query_string:
+  // an embedded request carries `id_token` and `hmac` in its query string, and
+  // the platform's own invocation logs would otherwise record the full URL.
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "redact_query_string": true
+  },
 
   // Local development: reconcile Partner history every five minutes.
   // Production keeps the lower-frequency schedule declared below.
@@ -168,7 +176,11 @@
   // compatibility_flags and assets ARE inherited.)
   "env": {
     "production": {
-      "observability": { "enabled": true },
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 1,
+        "redact_query_string": true
+      },
       "queues": {
         "producers": [
           { "binding": "WEBHOOK_QUEUE", "queue": "shopify-webhooks-prod" },
