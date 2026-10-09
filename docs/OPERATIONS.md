@@ -82,6 +82,8 @@ whole-database recovery mechanism when its retention window covers the event.
 
 ## Scheduled cleanup and R2
 
+Production has two crons: hourly (`0 * * * *`) runs only the uninstall probe (40 shops per tick, 960 per day; watch
+`uninstall_probe.backlog`), and daily (`30 3 * * *`) runs maintenance plus the probe.
 The daily production cron runs expired-upload cleanup. It deletes R2 objects
 before deleting their D1 rows, so a failed object deletion remains retryable on
 the next cron. Investigate `cron.sweep_failed` and the event-specific failure

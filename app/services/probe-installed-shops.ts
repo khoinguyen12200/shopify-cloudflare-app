@@ -4,8 +4,14 @@ import type { ShopTokenRefresher, TokenRefreshOutcome } from "~/ports/token-refr
 import type { UninstallObservation } from "~/domain/webhook-ordering";
 import type { UninstallOutcome } from "~/services/record-uninstall";
 
-/** Shops probed per tick. Each probe is a handful of KV/D1 calls plus one fetch, all sequential. */
-export const PROBE_BATCH_SIZE = 50;
+/**
+ * Shops probed per tick. Each probe is ONE external fetch (the token endpoint) plus a handful of KV/D1 calls, all
+ * sequential. Workers Free allows 50 external subrequests per invocation (Paid: 10,000) and 1,000 to internal
+ * services, so 40 leaves headroom under the Free cap for the other fetches a full daily tick makes. Capacity is
+ * `PROBE_BATCH_SIZE x ticks per day`: with the hourly probe cron, 960 shops/day, and a fleet of up to
+ * `PROBE_BATCH_SIZE x (PROBE_COOLDOWN_MS / 1h)` = 800 shops is covered inside one cooldown. See shopify-api-invariants.md.
+ */
+export const PROBE_BATCH_SIZE = 40;
 /** A shop probed successfully inside this window is not probed again. */
 export const PROBE_COOLDOWN_MS = 20 * 60 * 60 * 1000;
 /** Longer than a probe can take, short enough that a crashed tick does not block the shop for long. */
@@ -14,6 +20,8 @@ export const PROBE_LEASE_MS = 2 * 60 * 1000;
 export interface ProbePorts {
   readonly probes: {
     listDue(now: number, cooldownMs: number, limit: number): Promise<readonly string[]>;
+    /** Shops due right now, beyond the batch: a count, so a growing backlog is visible without naming anyone. */
+    countDue(now: number, cooldownMs: number): Promise<number>;
     acquireLease(shop: string, now: number, leaseMs: number): Promise<boolean>;
     release(shop: string, result: { readonly at: number } & ({ readonly succeeded: true } | { readonly succeeded: false; readonly code: string; readonly detail: string })): Promise<void>;
   };
@@ -27,7 +35,7 @@ export interface ProbePorts {
 type Disposition = "refreshed" | "fresh" | "noSession" | "superseded" | "uninstalled" | "failed" | "suppressed";
 
 /** Counts for the cron log. A mapped type, so it is assignable to the port's `Record<string, number>`. */
-export type ProbeSummary = { readonly [K in Disposition | "examined" | "leased"]: number };
+export type ProbeSummary = { readonly [K in Disposition | "examined" | "leased" | "overdue"]: number };
 
 /**
  * Reconciliation for a missed `app/uninstalled`. Shopify retries a webhook for four hours and then gives up, and
@@ -42,6 +50,9 @@ export type ProbeSummary = { readonly [K in Disposition | "examined" | "leased"]
  */
 export async function probeInstalledShops(ports: ProbePorts, now: number): Promise<ProbeSummary> {
   const shops = await ports.probes.listDue(now, PROBE_COOLDOWN_MS, PROBE_BATCH_SIZE);
+  // Counted before the batch runs: how many shops were overdue when this tick started.
+  const overdue = await ports.probes.countDue(now, PROBE_COOLDOWN_MS);
+  if (overdue > shops.length) console.log(JSON.stringify({ event: "uninstall_probe.backlog", overdue, batch: PROBE_BATCH_SIZE }));
   const counts: Record<Disposition | "leased", number> = { leased: 0, refreshed: 0, fresh: 0, noSession: 0, superseded: 0, uninstalled: 0, failed: 0, suppressed: 0 };
   const redacted = await ports.redaction.redactedAmong(shops);
   for (const shop of shops) {
@@ -56,7 +67,7 @@ export async function probeInstalledShops(ports: ProbePorts, now: number): Promi
     counts[await probeOne(ports, shop)] += 1;
   }
   if (counts.suppressed > 0) console.log(JSON.stringify({ event: "uninstall_probe.suppressed", count: counts.suppressed }));
-  return { examined: shops.length, ...counts };
+  return { examined: shops.length, overdue, ...counts };
 }
 
 async function probeOne(ports: ProbePorts, shop: string): Promise<Disposition> {

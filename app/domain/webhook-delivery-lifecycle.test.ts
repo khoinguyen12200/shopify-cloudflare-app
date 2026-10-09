@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isWebhookTopic, topicRequiresShopRecord, transitionWebhookDelivery, type WebhookDeliveryStatus, type WebhookTransitionEvent } from "./webhook-delivery-lifecycle";
+import { decideShopGate, deferralDelaySeconds, isWebhookTopic, topicRequiresShopRecord, transitionWebhookDelivery, type WebhookDeliveryStatus, type WebhookTransitionEvent } from "./webhook-delivery-lifecycle";
 
 describe("webhook delivery lifecycle", () => {
   const legal: readonly [WebhookDeliveryStatus, WebhookTransitionEvent, WebhookDeliveryStatus][] = [
@@ -60,5 +60,51 @@ describe("webhook topics", () => {
 
   it("lets only the compliance topics run when the shop record is gone", () => {
     expect(topics.filter((topic) => !topicRequiresShopRecord(topic))).toEqual(["customers/data_request", "customers/redact", "shop/redact"]);
+  });
+});
+
+describe("decideShopGate", () => {
+  const base = { tombstoned: false, hasShopRecord: false, finalAttempt: false };
+
+  it.each(["customers/data_request", "customers/redact", "shop/redact"])("%s always runs, tombstoned or not", (topic) => {
+    for (const tombstoned of [true, false]) for (const hasShopRecord of [true, false]) for (const finalAttempt of [true, false]) {
+      expect(decideShopGate({ topic, tombstoned, hasShopRecord, finalAttempt })).toBe("run");
+    }
+  });
+
+  it.each(["app/uninstalled", "app/scopes_update", "orders/create"])("%s for a tombstoned shop is discarded, whatever else is true", (topic) => {
+    for (const hasShopRecord of [true, false]) for (const finalAttempt of [true, false]) {
+      expect(decideShopGate({ topic, tombstoned: true, hasShopRecord, finalAttempt })).toBe("discard_redacted");
+    }
+  });
+
+  it.each(["app/uninstalled", "app/scopes_update"])("%s for a known shop runs", (topic) => {
+    expect(decideShopGate({ ...base, topic, hasShopRecord: true })).toBe("run");
+  });
+
+  it("an uninstall for an unknown shop runs as a flagged no-op, on any attempt", () => {
+    expect(decideShopGate({ ...base, topic: "app/uninstalled" })).toBe("run_unknown_shop");
+    expect(decideShopGate({ ...base, topic: "app/uninstalled", finalAttempt: true })).toBe("run_unknown_shop");
+  });
+
+  it("a scopes update for an unknown shop is deferred until the final attempt, then runs flagged", () => {
+    expect(decideShopGate({ ...base, topic: "app/scopes_update" })).toBe("defer_unknown_shop");
+    expect(decideShopGate({ ...base, topic: "app/scopes_update", finalAttempt: true })).toBe("run_unknown_shop");
+  });
+
+  it("an unrecognised topic that is not tombstoned runs, so it reaches the retire-unsupported path", () => {
+    expect(decideShopGate({ ...base, topic: "orders/create" })).toBe("run");
+    expect(decideShopGate({ ...base, topic: "toString" })).toBe("run");
+  });
+});
+
+describe("deferralDelaySeconds", () => {
+  it("doubles from a minute and caps at an hour", () => {
+    expect([1, 2, 3, 4, 5, 6, 7, 8, 9, 100].map(deferralDelaySeconds)).toEqual([60, 120, 240, 480, 960, 1920, 3600, 3600, 3600, 3600]);
+  });
+
+  it("treats a missing or zero attempt count as the first", () => {
+    expect(deferralDelaySeconds(0)).toBe(60);
+    expect(deferralDelaySeconds(-3)).toBe(60);
   });
 });

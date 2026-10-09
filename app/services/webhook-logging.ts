@@ -52,5 +52,5 @@ export async function withWebhookFailureLog<T>(request: Request, run: () => Prom
 
 /** A webhook that was handled, or safely ignored, is routine; only a failure belongs at error level. */
 export function webhookLogLevel(outcome: string): "log" | "error" {
-  return outcome === "processed" || outcome === "duplicate" || outcome === "discarded" || outcome === "unsupported" ? "log" : "error";
+  return outcome === "processed" || outcome === "duplicate" || outcome === "deferred" || outcome === "discarded" || outcome === "unsupported" ? "log" : "error";
 }

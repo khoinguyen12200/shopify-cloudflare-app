@@ -4,6 +4,7 @@ import {
   RouterContextProvider,
 } from "react-router";
 import { runWithRequestContext } from "../app/request-context.server";
+import { sweepPlanFor } from "../app/domain/cron-schedule";
 import { runScheduledSweeps } from "../app/services/scheduled.server";
 import { scheduledDependencies, webhookConsumer } from "../app/wiring.server";
 import { consumeWebhook } from "../app/services/webhook-consumer";
@@ -42,8 +43,8 @@ export default {
   },
 
   /** Cron work shares the request context used by HTTP routes. */
-  async scheduled(_controller, env) {
-    await runWithRequestContext(env, () => runScheduledSweeps(Date.now(), scheduledDependencies()));
+  async scheduled(controller, env) {
+    await runWithRequestContext(env, () => runScheduledSweeps(Date.now(), scheduledDependencies(), sweepPlanFor(controller.cron)));
   },
 
   async queue(batch, env) {

@@ -92,7 +92,8 @@ describe("redaction tombstone at webhook intake (real D1 + queue)", () => {
 
   it("the consumer deletes a delivery it skips for a redacted shop, so nothing lingers", async () => {
     vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const shop = "tomb-skip.myshopify.com"; // no shops row: the consumer treats the shop as redacted
+    const shop = "tomb-skip.myshopify.com";
+    await redactAndPurge(shop, "tomb-skip-redact"); // tombstoned; a delivery queued before the purge can still be in flight
     const work = await inRequest(() => queuedDelivery({ shop, id: "skip-me", topic: "app/uninstalled", triggeredAt: 5 }));
     expect(await deliveryCount(shop)).toBe(1);
 

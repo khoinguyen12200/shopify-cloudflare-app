@@ -20,6 +20,7 @@ function validFiles() {
     ai: { binding: "AI" },
     queues: { producers: [{ binding: "WEBHOOK_QUEUE", queue: "queue" }], consumers: [{ queue: "queue", max_retries: 5, dead_letter_queue: "queue-dlq" }] },
     ratelimits: [{ name: "SUPPORT_LIMITER" }, { name: "LOGIN_LIMITER" }, { name: "RESET_LIMITER" }],
+    triggers: { crons: ["30 3 * * *", "0 * * * *"] },
   };
   return {
     wrangler: {
@@ -37,6 +38,16 @@ function validFiles() {
 
 test("accepts populated production config while allowing local fixture values", () => {
   assert.deepEqual(validateLaunchContract(validFiles()), []);
+});
+
+test("requires the hourly uninstall-probe cron and a daily cron in production", () => {
+  const files = validFiles();
+  files.wrangler.env.production.triggers = { crons: ["30 3 * * *"] };
+  assert.match(validateLaunchContract(files).join("\n"), /hourly uninstall-probe cron/);
+  files.wrangler.env.production.triggers = { crons: ["0 * * * *"] };
+  assert.match(validateLaunchContract(files).join("\n"), /daily maintenance cron/);
+  delete files.wrangler.env.production.triggers;
+  assert.match(validateLaunchContract(files).join("\n"), /hourly uninstall-probe cron/);
 });
 
 test("rejects a webhook API version that is not the template release", () => {

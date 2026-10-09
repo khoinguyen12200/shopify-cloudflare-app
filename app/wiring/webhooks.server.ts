@@ -90,7 +90,10 @@ export function webhookConsumer() {
   return {
     deliveries: webhookDeliveryRepository(),
     now: appRuntime().clock.now,
-    isRedactedShop: async (shop: string) => (await shops().get(shop)) === undefined,
+    shopStanding: async (shop: string) => ({
+      tombstoned: (await redactionGuard().redactedAmong([shop])).has(shop),
+      hasShopRecord: (await shops().get(shop)) !== undefined,
+    }),
     handlers,
   };
 }

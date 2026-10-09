@@ -17,6 +17,7 @@
 
   // Local development: reconcile Partner history every five minutes.
   // Production keeps the lower-frequency schedule declared below.
+  // Every tick here runs everything: only the exact hourly probe cron (UNINSTALL_PROBE_CRON) is probe-only.
   "triggers": { "crons": ["*/5 * * * *"] },
 
   // Authenticated Shopify webhooks are acknowledged only after their durable
@@ -215,7 +216,9 @@
           "simple": { "limit": 3, "period": 60 }
         }
       ],
-      "triggers": { "crons": ["30 3 * * *"] },
+      // Re-declared, never inherited. Daily: full maintenance + probe. Hourly: probe only (app/domain/cron-schedule.ts).
+      // 40 probes/tick x 24 ticks = 960 shops/day; see .claude/rules/shopify-api-invariants.md.
+      "triggers": { "crons": ["30 3 * * *", "0 * * * *"] },
       "d1_databases": [
         {
           "binding": "DB",

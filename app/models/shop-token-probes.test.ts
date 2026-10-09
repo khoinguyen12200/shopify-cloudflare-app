@@ -21,6 +21,23 @@ async function installed(...names: string[]) {
   for (const shop of names) await repo.recordInstall(shop, 1);
 }
 
+describe("ShopTokenProbeRepo.countDue", () => {
+  it("counts exactly the shops listDue would return without its limit, and only installed ones", async () => {
+    const now = 100 * HOUR;
+    const result = await inRequest(async () => {
+      await installed("c1.myshopify.com", "c2.myshopify.com", "c3.myshopify.com", "c4.myshopify.com", "c5.myshopify.com");
+      await new ShopRepo().applyUninstall("c5.myshopify.com", { kind: "uninstalled", occurredAt: 5, externalId: "u" });
+      await probes.acquireLease("c2.myshopify.com", now - HOUR, 1);
+      await probes.release("c2.myshopify.com", { succeeded: true, at: now - HOUR });
+      await probes.acquireLease("c3.myshopify.com", now - 1_000, 60_000);
+      return { count: await probes.countDue(now, COOLDOWN), listed: await probes.listDue(now, COOLDOWN, 1) };
+    });
+    // c2 probed recently, c3 leased, c5 uninstalled: c1 and c4 remain; the limit does not change the count.
+    expect(result.count).toBe(2);
+    expect(result.listed).toHaveLength(1);
+  });
+});
+
 describe("ShopTokenProbeRepo.listDue", () => {
   it("lists installed shops only, never an uninstalled one", async () => {
     const due = await inRequest(async () => {

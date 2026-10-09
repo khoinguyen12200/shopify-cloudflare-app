@@ -6,7 +6,7 @@ import { PROBE_BATCH_SIZE, PROBE_COOLDOWN_MS, PROBE_LEASE_MS, probeInstalledShop
 
 afterEach(() => vi.restoreAllMocks());
 
-function fixture(options: { due: readonly string[]; outcomes?: Record<string, TokenRefreshOutcome | Error>; leased?: readonly string[]; uninstall?: "recorded" | "ignored_stale" }) {
+function fixture(options: { due: readonly string[]; outcomes?: Record<string, TokenRefreshOutcome | Error>; leased?: readonly string[]; overdue?: number; uninstall?: "recorded" | "ignored_stale" }) {
   const events: string[] = [];
   const released: Record<string, unknown> = {};
   let now = 1_000;
@@ -14,6 +14,7 @@ function fixture(options: { due: readonly string[]; outcomes?: Record<string, To
   const ports: ProbePorts = {
     probes: {
       listDue: async (at, cooldown, limit) => { events.push(`due:${at}:${cooldown}:${limit}`); return options.due; },
+      countDue: async () => options.overdue ?? options.due.length,
       acquireLease: async (shop, _at, leaseMs) => { events.push(`lease:${shop}:${leaseMs}`); return !(options.leased ?? []).includes(shop); },
       release: async (shop, result) => { events.push(`release:${shop}`); released[shop] = result; },
     },
@@ -41,7 +42,24 @@ describe("probeInstalledShops", () => {
     const { ports, events } = fixture({ due: [] });
     await expect(probeInstalledShops(ports, 5_000)).resolves.toMatchObject({ examined: 0 });
     expect(events).toEqual([`due:5000:${PROBE_COOLDOWN_MS}:${PROBE_BATCH_SIZE}`]);
-    expect(PROBE_BATCH_SIZE).toBeLessThanOrEqual(100);
+    // Workers Free allows 50 external subrequests per invocation; each probe makes one.
+    expect(PROBE_BATCH_SIZE).toBeLessThanOrEqual(45);
+  });
+
+  it("reports how many shops are overdue, and logs a backlog event (count only) when the batch cannot cover them", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const { ports } = fixture({ due: ["a.myshopify.com"], overdue: 500 });
+    await expect(probeInstalledShops(ports, 5_000)).resolves.toMatchObject({ examined: 1, overdue: 500 });
+    const lines = log.mock.calls.map(([line]) => String(line));
+    expect(lines).toContain(JSON.stringify({ event: "uninstall_probe.backlog", overdue: 500, batch: PROBE_BATCH_SIZE }));
+    expect(lines.some((line) => line.includes("a.myshopify.com"))).toBe(false);
+  });
+
+  it("logs no backlog event when the batch covers everything that is due", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const { ports } = fixture({ due: ["a.myshopify.com", "b.myshopify.com"] });
+    await probeInstalledShops(ports, 5_000);
+    expect(log.mock.calls.some(([line]) => String(line).includes("uninstall_probe.backlog"))).toBe(false);
   });
 
   it("probes one shop at a time, under a lease each, releasing it as a success", async () => {

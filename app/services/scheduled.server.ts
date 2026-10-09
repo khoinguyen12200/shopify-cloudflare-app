@@ -1,3 +1,4 @@
+import type { SweepPlan } from "~/domain/cron-schedule";
 import type { ScheduledDependencies } from "~/ports/scheduled";
 
 /** Keep spent and expired tokens around briefly, so a replay still reports accurately. */
@@ -9,7 +10,18 @@ const TOKEN_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
  * Each sweep guards its own errors: one failing must never cost the others their
  * tick, and a cron that throws simply does not run the rest.
  */
-export async function runScheduledSweeps(now: number, dependencies: ScheduledDependencies): Promise<void> {
+export async function runScheduledSweeps(
+  now: number,
+  dependencies: ScheduledDependencies,
+  plan: SweepPlan = { includeDailyMaintenance: true },
+): Promise<void> {
+  if (plan.includeDailyMaintenance) await runDailyMaintenance(now, dependencies);
+  // Shopify tells apps not to rely on webhooks alone; this is what finds an uninstall whose webhook was lost.
+  // It runs on every tick, including the hourly probe-only one.
+  await sweep("uninstall_reconciliation", async () => ({ ...(await dependencies.uninstallProbe.run(now)) }));
+}
+
+async function runDailyMaintenance(now: number, dependencies: ScheduledDependencies): Promise<void> {
   await sweep("password_reset_tokens", async () => {
     const deleted = await dependencies.tokens.deleteExpiredBefore(
       now - TOKEN_RETENTION_MS,
@@ -31,8 +43,6 @@ export async function runScheduledSweeps(now: number, dependencies: ScheduledDep
     if (result.status === "failed") throw new Error(`${result.code}: ${result.detail}`);
     return { pages: result.pages, events: result.events };
   });
-  // Shopify tells apps not to rely on webhooks alone; this is what finds an uninstall whose webhook was lost.
-  await sweep("uninstall_reconciliation", async () => ({ ...(await dependencies.uninstallProbe.run(now)) }));
 }
 
 async function sweep(

@@ -217,6 +217,11 @@ export function validateLaunchContract(files) {
   if (!webhookQueue || !production.queues?.consumers?.some((entry) => entry.queue === webhookQueue)) {
     issues.push("production WEBHOOK_QUEUE consumer is missing");
   }
+  // Named-env triggers are not inherited, and the hourly probe cron must match UNINSTALL_PROBE_CRON in
+  // app/domain/cron-schedule.ts (that file's test pins the literal). Without it uninstall reconciliation runs once a day.
+  const crons = production.triggers?.crons ?? [];
+  if (!crons.includes("0 * * * *")) issues.push('production triggers.crons must include the hourly uninstall-probe cron "0 * * * *"');
+  if (crons.length < 2) issues.push("production triggers.crons must also keep a daily maintenance cron");
   if (!("AI_GATEWAY_ID" in vars)) issues.push("AI_GATEWAY_ID production var is missing");
 
   const clientId = tomlString(files.productionToml, "client_id");

@@ -1,5 +1,6 @@
+import { shopLog } from "~/observability/shop-log";
 import type { QueuedWebhook } from "~/ports/webhook-queue";
-import { isWebhookTopic, topicRequiresShopRecord, transitionWebhookDelivery, WEBHOOK_PROCESSING_LEASE_MS, type WebhookTopic } from "~/domain/webhook-delivery-lifecycle";
+import { decideShopGate, deferralDelaySeconds, type ShopGateDecision, isWebhookTopic, topicRequiresShopRecord, transitionWebhookDelivery, WEBHOOK_PROCESSING_LEASE_MS, type WebhookTopic } from "~/domain/webhook-delivery-lifecycle";
 export type { QueuedWebhook } from "~/ports/webhook-queue";
 
 export interface ConsumerDelivery {
@@ -32,12 +33,23 @@ export interface WebhookConsumerDependencies {
   };
   readonly handlers: WebhookHandlerRegistry;
   readonly now: () => number;
-  readonly isRedactedShop?: (shop: string) => Promise<boolean>;
+  /**
+   * What is known about a shop: erased (tombstoned) and/or recorded (has a `shops` row). Asked only for topics that
+   * need the record. Absent means "known and not erased".
+   */
+  readonly shopStanding?: (shop: string) => Promise<ShopStanding>;
+}
+
+export interface ShopStanding {
+  readonly tombstoned: boolean;
+  readonly hasShopRecord: boolean;
 }
 
 export interface WebhookConsumerResult {
-  readonly outcome: "processed" | "unavailable" | "missing" | "duplicate" | "unsupported";
+  readonly outcome: "processed" | "unavailable" | "deferred" | "missing" | "duplicate" | "unsupported";
   readonly topic: string | null;
+  /** Set with `deferred`: how long the queue should wait before redelivering. */
+  readonly retryDelaySeconds?: number;
 }
 
 const FINAL_QUEUE_ATTEMPT = 9;
@@ -115,8 +127,8 @@ export async function consumeWebhook(
 ): Promise<WebhookConsumerResult> {
   const delivery = await dependencies.deliveries.get(work.shop, work.id);
   if (!delivery) return { outcome: "missing", topic: null };
-  // Topics that exist to run when the shop is gone (the purge itself, the compliance answers) skip this guard.
-  if ((!isWebhookTopic(delivery.topic) || topicRequiresShopRecord(delivery.topic)) && await dependencies.isRedactedShop?.(work.shop)) {
+  const gate = await shopGate(dependencies, work, delivery);
+  if (gate === "discard_redacted") {
     await dependencies.deliveries.deleteDelivery?.(work.shop, work.id);
     return { outcome: "missing", topic: delivery.topic };
   }
@@ -124,11 +136,30 @@ export async function consumeWebhook(
   if (delivery.status === "dead_letter" && !isWebhookTopic(delivery.topic)) {
     return { outcome: "unsupported", topic: delivery.topic };
   }
+  if (gate === "defer_unknown_shop") {
+    return { outcome: "deferred", topic: delivery.topic, retryDelaySeconds: deferralDelaySeconds(work.attempts ?? 1) };
+  }
 
   const topic = delivery.topic;
   if (!isWebhookTopic(topic)) return retireUnsupportedTopic(dependencies, work, delivery);
 
   const claim = await claimDelivery(dependencies, work, delivery);
   if (!claim.claimed) return { outcome: "unavailable", topic };
+  if (gate === "run_unknown_shop") await shopLog("webhook.shop_unknown", work.shop, { topic, deliveryId: delivery.id });
   return runHandler(dependencies, work, delivery, topic, claim.startedAt);
+}
+
+/**
+ * Topics that exist to run when the shop is gone (the purge, the compliance answers) never pay for the lookup.
+ * "Erased" is the tombstone, not a missing `shops` row: a shop can legitimately have no row yet.
+ */
+async function shopGate(dependencies: WebhookConsumerDependencies, work: QueuedWebhook, delivery: ConsumerDelivery): Promise<ShopGateDecision> {
+  const needsRecord = !isWebhookTopic(delivery.topic) || topicRequiresShopRecord(delivery.topic);
+  const standing = needsRecord ? await dependencies.shopStanding?.(work.shop) : undefined;
+  return decideShopGate({
+    topic: delivery.topic,
+    tombstoned: standing?.tombstoned ?? false,
+    hasShopRecord: standing?.hasShopRecord ?? true,
+    finalAttempt: (work.attempts ?? 0) >= FINAL_QUEUE_ATTEMPT,
+  });
 }

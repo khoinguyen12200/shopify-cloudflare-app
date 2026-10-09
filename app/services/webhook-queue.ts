@@ -4,7 +4,7 @@ export interface QueueMessageLike {
   readonly body: unknown;
   readonly attempts: number;
   readonly ack: () => void;
-  readonly retry: () => void;
+  readonly retry: (options?: { readonly delaySeconds: number }) => void;
 }
 
 export interface QueueBatchLike {
@@ -16,14 +16,14 @@ export interface QueueLogEntry {
   readonly id?: string;
   readonly shop?: string;
   readonly attempts?: number;
-  readonly outcome: "discarded" | "duplicate" | "processed" | "unavailable" | "failed" | "invalid" | "unsupported";
+  readonly outcome: "discarded" | "duplicate" | "processed" | "unavailable" | "deferred" | "failed" | "invalid" | "unsupported";
   readonly topic?: string;
   readonly handler?: string;
   readonly latencyMs?: number;
 }
 
 export interface QueueProcessingDependencies {
-  readonly consume: (work: QueuedWebhook) => Promise<"processed" | "unavailable" | "missing" | "duplicate" | "unsupported" | { readonly outcome: "processed" | "unavailable" | "missing" | "duplicate" | "unsupported"; readonly topic: string | null }>;
+  readonly consume: (work: QueuedWebhook) => Promise<"processed" | "unavailable" | "missing" | "duplicate" | "unsupported" | { readonly outcome: "processed" | "unavailable" | "deferred" | "missing" | "duplicate" | "unsupported"; readonly topic: string | null; readonly retryDelaySeconds?: number }>;
   readonly log: (entry: QueueLogEntry) => void | Promise<void>;
   readonly now: () => number;
 }
@@ -65,6 +65,10 @@ export async function processQueuedWebhookMessage(
     settleMessage(message, "retry", work.id, message.attempts);
     return;
   }
+  if (outcome === "deferred") {
+    settleMessage(message, "retry", work.id, message.attempts, typeof result === "string" ? undefined : result.retryDelaySeconds);
+    return;
+  }
 
   settleMessage(message, "ack", work.id, message.attempts);
 }
@@ -87,10 +91,12 @@ function settleMessage(
   operation: "ack" | "retry",
   id?: string,
   attempts?: number,
+  retryDelaySeconds?: number,
 ): void {
   try {
     if (operation === "ack") message.ack();
-    else message.retry();
+    else if (retryDelaySeconds === undefined) message.retry();
+    else message.retry({ delaySeconds: retryDelaySeconds });
   } catch (cause) {
     console.error(JSON.stringify({
       event: operation === "ack" ? "webhook.queue_ack_failed" : "webhook.queue_retry_failed",

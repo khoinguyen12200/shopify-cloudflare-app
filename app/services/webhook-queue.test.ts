@@ -134,4 +134,17 @@ describe("processQueuedWebhookMessage", () => {
       error: "ack unavailable",
     }));
   });
+
+  it("retries a deferred delivery with the requested delay and logs it as deferred", async () => {
+    const events: string[] = [];
+    await processQueuedWebhookMessage({
+      body: { shop: "shop.myshopify.com", id: "d1" }, attempts: 2,
+      ack: () => events.push("ack"), retry: (options) => events.push(`retry:${options?.delaySeconds}`),
+    }, {
+      now: () => 100,
+      consume: async () => ({ outcome: "deferred", topic: "app/scopes_update", retryDelaySeconds: 120 }),
+      log: (entry) => { events.push(entry.outcome); },
+    });
+    expect(events).toEqual(["deferred", "retry:120"]);
+  });
 });

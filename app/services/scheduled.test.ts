@@ -68,4 +68,34 @@ describe("runScheduledSweeps", () => {
     });
     expect(calls).toEqual(["history", "probe"]);
   });
+
+  it("runs only the probe when daily maintenance is excluded", async () => {
+    const calls: string[] = [];
+    await runScheduledSweeps(300, {
+      tokens: { deleteExpiredBefore: async () => { calls.push("tokens"); return 0; } },
+      uploads: {
+        listExpiredUploads: async () => { calls.push("uploads"); return []; },
+        deleteUploadObjects: async () => undefined,
+        deleteExpiredUploads: async () => 0,
+      },
+      history: { reconcile: async () => { calls.push("history"); return { status: "succeeded", pages: 1, events: 0 }; } },
+      uninstallProbe: { run: async () => { calls.push("probe"); return { examined: 0 }; } },
+    }, { includeDailyMaintenance: false });
+    expect(calls).toEqual(["probe"]);
+  });
+
+  it("a failing probe does not fail the tick", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      await expect(runScheduledSweeps(300, {
+        tokens: { deleteExpiredBefore: async () => 0 },
+        uploads: { listExpiredUploads: async () => [], deleteUploadObjects: async () => undefined, deleteExpiredUploads: async () => 0 },
+        history: { reconcile: async () => ({ status: "succeeded", pages: 0, events: 0 }) },
+        uninstallProbe: { run: async () => { throw new Error("d1 down"); } },
+      }, { includeDailyMaintenance: false })).resolves.toBeUndefined();
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('"sweep":"uninstall_reconciliation"'));
+    } finally {
+      error.mockRestore();
+    }
+  });
 });

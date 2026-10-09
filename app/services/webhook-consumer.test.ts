@@ -119,4 +119,62 @@ describe("consumeWebhook", () => {
     expect(second).toEqual({ outcome: "unsupported", topic: "retired/topic" });
     expect(states).toEqual(["failed", "dead_letter"]);
   });
+
+  describe("shop standing", () => {
+    const unknown = async () => ({ tombstoned: false, hasShopRecord: false });
+    const tombstoned = async () => ({ tombstoned: true, hasShopRecord: false });
+    const work = { shop: "example.myshopify.com", id: "delivery-1" };
+
+    function scopesDeps(shopStanding: () => Promise<{ tombstoned: boolean; hasShopRecord: boolean }>) {
+      const deps = dependencies();
+      const deleted: string[] = [];
+      const deliveries = {
+        ...deps.deliveries,
+        async get() { return { id: "delivery-1", shop: work.shop, topic: "app/scopes_update", status: "queued", triggeredAt: 50 }; },
+        async deleteDelivery(_shop: string, id: string) { deleted.push(id); },
+      };
+      return { ...deps, deliveries, shopStanding, deleted, handlers: { ...deps.handlers, "app/scopes_update": async () => { deps.handled.push("scopes"); } } };
+    }
+
+    it("runs an uninstall for an unknown shop and keeps the delivery row", async () => {
+      const deps = { ...dependencies(), shopStanding: unknown };
+      const deleted: string[] = [];
+      const deliveries = { ...deps.deliveries, async deleteDelivery(_s: string, id: string) { deleted.push(id); } };
+      await expect(consumeWebhook({ ...deps, deliveries }, work)).resolves.toEqual({ outcome: "processed", topic: "app/uninstalled" });
+      expect(deps.handled).toEqual(["delivery-1"]);
+      expect(deleted).toEqual([]);
+    });
+
+    it("discards and deletes a tombstoned shop's delivery without dispatching", async () => {
+      const deps = scopesDeps(tombstoned);
+      await expect(consumeWebhook(deps, work)).resolves.toEqual({ outcome: "missing", topic: "app/scopes_update" });
+      expect(deps.deleted).toEqual(["delivery-1"]);
+      expect(deps.handled).toEqual([]);
+    });
+
+    it("defers a scopes update for an unknown shop with a growing delay, without claiming it", async () => {
+      const deps = scopesDeps(unknown);
+      await expect(consumeWebhook(deps, { ...work, attempts: 1 })).resolves.toEqual({ outcome: "deferred", topic: "app/scopes_update", retryDelaySeconds: 60 });
+      await expect(consumeWebhook(deps, { ...work, attempts: 3 })).resolves.toEqual({ outcome: "deferred", topic: "app/scopes_update", retryDelaySeconds: 240 });
+      expect(deps.handled).toEqual([]);
+    });
+
+    it("runs a scopes update for an unknown shop on the final attempt so it settles", async () => {
+      const deps = scopesDeps(unknown);
+      await expect(consumeWebhook(deps, { ...work, attempts: 9 })).resolves.toMatchObject({ outcome: "processed" });
+      expect(deps.handled).toEqual(["scopes"]);
+    });
+
+    it("a processed delivery stays a duplicate even if the shop is unknown, and compliance never asks for standing", async () => {
+      const deps = scopesDeps(unknown);
+      const processed = { ...deps, deliveries: { ...deps.deliveries, async get() { return { id: "delivery-1", shop: work.shop, topic: "app/scopes_update", status: "processed", triggeredAt: 50 }; } } };
+      await expect(consumeWebhook(processed, work)).resolves.toMatchObject({ outcome: "duplicate" });
+
+      let asked = 0;
+      const compliance = { ...dependencies(), shopStanding: async () => { asked += 1; return { tombstoned: true, hasShopRecord: false }; } };
+      const redact = { ...compliance, deliveries: { ...compliance.deliveries, async get() { return { id: "delivery-1", shop: work.shop, topic: "shop/redact", status: "queued", triggeredAt: 50 }; } } };
+      await expect(consumeWebhook(redact, work)).resolves.toMatchObject({ outcome: "processed" });
+      expect(asked).toBe(0);
+    });
+  });
 });

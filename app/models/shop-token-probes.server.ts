@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, lt, lte, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { shops, shopifySyncCheckpoints } from "~/db/schema";
 import { getDb } from "~/request-context.server";
 
@@ -9,6 +9,16 @@ import { getDb } from "~/request-context.server";
  * shop, so `TenantPurgeRepo` deletes it with the rest of the shop's data.
  */
 const checkpointName = (shop: string) => `uninstall_probe:${shop}`;
+
+/** Installed, not probed within the cooldown, no live lease: the one definition of "due" for listing and counting. */
+function dueWhere(now: number, cooldownMs: number) {
+  const probe = shopifySyncCheckpoints;
+  return and(
+    isNull(shops.uninstalledAt),
+    or(isNull(probe.lastSucceededAt), lt(probe.lastSucceededAt, now - cooldownMs)),
+    or(isNull(probe.watermarkAt), lte(probe.watermarkAt, now)),
+  );
+}
 
 export class ShopTokenProbeRepo {
   /**
@@ -23,14 +33,21 @@ export class ShopTokenProbeRepo {
       .select({ shop: shops.shop })
       .from(shops)
       .leftJoin(probe, eq(probe.name, sql`'uninstall_probe:' || ${shops.shop}`))
-      .where(and(
-        isNull(shops.uninstalledAt),
-        or(isNull(probe.lastSucceededAt), lt(probe.lastSucceededAt, now - cooldownMs)),
-        or(isNull(probe.watermarkAt), lte(probe.watermarkAt, now)),
-      ))
+      .where(dueWhere(now, cooldownMs))
       .orderBy(asc(lastAttempt), asc(shops.shop))
       .limit(limit);
     return rows.map((row) => row.shop);
+  }
+
+  /** How many shops are due right now - the backlog behind `listDue`'s batch. A count only; no shop is named. */
+  async countDue(now: number, cooldownMs: number): Promise<number> {
+    const probe = shopifySyncCheckpoints;
+    const [row] = await getDb()
+      .select({ due: count() })
+      .from(shops)
+      .leftJoin(probe, eq(probe.name, sql`'uninstall_probe:' || ${shops.shop}`))
+      .where(dueWhere(now, cooldownMs));
+    return row?.due ?? 0;
   }
 
   /**

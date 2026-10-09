@@ -1,8 +1,11 @@
 import { count, eq } from "drizzle-orm";
 import { makeDb } from "~/db/client";
 import * as schema from "~/db/schema";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import worker from "./app";
+import { shopHasher } from "~/adapters/shop-hasher";
+import { RedactedShopRepo } from "~/models/redacted-shops.server";
+import { runWithRequestContext } from "~/request-context.server";
 import { env } from "cloudflare:test";
 import { setupTestDatabase } from "~/test/db";
 
@@ -34,7 +37,8 @@ describe("worker webhook queue", () => {
     expect(row).toEqual({ status: "dead_letter", attempts: 1 });
   });
 
-  it("acks queued work for a redacted shop without writing a projection, and deletes the delivery it skipped", async () => {
+  it("acks queued work for a tombstoned shop without writing a projection, and deletes the delivery it skipped", async () => {
+    await runWithRequestContext(env, async () => new RedactedShopRepo().mark(await shopHasher.hash("redacted.myshopify.com"), 1));
     await makeDb(env.DB).insert(schema.webhookDeliveries).values({ id: "redacted-delivery", eventId: "redacted-event", topic: "app/uninstalled", apiVersion: "2026-10", shop: "redacted.myshopify.com", triggeredAt: 1, receivedAt: 1, payloadHash: "hash" }).run();
     const actions: string[] = [];
 
@@ -72,5 +76,34 @@ describe("worker queue routing", () => {
       ackAll: () => actions.push("ackAll"),
     } as never, env);
     expect(actions).toEqual(['retryAll:{"delaySeconds":60}']);
+  });
+});
+
+describe("worker scheduled handler", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  async function sweepsRunBy(cron: string): Promise<string[]> {
+    const sweeps: string[] = [];
+    const record = (line: unknown) => {
+      const text = String(line);
+      const match = /"sweep":"([a-z_]+)"/.exec(text);
+      if (match?.[1]) sweeps.push(match[1]);
+    };
+    vi.spyOn(console, "log").mockImplementation(record);
+    vi.spyOn(console, "error").mockImplementation(record);
+    await worker.scheduled({ cron, scheduledTime: Date.now(), type: "scheduled", noRetry: () => undefined } as never, env);
+    return sweeps;
+  }
+
+  it("the hourly production cron runs only the uninstall probe", async () => {
+    expect(await sweepsRunBy("0 * * * *")).toEqual(["uninstall_reconciliation"]);
+  });
+
+  it("the daily production cron runs the maintenance sweeps and the probe", async () => {
+    expect(await sweepsRunBy("30 3 * * *")).toEqual(["password_reset_tokens", "pending_uploads", "partner_history", "uninstall_reconciliation"]);
+  });
+
+  it("the local five-minute cron runs everything too", async () => {
+    expect(await sweepsRunBy("*/5 * * * *")).toContain("password_reset_tokens");
   });
 });

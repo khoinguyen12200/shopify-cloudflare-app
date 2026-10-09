@@ -95,6 +95,28 @@ Verified by diffing the installed 2.0.0 sources against 3.0.2 (`@shopify/shopify
 | `ApiVersion` in api 15 is unchanged from 14: `July26 = "2026-07"`, `October26 = "2026-10"`, `Unstable`. | The upgrade does not force a version change. `apiVersion` stays `ApiVersion.July26`, in step with both tomls |
 | Engines: both libraries require Node `>=22.0.0` (since react-router 2.0.0). | `.nvmrc` is 24.14.0, fine. `package.json` `engines` still admits `>=20.19 <22`, which the libraries do not support |
 
+## Unknown-shop webhooks and uninstall-probe capacity (2026-10-09)
+
+**Our design decisions** (Shopify's docs do not define either; labelled as ours, not documented behaviour):
+
+| Decision | Reasoning | Where |
+|---|---|---|
+| **"Redacted" means TOMBSTONED, never "has no `shops` row".** A shop can legitimately have no row: a webhook can overtake the first embedded load that creates it. The consumer asks the tombstone table and the `shops` row separately (`shopStanding`) and `decideShopGate` decides. | The old `isRedactedShop` (= no row) silently dropped, and then DELETED the delivery row of, any webhook for a shop not yet recorded. | `app/domain/webhook-delivery-lifecycle.ts`, `app/services/webhook-consumer.ts` |
+| Tombstoned shop, record-requiring topic: discard and delete the delivery row. Compliance topics always run, tombstone or not. | Nothing naming an erased shop may linger; compliance is owed an answer regardless. | same |
+| **`app/uninstalled` for an unknown shop: run**, a logged no-op. The handler's `decideUninstall` returns `ignore/unknown_shop`, the delivery is marked processed (row kept as the record) and `webhook.shop_unknown` is logged with the shop hash. | An uninstall of a never-recorded shop has nothing to undo, and a row created later is newer than the uninstall, so retrying could never change the outcome. | `topic table: onUnknownShop: "run"` |
+| **`app/scopes_update` for an unknown shop: defer** with a queue retry delay (60 s doubling to 3600 s cap, ~3 h across the retries), delivery left `queued`. On the final attempt it runs instead (no-op, `webhook.shop_unknown`, processed) so it settles rather than dead-lettering unrecorded. | The payload is the complete scope set the row will want once it exists; dropping it loses a fact that can still be applied. A never-installed shop costs at most a bounded number of cheap retries. | `onUnknownShop: "defer"`, `deferralDelaySeconds` |
+
+**Uninstall probe capacity.** Limits are from the Workers limits page (https://developers.cloudflare.com/workers/platform/limits/, read 2026-10-09):
+subrequests per invocation Free 50 / Paid 10,000; to internal services (KV, D1, R2) Free 1,000 / Paid = configured limit
+(default 10,000); 6 simultaneous open connections; Cron Triggers CPU Free 10 ms, Paid 30 s for intervals under 1 hour and
+15 min for 1 hour or more; 15 min wall clock per invocation.
+
+- Each probe is **one external fetch** (token endpoint) plus KV and D1 calls (lease acquire/release, session read/write). The internal count per probe was not measured; assume it stays far below `1,000 / 40`.
+- `PROBE_BATCH_SIZE = 40` keeps the external fetches under the Free cap of 50 even on the daily tick that also runs Partner history. Probes are sequential (never over the 6-connection limit), each with a 10 s timeout, so a tick is bounded at ~400 s wall, inside 15 min.
+- **Capacity = batch x ticks per day.** Production runs the probe hourly (`0 * * * *`, probe only) plus on the daily maintenance tick: 40 x 24 = **960 shops/day**. A shop is re-probed after a 20 h cooldown, so one cooldown window covers `40 x 20 = 800` shops. Above ~800 installed shops the backlog grows: `uninstall_probe.backlog {overdue, batch}` is logged (count only) and `cron.sweep` for `uninstall_reconciliation` reports `overdue`. Raise capacity by raising `PROBE_BATCH_SIZE` on the Paid plan (10,000 subrequests allows hundreds per tick) or adding ticks.
+- The previous schedule (one daily tick of 50) covered 50 shops/day, so a fleet over ~50 was never covered within the cooldown.
+- Named-env `triggers` are not inherited: `env.production.triggers.crons` re-declares both crons, and `scripts/check-placeholders.mjs` fails the deploy gate if the hourly one is missing. The dispatcher matches `controller.cron` against `UNINSTALL_PROBE_CRON` (`app/domain/cron-schedule.ts`); any other cron, including the local `*/5 * * * *`, runs everything.
+
 ## Unverified — must be confirmed before anything depends on it
 
 Anything in this section stays labelled unverified until someone observes it
