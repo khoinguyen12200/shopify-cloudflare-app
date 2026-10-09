@@ -1,4 +1,4 @@
-import { shops } from "~/wiring.server";
+import { redactionGuard, shops } from "~/wiring.server";
 // Workers runtime adapter (Web Crypto + global fetch) — replaces the Node
 // adapter the upstream template ships with. Must be imported before shopifyApp.
 import "@shopify/shopify-api/adapters/cf-worker";
@@ -12,7 +12,7 @@ import {
 import { KVSessionStorage } from "./session-storage.server";
 import { persistShopIdentity, refreshShopSubscription } from "~/wiring.server";
 import { getEnv } from "~/request-context.server";
-import { hashShop } from "~/observability/shop-log";
+import { hashShop, shopLog } from "~/observability/shop-log";
 
 export const apiVersion = ApiVersion.July26;
 
@@ -47,6 +47,10 @@ export async function afterAuth({
   session: { shop: string };
   admin?: { graphql: (query: string) => Promise<Response> };
 }, refresh: (env: Env, shop: string) => Promise<unknown> = refreshShopSubscription): Promise<void> {
+  // A merchant installing again is the one thing that lifts a redaction tombstone (our own design; Shopify's docs
+  // say nothing about reinstalls). Cleared BEFORE recording the install so the shop works and Partner events for it
+  // are processed again.
+  if (await redactionGuard().clearOnInstall(session.shop)) await shopLog("shop.redaction_cleared", session.shop);
   await shops().recordInstall(session.shop, Date.now());
   if (admin) {
     try {

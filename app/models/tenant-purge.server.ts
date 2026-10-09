@@ -22,8 +22,10 @@ import {
   entitlementUsage,
   entitlementAllocations,
   mcpAuditLogs,
+  redactedShops,
   shopPlanGrants,
 } from "~/db/schema";
+import type { RedactionTombstone } from "~/ports/redacted-shops";
 import { getDb } from "~/request-context.server";
 
 const PURGED_SHOP_TABLES = [
@@ -58,11 +60,17 @@ export class TenantPurgeRepo {
     return { shop, attachmentKeys: rows.map(({ key }) => key) };
   }
 
-  async deleteTenantRows(shop: string): Promise<number> {
+  /**
+   * Erase every row of the shop AND write its redaction tombstone in the same D1 batch (one transaction), so there is
+   * never a moment where the data is gone but the tombstone is missing. `redacted_shops` has no `shop` column, so the
+   * coverage guard never lists it and this purge never deletes it; a replay's insert is a no-op.
+   */
+  async deleteTenantRows(shop: string, tombstone: RedactionTombstone): Promise<number> {
     await assertTenantPurgeCoverage();
     const db = getDb();
     const deliveries = db.select({ id: webhookDeliveries.id }).from(webhookDeliveries).where(eq(webhookDeliveries.shop, shop));
     const deleted = await db.batch([
+      db.insert(redactedShops).values(tombstone).onConflictDoNothing(),
       db.delete(webhookScopeObservations).where(or(eq(webhookScopeObservations.shop, shop), inArray(webhookScopeObservations.deliveryId, deliveries))),
       db.delete(supportAttachments).where(eq(supportAttachments.shop, shop)),
       db.delete(pendingUploads).where(eq(pendingUploads.shop, shop)),
@@ -88,7 +96,8 @@ export class TenantPurgeRepo {
       db.delete(shopifySyncCheckpoints).where(inArray(shopifySyncCheckpoints.name, [`partner_history:${shop}`, `uninstall_probe:${shop}`])),
       db.delete(shops).where(eq(shops.shop, shop)),
     ]);
-    return deleted.reduce((total, result) => total + result.meta.changes, 0);
+    // The tombstone insert is bookkeeping, not erased data, so it is not counted.
+    return deleted.slice(1).reduce((total, result) => total + result.meta.changes, 0);
   }
 }
 

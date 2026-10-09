@@ -25,3 +25,4 @@ export * from "./schema/lifecycle";
 export * from "./schema/entitlements";
 export * from "./schema/mcp";
 export * from "./schema/plan-grants";
+export * from "./schema/redacted-shops";

@@ -8,6 +8,7 @@ import {
   isComplianceTopic,
   complianceHandlers,
 } from "./compliance.server";
+import { shopHasher } from "~/adapters/shop-hasher";
 import { TenantPurgeRepo } from "~/models/tenant-purge.server";
 import { KVSessionStorage } from "~/session-storage.server";
 import { vi } from "vitest";
@@ -20,7 +21,9 @@ function inRequest<T>(fn: () => Promise<T>): Promise<T> {
 
 const dispatch = (topic: string, ctx: { shop: string; payload: Record<string, unknown> }) => handleCompliance(topic, ctx, {
   tenantPurge: {
-    d1: { prepare: (shop) => new TenantPurgeRepo().prepareTenantPurge(shop), deleteRows: (shop) => new TenantPurgeRepo().deleteTenantRows(shop) },
+    d1: { prepare: (shop) => new TenantPurgeRepo().prepareTenantPurge(shop), deleteRows: (shop, tombstone) => new TenantPurgeRepo().deleteTenantRows(shop, tombstone) },
+    hasher: shopHasher,
+    now: () => 1_000,
     r2: { delete: (keys) => env.UPLOADS.delete([...keys]) },
     kv: { deleteSessions: async (shop) => { const storage = new KVSessionStorage(env.SESSION); const sessions = await storage.findSessionsByShop(shop); await storage.deleteSessions(sessions.map(({ id }) => id)); return sessions.length; } },
   },

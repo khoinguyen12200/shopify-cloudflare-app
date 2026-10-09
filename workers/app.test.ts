@@ -34,7 +34,7 @@ describe("worker webhook queue", () => {
     expect(row).toEqual({ status: "dead_letter", attempts: 1 });
   });
 
-  it("acks queued work for a redacted shop without writing a projection", async () => {
+  it("acks queued work for a redacted shop without writing a projection, and deletes the delivery it skipped", async () => {
     await makeDb(env.DB).insert(schema.webhookDeliveries).values({ id: "redacted-delivery", eventId: "redacted-event", topic: "app/uninstalled", apiVersion: "2026-10", shop: "redacted.myshopify.com", triggeredAt: 1, receivedAt: 1, payloadHash: "hash" }).run();
     const actions: string[] = [];
 
@@ -47,7 +47,8 @@ describe("worker webhook queue", () => {
     const delivery = await makeDb(env.DB).select({ status: schema.webhookDeliveries.status }).from(schema.webhookDeliveries).where(eq(schema.webhookDeliveries.id, "redacted-delivery")).get();
     expect(actions).toEqual(["ack"]);
     expect(Number(rows?.count ?? 0)).toBe(0);
-    expect(delivery?.status).toBe("received");
+    // The skipped delivery is deleted, so no row naming the redacted shop lingers.
+    expect(delivery).toBeUndefined();
   });
 });
 

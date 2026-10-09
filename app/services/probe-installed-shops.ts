@@ -1,3 +1,4 @@
+import type { RedactionGuard } from "~/services/redaction-guard";
 import { shopLog } from "~/observability/shop-log";
 import type { ShopTokenRefresher, TokenRefreshOutcome } from "~/ports/token-refresh";
 import type { UninstallObservation } from "~/domain/webhook-ordering";
@@ -19,9 +20,11 @@ export interface ProbePorts {
   readonly refresher: ShopTokenRefresher;
   readonly uninstall: (shop: string, observation: UninstallObservation) => Promise<UninstallOutcome>;
   readonly clock: { now(): number };
+  /** A shop with a redaction tombstone is never probed: a probe would write a checkpoint row naming it. */
+  readonly redaction: Pick<RedactionGuard, "redactedAmong">;
 }
 
-type Disposition = "refreshed" | "fresh" | "noSession" | "superseded" | "uninstalled" | "failed";
+type Disposition = "refreshed" | "fresh" | "noSession" | "superseded" | "uninstalled" | "failed" | "suppressed";
 
 /** Counts for the cron log. A mapped type, so it is assignable to the port's `Record<string, number>`. */
 export type ProbeSummary = { readonly [K in Disposition | "examined" | "leased"]: number };
@@ -39,14 +42,20 @@ export type ProbeSummary = { readonly [K in Disposition | "examined" | "leased"]
  */
 export async function probeInstalledShops(ports: ProbePorts, now: number): Promise<ProbeSummary> {
   const shops = await ports.probes.listDue(now, PROBE_COOLDOWN_MS, PROBE_BATCH_SIZE);
-  const counts: Record<Disposition | "leased", number> = { leased: 0, refreshed: 0, fresh: 0, noSession: 0, superseded: 0, uninstalled: 0, failed: 0 };
+  const counts: Record<Disposition | "leased", number> = { leased: 0, refreshed: 0, fresh: 0, noSession: 0, superseded: 0, uninstalled: 0, failed: 0, suppressed: 0 };
+  const redacted = await ports.redaction.redactedAmong(shops);
   for (const shop of shops) {
+    if (redacted.has(shop)) {
+      counts.suppressed += 1;
+      continue;
+    }
     if (!(await ports.probes.acquireLease(shop, ports.clock.now(), PROBE_LEASE_MS))) {
       counts.leased += 1;
       continue;
     }
     counts[await probeOne(ports, shop)] += 1;
   }
+  if (counts.suppressed > 0) console.log(JSON.stringify({ event: "uninstall_probe.suppressed", count: counts.suppressed }));
   return { examined: shops.length, ...counts };
 }
 

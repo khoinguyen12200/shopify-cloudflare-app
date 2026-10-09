@@ -65,4 +65,5 @@ export {
   requireAttachmentTokenSecret,
   supportService,
 } from "~/wiring/ai-support.server";
+export { redactionGuard } from "~/wiring/redaction.server";
 export { scheduledDependencies, tenantPurgeDependencies, webhookConsumer } from "~/wiring/webhooks.server";

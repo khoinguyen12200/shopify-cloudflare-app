@@ -77,7 +77,7 @@ Required source-of-truth rules:
 ### Compliance and tenant data
 
 - Tenant purge orchestration deletes R2 objects before D1 rows, then KV sessions.
-- D1 purge repository covers current shop-scoped tables.
+- D1 purge repository covers current shop-scoped tables, and writes a redaction tombstone (`redacted_shops`: hash + timestamp) in the same batch. Partner history, webhook intake and the sweeps skip a tombstoned shop; a merchant reinstall (`afterAuth`) clears it.
 - Two-tenant isolation tests.
 - Purge inventory checks fail if future D1 schema tables add a `shop` column
   without coverage; D1/KV/R2 boundary tests retain another tenant's data.

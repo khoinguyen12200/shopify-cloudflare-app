@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ConsumerDelivery } from "~/services/webhook-consumer";
+import { identityHasher } from "~/test/redaction";
 import { complianceHandler } from "./compliance";
 
 const delivery = (topic: string): ConsumerDelivery => ({ id: "d1", shop: "fake.myshopify.com", topic, status: "processing", triggeredAt: 1 });
@@ -12,6 +13,8 @@ function fakeDependencies() {
     dependencies: {
       now: () => { tick += 40; return tick; },
       tenantPurge: {
+        hasher: identityHasher,
+        now: () => 1,
         d1: { prepare: async () => { calls.push("prepare"); return { shop: "fake.myshopify.com", attachmentKeys: ["k1"] }; }, deleteRows: async () => { calls.push("rows"); return 3; } },
         r2: { delete: async () => { calls.push("r2"); } },
         kv: { deleteSessions: async () => { calls.push("kv"); return 1; } },

@@ -26,6 +26,8 @@ export interface WebhookConsumerDependencies {
       readonly failureCode: string;
       readonly failureDetail: string;
     }, expectedFrom?: string, expectedProcessingStartedAt?: number | null): Promise<void | "applied" | "conflict">;
+    /** Removes a delivery that was skipped for a redacted shop, so nothing naming the shop lingers. */
+    deleteDelivery?(shop: string, id: string): Promise<void>;
     markDeadLetter?(shop: string, id: string, failedAt: number, detail: string, expectedFrom?: string): Promise<void | "applied" | "conflict">;
   };
   readonly handlers: WebhookHandlerRegistry;
@@ -115,6 +117,7 @@ export async function consumeWebhook(
   if (!delivery) return { outcome: "missing", topic: null };
   // Topics that exist to run when the shop is gone (the purge itself, the compliance answers) skip this guard.
   if ((!isWebhookTopic(delivery.topic) || topicRequiresShopRecord(delivery.topic)) && await dependencies.isRedactedShop?.(work.shop)) {
+    await dependencies.deliveries.deleteDelivery?.(work.shop, work.id);
     return { outcome: "missing", topic: delivery.topic };
   }
   if (delivery.status === "processed") return { outcome: "duplicate", topic: delivery.topic };

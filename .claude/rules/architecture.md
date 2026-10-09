@@ -92,6 +92,13 @@ when you create it, not a structure to scaffold up front.
 staff are your team rather than a merchant's records. Every other table stays
 shop-scoped per `@rules/data.md`; do not treat this as a precedent.
 
+**`redacted_shops` is the other** (deliberately: it has no `shop` column). It is
+the redaction tombstone — a SHA-256 hash of the shop domain plus a timestamp —
+and exists precisely because the shop's own rows are gone after `shop/redact`.
+Having no `shop` column is also what keeps the purge coverage guard from ever
+deleting it. It is never a precedent for storing a domain or any other
+identifier in a table without a `shop` column.
+
 There is no `app/utils/`. "Utils" is a junk drawer — pure helpers go to
 `app/lib/<topic>.ts`, named for the topic.
 

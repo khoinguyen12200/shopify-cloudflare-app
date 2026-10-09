@@ -1,9 +1,11 @@
+import { shopHasher } from "~/adapters/shop-hasher";
 import { ShopifyPartnerAdapter } from "~/adapters/shopify-partner.server";
 import { ShopifyTokenRefresh } from "~/adapters/shopify-token-refresh.server";
 import { PasswordResetTokenRepo } from "~/models/password-reset-tokens.server";
 import { ShopRepo } from "~/models/shops.server";
 import { ShopTokenProbeRepo } from "~/models/shop-token-probes.server";
 import { TenantPurgeRepo } from "~/models/tenant-purge.server";
+import type { RedactionTombstone } from "~/ports/redacted-shops";
 import { getEnv } from "~/request-context.server";
 import { KVSessionStorage } from "~/session-storage.server";
 import { probeInstalledShops } from "~/services/probe-installed-shops";
@@ -17,6 +19,7 @@ import { complianceHandler } from "~/services/webhook-handlers/compliance";
 import { historyLedger, refreshShopHistory, refreshShopSubscription } from "~/wiring/billing.server";
 import { invalidateEntitlements } from "~/wiring/entitlement-cache.server";
 import { shops, shopSyncCheckpoints, support, webhookDeliveryRepository, webhookScopeObservations } from "~/wiring/repositories.server";
+import { redactionGuard } from "~/wiring/redaction.server";
 import { appRuntime } from "~/wiring/runtime.server";
 
 export function tenantPurgeDependencies() {
@@ -26,7 +29,7 @@ export function tenantPurgeDependencies() {
   return {
     d1: {
       prepare: (shop: string) => repo.prepareTenantPurge(shop),
-      deleteRows: (shop: string) => repo.deleteTenantRows(shop),
+      deleteRows: (shop: string, tombstone: RedactionTombstone) => repo.deleteTenantRows(shop, tombstone),
     },
     r2: { delete: (keys: readonly string[]) => env.UPLOADS.delete([...keys]) },
     kv: {
@@ -37,6 +40,8 @@ export function tenantPurgeDependencies() {
       },
     },
     entitlementCache: { invalidate: invalidateEntitlements },
+    hasher: shopHasher,
+    now: appRuntime().clock.now,
   };
 }
 
@@ -114,6 +119,7 @@ export function scheduledDependencies() {
         ledger: historyLedger(),
         clock: { now: () => now },
         appId: env.SHOPIFY_PARTNER_APP_ID || null,
+        redaction: redactionGuard(),
       }, now),
     },
     uninstallProbe: {
@@ -129,6 +135,7 @@ export function scheduledDependencies() {
         }),
         uninstall: (shop, observation) => recordUninstall(recordUninstallPorts(env), shop, observation),
         clock: appRuntime().clock,
+        redaction: redactionGuard(),
       }, now),
     },
   };

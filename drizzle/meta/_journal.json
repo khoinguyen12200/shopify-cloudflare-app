@@ -197,6 +197,13 @@
       "when": 1791518026287,
       "tag": "0027_gigantic_vindicator",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "6",
+      "when": 1791530048977,
+      "tag": "0028_low_major_mapleleaf",
+      "breakpoints": true
     }
   ]
 }

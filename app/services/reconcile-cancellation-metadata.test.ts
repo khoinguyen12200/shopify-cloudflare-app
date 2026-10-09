@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { noRedaction } from "~/test/redaction";
 import { makeDb } from "~/db/client";
 import * as schema from "~/db/schema";
 import { describe, expect, it } from "vitest";
@@ -50,7 +51,7 @@ describe("cancellation history metadata", () => {
       });
       const now = Date.parse("2026-09-02T00:00:00Z");
       expect(await reconcileShopHistory({ partner, ledger: new ShopifyEventRepo(),
-        clock: { now: () => now }, appId: "app",
+        clock: { now: () => now }, appId: "app", redaction: noRedaction,
       }, { shop, shopifyShopId }, now)).toMatchObject({ status: "succeeded" });
       const current = await makeDb(env.DB).select().from(schema.shopSubscriptions).where(eq(schema.shopSubscriptions.shop, shop)).get();
       const event = await makeDb(env.DB).select().from(schema.shopifySubscriptionEvents).where(eq(schema.shopifySubscriptionEvents.eventId, "scheduled")).get();

@@ -1,7 +1,7 @@
 import type { ActionFunctionArgs } from "react-router";
 import { verifyShopifyWebhook, webhookSecrets } from "~/adapters/shopify-webhook.server";
 import { getEnv } from "~/request-context.server";
-import { webhookDeliveries } from "~/wiring.server";
+import { redactionGuard, webhookDeliveries } from "~/wiring.server";
 import { ingestWebhook, parseTriggeredAt, sha256Json } from "~/services/webhook-ingest";
 import { formatWebhookLog, withWebhookFailureLog, writeWebhookLog } from "~/services/webhook-logging";
 
@@ -15,6 +15,7 @@ async function receive(request: Request): Promise<Response> {
     queue: { send: async (message) => { await getEnv().WEBHOOK_QUEUE.send(message); } },
     now: Date.now,
     hashPayload: sha256Json,
+    redaction: redactionGuard(),
     log: async (webhook, outcome, latencyMs) => writeWebhookLog(await formatWebhookLog({ deliveryId: webhook.webhookId, topic: webhook.topic, shop: webhook.shop, handler: webhook.topic, outcome, attempts: 0, latencyMs })),
   }, {
     webhookId: authenticated.webhookId,

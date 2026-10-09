@@ -1,4 +1,5 @@
 import { env } from "cloudflare:test";
+import { redactionGuard } from "~/wiring/redaction.server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ShopRepo } from "~/models/shops.server";
 import { ShopTokenProbeRepo } from "~/models/shop-token-probes.server";
@@ -26,6 +27,7 @@ function composed(refresher: FakeTokenRefresher, clock: () => number): ProbePort
     probes: new ShopTokenProbeRepo(),
     refresher,
     clock: { now: clock },
+    redaction: redactionGuard(),
     uninstall: (shop, observation) => recordUninstall({
       shops: { facts: (domain) => repository.get(domain), applyUninstall: (domain, next) => repository.applyUninstall(domain, next) },
       cleanup: async (domain) => { await sessions.deleteSessions((await sessions.findSessionsByShop(domain)).map(({ id }) => id)); },

@@ -1,4 +1,5 @@
 import type { WebhookDeliveriesPort } from "~/ports/webhook-deliveries";
+import type { RedactionGuard } from "~/services/redaction-guard";
 
 export interface WebhookIngestDependencies {
   readonly deliveries: WebhookDeliveriesPort;
@@ -6,8 +7,10 @@ export interface WebhookIngestDependencies {
   /** Epoch milliseconds; the log reports latency as `now() - receivedAt`. */
   readonly now: () => number;
   readonly hashPayload: (payload: unknown) => Promise<string>;
+  /** A redacted shop's deliveries are acknowledged and dropped: no delivery row may carry its domain again. */
+  readonly redaction: Pick<RedactionGuard, "isSuppressed">;
   readonly beforeEnqueue?: (webhook: AuthenticatedWebhook) => Promise<void>;
-  readonly log?: (webhook: AuthenticatedWebhook, outcome: "queued" | "duplicate", latencyMs: number) => Promise<void>;
+  readonly log?: (webhook: AuthenticatedWebhook, outcome: "queued" | "duplicate" | "suppressed", latencyMs: number) => Promise<void>;
 }
 
 export interface WebhookQueueMessage {
@@ -30,7 +33,13 @@ export interface AuthenticatedWebhook {
 export async function ingestWebhook(
   dependencies: WebhookIngestDependencies,
   webhook: AuthenticatedWebhook,
-): Promise<"queued" | "duplicate"> {
+): Promise<"queued" | "duplicate" | "suppressed"> {
+  // Before any write. The caller still answers 2xx so Shopify stops retrying; a duplicate or late `shop/redact`
+  // for an already-redacted shop is therefore acknowledged and is a no-op that leaves no delivery row behind.
+  if (await dependencies.redaction.isSuppressed(webhook.shop, "webhook_delivery")) {
+    await dependencies.log?.(webhook, "suppressed", dependencies.now() - webhook.receivedAt);
+    return "suppressed";
+  }
   const topic = normalizeWebhookTopic(webhook.topic);
   const claimed = await dependencies.deliveries.claim({
     id: webhook.webhookId,

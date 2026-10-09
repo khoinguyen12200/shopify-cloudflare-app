@@ -3,7 +3,7 @@ export type SubscriptionRefreshResult =
   | { readonly status: "failed"; readonly code: string; readonly detail: string };
 
 export type HistoryRefreshResult =
-  | { readonly status: "succeeded"; readonly pages: number; readonly events: number }
+  | { readonly status: "succeeded"; readonly pages: number; readonly events: number; readonly suppressed?: number }
   | { readonly status: "failed"; readonly code: string; readonly detail: string };
 
 export interface ShopReconciler {

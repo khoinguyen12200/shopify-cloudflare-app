@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { fakeRedaction, noRedaction } from "~/test/redaction";
 import { FakeTokenRefresher } from "~/test/fake-token-refresh";
 import type { TokenRefreshOutcome } from "~/ports/token-refresh";
 import { PROBE_BATCH_SIZE, PROBE_COOLDOWN_MS, PROBE_LEASE_MS, probeInstalledShops, type ProbePorts } from "./probe-installed-shops";
@@ -19,9 +20,21 @@ function fixture(options: { due: readonly string[]; outcomes?: Record<string, To
     refresher,
     uninstall: async (shop, observation) => { events.push(`uninstall:${shop}@${observation.occurredAt}:${observation.externalId}`); return options.uninstall ?? "recorded"; },
     clock: { now: () => (now += 10) },
+    redaction: noRedaction,
   };
   return { ports, events, released, refresher };
 }
+
+describe("probeInstalledShops and redaction", () => {
+  it("skips a tombstoned shop entirely: no lease, no Shopify call, counted as suppressed", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const { ports, events, refresher } = fixture({ due: ["gone.myshopify.com", "live.myshopify.com"] });
+    const summary = await probeInstalledShops({ ...ports, redaction: fakeRedaction(["gone.myshopify.com"]).guard }, 5_000);
+    expect(summary).toMatchObject({ examined: 2, suppressed: 1, refreshed: 1 });
+    expect(events.some((event) => event.includes("gone.myshopify.com"))).toBe(false);
+    expect(refresher.calls.map((call) => call.shop)).toEqual(["live.myshopify.com"]);
+  });
+});
 
 describe("probeInstalledShops", () => {
   it("asks for one bounded batch of due shops, once, and never more than the cap", async () => {

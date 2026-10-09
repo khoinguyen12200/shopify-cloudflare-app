@@ -10,8 +10,12 @@ import { createEntitlements, type EntitlementService } from "~/services/entitlem
 import { reconcileShopHistory } from "~/services/reconcile-shopify-history";
 import { refreshSubscription } from "~/services/reconcile-subscription";
 import { entitlementCachePort, invalidateEntitlements } from "~/wiring/entitlement-cache.server";
+import { redactionGuard } from "~/wiring/redaction.server";
 import { planGrants, shopifyEvents, shops, shopSubscriptions, shopSyncCheckpoints } from "~/wiring/repositories.server";
 import { appRuntime } from "~/wiring/runtime.server";
+
+/** A redacted shop is not refreshed: nothing is fetched or written, and callers see an ordinary failure. */
+const redactedRefusal = { status: "failed", code: "SHOP_REDACTED", detail: "Shop was redacted; refresh suppressed" } as const;
 
 export function subscriptionsPort(): SubscriptionPort {
   const current = async (shop: string) => {
@@ -86,6 +90,7 @@ export function entitlements(): EntitlementService {
 
 /** Targeted billing refresh composition. Missing Partner credentials stay observable. */
 export async function refreshShopSubscription(env: Env, shop: string, now = appRuntime().clock.now()) {
+  if (await redactionGuard().isSuppressed(shop, "scheduled_sweep")) return redactedRefusal;
   const identity = await shops().get(shop);
   const partner = new ShopifyPartnerAdapter({
     token: env.SHOPIFY_PARTNER_API_TOKEN || "",
@@ -102,6 +107,8 @@ export async function refreshShopSubscription(env: Env, shop: string, now = appR
 }
 
 export async function refreshShopHistory(env: Env, shop: string, now = appRuntime().clock.now()) {
+  // Before anything is written: a checkpoint row is named after the shop and would put the domain back.
+  if (await redactionGuard().isSuppressed(shop, "scheduled_sweep")) return redactedRefusal;
   const identity = await shops().get(shop);
   const checkpoints = shopSyncCheckpoints();
   const result = await reconcileShopHistory({
@@ -109,6 +116,7 @@ export async function refreshShopHistory(env: Env, shop: string, now = appRuntim
     ledger: historyLedger(),
     clock: { now: () => now },
     appId: env.SHOPIFY_PARTNER_APP_ID || null,
+    redaction: redactionGuard(),
   }, { shop, shopifyShopId: identity?.shopifyShopId ?? null, installedAt: identity?.installedAt ?? null }, now);
   const checkpointName = `partner_history:${shop}`;
   if (result.status === "succeeded") {

@@ -26,6 +26,11 @@ export class WebhookDeliveryRepo {
     const changed = await getDb().update(webhookDeliveries).set({ status: "dead_letter", failedAt, failureCode: "dead_letter", failureDetail: detail.slice(0, 1000) }).where(and(eq(webhookDeliveries.shop, shop), eq(webhookDeliveries.id, id), eq(webhookDeliveries.status, expectedFrom))).returning({ id: webhookDeliveries.id });
     return changed.length === 1 ? "applied" : "conflict";
   }
+  /** Drop one delivery row (and, by cascade, its scope observations). Used when a delivery is skipped for a redacted shop. */
+  async deleteDelivery(shop: string, id: string): Promise<void> {
+    await getDb().delete(webhookDeliveries).where(and(eq(webhookDeliveries.shop, shop), eq(webhookDeliveries.id, id)));
+  }
+
   async claim(input: WebhookDeliveryInput): Promise<"claimed" | "duplicate"> {
     const inserted = await getDb()
       .insert(webhookDeliveries)

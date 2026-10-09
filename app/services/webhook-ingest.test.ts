@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { noRedaction } from "~/test/redaction";
 import {
   ingestWebhook,
   type WebhookIngestDependencies,
@@ -17,6 +18,7 @@ function dependencies(): WebhookIngestDependencies & { readonly queued: string[]
     },
     queue: { async send(message) { queued.push(`${message.shop}:${message.id}`); } },
     hashPayload: async () => "a".repeat(64),
+    redaction: noRedaction,
     queued,
   };
 }
@@ -131,5 +133,18 @@ describe("ingestWebhook", () => {
 
     expect(result).toBe("queued");
     expect(deps.queued).toEqual(["example.myshopify.com:delivery-1"]);
+  });
+
+  it("acknowledges and drops a delivery for a redacted shop before any write", async () => {
+    const deps = dependencies();
+    let claimed = 0;
+    const result = await ingestWebhook({
+      ...deps,
+      deliveries: { ...deps.deliveries, async claim() { claimed += 1; return "claimed" as const; } },
+      redaction: { isSuppressed: async (_shop, source) => source === "webhook_delivery" },
+    }, { webhookId: "w", eventId: "e", topic: "app/uninstalled", shop: "gone.myshopify.com", apiVersion: "2026-07", triggeredAt: 1, receivedAt: 1, payload: {} });
+    expect(result).toBe("suppressed");
+    expect(claimed).toBe(0);
+    expect(deps.queued).toEqual([]);
   });
 });

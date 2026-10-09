@@ -6,6 +6,7 @@ import { env } from "cloudflare:test";
 import { runWithRequestContext } from "~/request-context.server";
 import { setupTestDatabase } from "~/test/db";
 import { SupportRepo } from "~/models/support.server";
+import { shopHasher } from "~/adapters/shop-hasher";
 import { TenantPurgeRepo } from "~/models/tenant-purge.server";
 import { KVSessionStorage } from "~/session-storage.server";
 import { handleCompliance } from "./compliance.server";
@@ -18,7 +19,7 @@ const OTHER = "beta.myshopify.com";
 setupTestDatabase();
 
 const run = <T>(fn: () => Promise<T>) => runWithRequestContext(env, fn);
-const dispatch = (shop: string) => handleCompliance("SHOP_REDACT", { shop, payload: { shop_domain: shop } }, { tenantPurge: { d1: { prepare: (tenant) => new TenantPurgeRepo().prepareTenantPurge(tenant), deleteRows: (tenant) => new TenantPurgeRepo().deleteTenantRows(tenant) }, r2: { delete: (keys) => env.UPLOADS.delete([...keys]) }, kv: { deleteSessions: async (tenant) => { const storage = new KVSessionStorage(env.SESSION); const sessions = await storage.findSessionsByShop(tenant); await storage.deleteSessions(sessions.map(({ id }) => id)); return sessions.length; } } } });
+const dispatch = (shop: string) => handleCompliance("SHOP_REDACT", { shop, payload: { shop_domain: shop } }, { tenantPurge: { hasher: shopHasher, now: () => 1_000, d1: { prepare: (tenant) => new TenantPurgeRepo().prepareTenantPurge(tenant), deleteRows: (tenant, tombstone) => new TenantPurgeRepo().deleteTenantRows(tenant, tombstone) }, r2: { delete: (keys) => env.UPLOADS.delete([...keys]) }, kv: { deleteSessions: async (tenant) => { const storage = new KVSessionStorage(env.SESSION); const sessions = await storage.findSessionsByShop(tenant); await storage.deleteSessions(sessions.map(({ id }) => id)); return sessions.length; } } } });
 const offlineSession = (shop: string) => new Session({ id: `offline_${shop}`, shop, state: "state", isOnline: false, accessToken: "token", scope: "write_products" });
 
 /** A ticket with one attachment whose blob really exists in the test bucket. */

@@ -266,7 +266,10 @@ team's console for operating the app.
 ```
 
 `admin_users` is **the one table that is not shop-scoped** — internal staff are
-your team, not a merchant's records. Everything else stays shop-scoped.
+your team, not a merchant's records. The only other exception is
+`redacted_shops`, the minimal (hash + timestamp) tombstone left after
+`shop/redact` so an erased shop is not recreated; everything else stays
+shop-scoped.
 
 ### Signing in locally
 

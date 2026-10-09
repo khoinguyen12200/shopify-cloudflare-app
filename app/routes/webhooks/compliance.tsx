@@ -5,7 +5,7 @@ import { compliancePayloadSchema } from "~/schemas/compliance-webhook";
 import { isComplianceTopic } from "~/services/compliance.server";
 import { ingestWebhook, parseTriggeredAt, sha256Json } from "~/services/webhook-ingest";
 import { formatWebhookLog, withWebhookFailureLog, writeWebhookLog } from "~/services/webhook-logging";
-import { webhookDeliveries } from "~/wiring.server";
+import { redactionGuard, webhookDeliveries } from "~/wiring.server";
 import { shopLog } from "~/observability/shop-log";
 
 /**
@@ -24,6 +24,10 @@ import { shopLog } from "~/observability/shop-log";
  * (https://shopify.dev/docs/apps/build/webhooks/verify-deliveries), while the erasure is allowed 30 days. So this
  * route only VERIFIES, CLAIMS and ENQUEUES: the 2xx means the delivery is durable in the inbox and on the queue, and
  * the queue consumer (`webhookConsumer()`, registry in `app/wiring.server.ts`) does the work with retries.
+ *
+ * Once a shop has been redacted a minimal tombstone (hash + timestamp) remains, and `ingestWebhook` acknowledges any
+ * later delivery for it (including a duplicate `shop/redact`) with 2xx without storing a delivery row. That tombstone is
+ * our own design: Shopify's docs say nothing about reinstalls. See `.claude/rules/shopify-api-invariants.md`.
  */
 export const action = ({ request }: ActionFunctionArgs) => withWebhookFailureLog(request, () => receive(request));
 
@@ -51,6 +55,7 @@ async function receive(request: Request): Promise<Response> {
     queue: { send: async (message) => { await getEnv().WEBHOOK_QUEUE.send(message); } },
     now: Date.now,
     hashPayload: sha256Json,
+    redaction: redactionGuard(),
     log: async (webhook, result, latencyMs) => writeWebhookLog(await formatWebhookLog({ deliveryId: webhook.webhookId, topic: webhook.topic, shop: webhook.shop, handler: webhook.topic, outcome: result, attempts: 0, latencyMs })),
   }, {
     webhookId: authenticated.webhookId,

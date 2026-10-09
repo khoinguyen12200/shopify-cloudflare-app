@@ -21,6 +21,14 @@ A query that can read or write another shop's row is a **security defect**.
 `@rules/testing.md` requires a test proving it cannot — part of the feature, not
 a follow-up.
 
+**Two tables are not shop-scoped:** `admin_users` (our staff) and
+`redacted_shops` (the redaction tombstone: `shop_hash` + `redacted_at`, nothing
+that identifies the shop). The tombstone is written in the same D1 batch as the
+purge and read by every path that could recreate a shop (Partner history,
+webhook intake, sweeps); only the merchant's own reinstall (`afterAuth`) clears
+it. Its model is keyed by hash, so the cross-shop test proves one hash never
+suppresses another.
+
 ## Never one query per row
 
 A query inside `.map()`, `for`, or `forEach` over rows you just fetched is a

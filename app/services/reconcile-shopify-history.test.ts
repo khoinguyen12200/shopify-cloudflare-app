@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { noRedaction } from "~/test/redaction";
 import { makeDb } from "~/db/client";
 import * as schema from "~/db/schema";
 import { describe, expect, it } from "vitest";
@@ -36,8 +37,8 @@ describe("reconcileHistory", () => {
         recordPartnerSubscription: async () => "inserted",
       },
       clock: { now: () => 100 },
-      appId: "gid://shopify/App/1",
-    }, { shop: "one.myshopify.com", shopifyShopId: "gid://shopify/Shop/1" }, 100)).resolves.toEqual({ status: "succeeded", pages: 1, events: 1 });
+      appId: "gid://shopify/App/1", redaction: noRedaction,
+    }, { shop: "one.myshopify.com", shopifyShopId: "gid://shopify/Shop/1" }, 100)).resolves.toEqual({ status: "succeeded", pages: 1, events: 1, suppressed: 0 });
 
     expect(calls).toEqual([{ appId: "gid://shopify/App/1", shopId: "gid://shopify/Shop/1", cursor: null, occurredAtMin: "1969-12-31T00:00:00.100Z", occurredAtMax: "1970-01-01T00:00:00.100Z" }]);
     expect(recorded).toEqual(["shop-event"]);
@@ -57,7 +58,7 @@ describe("reconcileHistory", () => {
     await reconcileShopHistory({
       partner,
       ledger: { recordPartnerRelationship: async () => "inserted", recordPartnerSubscription: async () => "inserted" },
-      clock: { now: () => end }, appId: "gid://shopify/App/1",
+      clock: { now: () => end }, appId: "gid://shopify/App/1", redaction: noRedaction,
     }, { shop: "one.myshopify.com", shopifyShopId: "gid://shopify/Shop/1", installedAt: start }, end);
     expect(calls).toEqual([
       { appId: "gid://shopify/App/1", shopId: "gid://shopify/Shop/1", cursor: null, occurredAtMin: "2024-01-01T00:00:00.000Z", occurredAtMax: "2024-12-31T00:00:00.000Z" },
@@ -80,7 +81,7 @@ describe("reconcileHistory", () => {
     }, ledger: {
       recordPartnerRelationship: async () => "inserted",
       recordPartnerSubscription: async () => "inserted",
-    }, clock: { now: () => Date.parse("2026-01-01T00:00:00.000Z") }, appId: "app" }, 1);
+    }, clock: { now: () => Date.parse("2026-01-01T00:00:00.000Z") }, appId: "app", redaction: noRedaction }, 1);
     expect(request).toEqual({ appId: "app", cursor: null });
   });
 
@@ -129,7 +130,7 @@ describe("reconcileHistory", () => {
         checkpoint,
         ledger: new ShopifyEventRepo(),
         clock: { now: () => 2_000 },
-        appId: "app",
+        appId: "app", redaction: noRedaction,
       }, 2_000)).resolves.toMatchObject({ status: "succeeded", events: 2 });
 
       const current = await makeDb(env.DB).select({ subscription_id: schema.shopSubscriptions.subscriptionId, status: schema.shopSubscriptions.status }).from(schema.shopSubscriptions).where(eq(schema.shopSubscriptions.shop, "one.myshopify.com")).all().then((results) => ({ results }));
@@ -181,7 +182,7 @@ describe("reconcileHistory", () => {
         markCheckpointFailed: async (...args) => { throw new Error(`unexpected checkpoint failure: ${args.join(" ")}`); },
       };
       const refreshedAt = Date.parse("2026-01-03T00:00:00.000Z");
-      await reconcileHistory({ partner, checkpoint, ledger: new ShopifyEventRepo(), clock: { now: () => refreshedAt - 1 }, appId: "app" }, refreshedAt - 1);
+      await reconcileHistory({ partner, checkpoint, ledger: new ShopifyEventRepo(), clock: { now: () => refreshedAt - 1 }, appId: "app", redaction: noRedaction }, refreshedAt - 1);
       await expect(refreshSubscription({ partner, subscriptions, clock: { now: () => refreshedAt }, appId: "app" }, { shop, shopifyShopId }, refreshedAt)).resolves.toEqual({ status: "refreshed" });
 
       const current = await makeDb(env.DB).select({ subscription_id: schema.shopSubscriptions.subscriptionId, status: schema.shopSubscriptions.status }).from(schema.shopSubscriptions).where(eq(schema.shopSubscriptions.shop, shop)).all().then((results) => ({ results }));
@@ -212,7 +213,7 @@ describe("reconcileHistory", () => {
       markCheckpointFailed: async () => { throw new Error("unexpected"); },
     };
 
-    await expect(reconcileHistory({ partner, checkpoint, ledger, clock: { now: () => 2_000 }, appId: "app" }, 2_000)).resolves.toMatchObject({ status: "succeeded" });
+    await expect(reconcileHistory({ partner, checkpoint, ledger, clock: { now: () => 2_000 }, appId: "app", redaction: noRedaction }, 2_000)).resolves.toMatchObject({ status: "succeeded" });
     expect(calls).toEqual([
       { appId: "app", cursor: null, occurredAtMin: "1969-12-31T00:00:00.001Z" },
       { appId: "app", cursor: "next", occurredAtMin: "1969-12-31T00:00:00.001Z" },
@@ -245,8 +246,8 @@ describe("reconcileHistory", () => {
       markCheckpointFailed: async () => { throw new Error("unexpected"); },
     };
 
-    await reconcileHistory({ partner, checkpoint: checkpointPort, ledger, clock: { now: () => 2_000 }, appId: "app" }, 2_000);
-    await reconcileHistory({ partner, checkpoint: checkpointPort, ledger, clock: { now: () => 3_000 }, appId: "app" }, 3_000);
+    await reconcileHistory({ partner, checkpoint: checkpointPort, ledger, clock: { now: () => 2_000 }, appId: "app", redaction: noRedaction }, 2_000);
+    await reconcileHistory({ partner, checkpoint: checkpointPort, ledger, clock: { now: () => 3_000 }, appId: "app", redaction: noRedaction }, 3_000);
 
     expect(calls.map(({ cursor }) => cursor)).toEqual([null, null]);
     expect(recorded).toEqual(["existing", "new"]);
@@ -267,7 +268,7 @@ describe("reconcileHistory", () => {
     await expect(reconcileHistory({ partner, checkpoint, ledger: {
       recordPartnerRelationship: async () => "inserted",
       recordPartnerSubscription: async () => "inserted",
-    }, clock: { now: () => 10 }, appId: "app" }, 10)).resolves.toMatchObject({ status: "failed", code: "HISTORY_SYNC_FAILED" });
+    }, clock: { now: () => 10 }, appId: "app", redaction: noRedaction }, 10)).resolves.toMatchObject({ status: "failed", code: "HISTORY_SYNC_FAILED" });
     expect(failure).toEqual(["partner_history", "HISTORY_SYNC_FAILED", "network down", 10]);
   });
 });

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { identityHasher } from "~/test/redaction";
 import { chunkR2Keys, purgeTenant } from "./tenant-purge.server";
+
+const purgeBase = { hasher: identityHasher, now: () => 1 };
 
 describe("purgeTenant", () => {
   it("chunks R2 deletion keys at one thousand objects", () => {
@@ -11,7 +14,7 @@ describe("purgeTenant", () => {
 
   it("deletes R2 objects and KV sessions BEFORE the relational rows, which are the commit point", async () => {
     const order: string[] = [];
-    const result = await purgeTenant({
+    const result = await purgeTenant({ ...purgeBase,
       d1: { prepare: async () => ({ shop: "s", attachmentKeys: ["a", "b"] }), deleteRows: async () => { order.push("d1"); return 3; } },
       r2: { delete: async (keys) => { order.push(`r2:${keys.length}`); } },
       kv: { deleteSessions: async () => { order.push("kv"); return 2; } },
@@ -23,7 +26,7 @@ describe("purgeTenant", () => {
   it("keeps other tenant data intact at each purge boundary", async () => {
     const state = { r2: new Set(["alpha/file", "beta/file"]), rows: new Set(["alpha", "beta"]), kv: new Set(["alpha", "beta"]) };
     const seen: string[] = [];
-    const result = await purgeTenant({
+    const result = await purgeTenant({ ...purgeBase,
       d1: {
         prepare: async () => ({ shop: "alpha", attachmentKeys: ["alpha/file"] }),
         deleteRows: async (shop) => { seen.push(`d1:${state.r2.has("beta/file")}`); state.rows.delete(shop); return 1; },
@@ -40,7 +43,7 @@ describe("purgeTenant", () => {
 
   it("keeps the delivery row (and so the retry) alive when KV deletion fails: D1 is only touched after R2 and KV succeed", async () => {
     const order: string[] = [];
-    await expect(purgeTenant({
+    await expect(purgeTenant({ ...purgeBase,
       d1: { prepare: async () => ({ shop: "s", attachmentKeys: [] }), deleteRows: async () => { order.push("d1"); return 1; } },
       r2: { delete: async () => undefined },
       kv: { deleteSessions: async () => { throw new Error("kv down"); } },
@@ -50,7 +53,7 @@ describe("purgeTenant", () => {
 
   it("invalidates entitlement cache after tenant purge", async () => {
     let invalidated = "";
-    await purgeTenant({ d1: { prepare: async () => ({ shop: "s", attachmentKeys: [] }), deleteRows: async () => 0 }, r2: { delete: async () => undefined }, kv: { deleteSessions: async () => 0 }, entitlementCache: { invalidate: async (shop) => { invalidated = shop; } } }, "s");
+    await purgeTenant({ ...purgeBase, d1: { prepare: async () => ({ shop: "s", attachmentKeys: [] }), deleteRows: async () => 0 }, r2: { delete: async () => undefined }, kv: { deleteSessions: async () => 0 }, entitlementCache: { invalidate: async (shop) => { invalidated = shop; } } }, "s");
     expect(invalidated).toBe("s");
   });
 });

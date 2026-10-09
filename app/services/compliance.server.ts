@@ -1,4 +1,4 @@
-import { purgeTenant, type TenantPurgeD1Port, type TenantPurgeKvPort, type TenantPurgeR2Port } from "~/services/tenant-purge.server";
+import { purgeTenant, type TenantPurgeDependencies } from "~/services/tenant-purge.server";
 import { shopLog } from "~/observability/shop-log";
 
 /**
@@ -40,7 +40,7 @@ export interface ComplianceOutcome {
 }
 
 export interface ComplianceDependencies {
-  readonly tenantPurge: { readonly d1: TenantPurgeD1Port; readonly r2: TenantPurgeR2Port; readonly kv: TenantPurgeKvPort };
+  readonly tenantPurge: TenantPurgeDependencies;
 }
 type ComplianceHandler = (ctx: ComplianceContext, deps: ComplianceDependencies) => Promise<ComplianceOutcome>;
 
@@ -120,7 +120,10 @@ const customersRedact: ComplianceHandler = async ({ shop, payload }) => {
 /**
  * Sent 48 hours after the shop uninstalls. Erase everything held for that shop.
  * This one does real work, and it is the pattern to copy: every shop-scoped
- * table gets purged here.
+ * table gets purged here. The same commit leaves a minimal tombstone (hash +
+ * timestamp) so the shop is not recreated by Partner history or a late webhook;
+ * a genuine reinstall clears it. That tombstone is our own design — Shopify's
+ * docs are silent on reinstalls.
  */
 const shopRedact: ComplianceHandler = async ({ shop }, deps) => {
   const erased = await purgeTenant(deps.tenantPurge, shop);
