@@ -1,8 +1,8 @@
 #!/bin/sh
 # Fast gate: typecheck + lint, about 7 seconds.
 #
-# Tests are NOT here on purpose. They take ~26s (real workerd, real D1, SSR
-# renders), and a hook that slow gets bypassed with --no-verify — at which point
+# Tests are NOT here on purpose. The full suite takes ~1.5 minutes (real workerd,
+# real D1, SSR renders), and a hook that slow gets bypassed with --no-verify — at which point
 # it protects nothing. They run in the pre-push hook and in CI instead, so nothing
 # untested reaches a shared branch.
 #

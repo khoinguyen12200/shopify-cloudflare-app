@@ -56,7 +56,9 @@ function collectTests(dir: string): string[] {
   return results;
 }
 
-const allTestFiles = collectTests("app");
+// `workers/` holds the Worker entry's own tests (queue routing, cron); leaving
+// it out of this list silently excluded them from every run.
+const allTestFiles = [...collectTests("app"), ...collectTests("workers")];
 
 const DOM_FILES = [
   "app/components/support/AttachmentPicker.render.test.tsx",
@@ -119,6 +121,8 @@ export default defineConfig({
         resolve: { tsconfigPaths: true },
         plugins: [
           cloudflareTest({
+            // A stub entry: see app/test/worker-entry.ts for why not workers/app.ts.
+            main: "./app/test/worker-entry.ts",
             wrangler: { configPath: "./wrangler.jsonc" },
             remoteBindings: false,
             miniflare: {
@@ -144,6 +148,14 @@ export default defineConfig({
         ],
         test: {
           name: "workers",
+          // One workerd runtime shared by every file in a worker, instead of a
+          // fresh isolate (and a fresh import of the whole dependency graph) per
+          // file. That startup was most of the suite's time. The cost is that
+          // KV, R2 and in-memory binding state is NOT reset between files, so a
+          // test must not depend on another file's leftovers: use unique keys,
+          // and reset D1 with setupTestDatabase(). Verified with shuffled file
+          // order (see .claude/rules/testing.md).
+          isolate: false,
           testTimeout: 60_000,
           hookTimeout: 60_000,
           include: workersFiles,

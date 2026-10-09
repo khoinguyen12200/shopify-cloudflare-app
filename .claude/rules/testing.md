@@ -70,6 +70,21 @@ So, in this repo:
   coupled; inject dependencies. Huge setup → extract factories into
   `app/test/`.
 
+## Speed, and what it costs
+
+The Workers project runs with `isolate: false`: files share one workerd runtime,
+so the dependency graph is imported once instead of once per file (the full
+suite went from ~165s to ~95s). Tests boot `app/test/worker-entry.ts`, a stub,
+not `workers/app.ts`, which would load the whole app into every runtime.
+
+The trade-off is that **KV, R2 and in-memory binding state is not reset between
+files**. A test must not rely on, or be broken by, another file's leftovers: use
+unique keys per test, reset D1 with `setupTestDatabase()` (one batched delete per
+test), and keep module-level mutable state out of production code (already
+banned). Run `npx vitest run --sequence.shuffle.files` after adding a test that
+touches KV, R2 or a rate limiter. For the inner loop, `npm run test:quick` runs
+only the tests affected by uncommitted changes.
+
 ## Before claiming done
 
 Run it and read the output. Then say what you ran.
