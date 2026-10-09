@@ -14,6 +14,11 @@ export async function reconcileHeld(
   let released = 0;
   const failures: { id: string; key: string; reason: string }[] = [];
   const page = await port.listHeld(shop, options.cursor, options.limit);
+  // Sequential on purpose, not an N+1: each `apply` is its own transactional state
+  // transition guarded by the item's current state (@rules/data.md: a guard and
+  // its write are never split). Batching would merge independent guards into one
+  // statement and let one stale item fail or commit its neighbours. The page
+  // size (`limit`) is the bound; `decide` may also be async per item.
   for (const item of page.items) {
     const decision = await decide(item);
     if (decision === "ignore") continue;

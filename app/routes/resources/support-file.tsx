@@ -3,7 +3,7 @@ import type { LoaderFunctionArgs } from "react-router";
 import { getEnv } from "~/request-context.server";
 import { requireAttachmentTokenSecret } from "~/wiring.server";
 import { getAdminUser } from "~/services/admin-auth.server";
-import { adminUsers } from "~/wiring.server";
+import { adminSessionUsers } from "~/wiring.server";
 import { verifyAttachmentToken } from "~/support/file-token";
 
 /**
@@ -87,5 +87,5 @@ async function isAuthorised({
   // `getAdminUser` returns undefined rather than redirecting, so an anonymous
   // request falls through to the 404 instead of being bounced to a login page
   // it could not render inside an <img> anyway.
-  return (await getAdminUser(request, { users: adminUsers() })) !== undefined;
+  return (await getAdminUser(request, { users: adminSessionUsers() })) !== undefined;
 }

@@ -1,4 +1,4 @@
-import { currencyDecimals, fromDecimalString, fromMinorUnits, toCurrency, type Money } from "~/money";
+import { fromApiNumber, fromMinorUnits, toCurrency, type Money } from "~/money";
 export type SubscriptionStatus = "ACTIVE" | "CANCELLED" | "PENDING" | "DECLINED" | "EXPIRED" | "FROZEN" | "ACCEPTED";
 
 /** The parts of `billing.check()`'s `AppSubscription` this module actually reads. */
@@ -42,16 +42,13 @@ const INTERVAL_LABEL: Record<string, "every_30_days" | "annual"> = {
 
 /**
  * `billing.check()`'s pricing already arrives as a parsed `{amount: number}`,
- * not the raw decimal string `~/money` normally parses — the SDK did that
- * conversion, not us. Rebuilding a clean `Money` from a float means going
- * through a fixed-precision string rather than multiplying by the currency's
- * scale directly: `19.99 * 100` is `1998.9999999999998` in IEEE-754, and that
- * is exactly the class of bug `~/money` exists to prevent.
+ * not the raw decimal string `~/money` normally parses. `fromApiNumber` rebuilds
+ * a `Money` from the number's shortest round-trip digits and refuses anything
+ * the currency cannot hold, instead of multiplying (`19.99 * 100` is
+ * `1998.9999999999998`) or rounding with `toFixed`.
  */
 function moneyFromApiAmount(amount: number, currencyCode: string): Money | null {
-  const currency = toCurrency(currencyCode);
-  if (!currency.ok) return null;
-  const parsed = fromDecimalString(amount.toFixed(currencyDecimals(currency.value)), currency.value);
+  const parsed = fromApiNumber(amount, currencyCode);
   return parsed.ok ? parsed.value : null;
 }
 

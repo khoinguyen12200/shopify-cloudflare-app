@@ -4,7 +4,7 @@ import { generateToken, hashToken } from "~/lib/token";
 import { hashPassword } from "~/lib/password";
 import { validatePasswordStrength } from "~/lib/password-policy";
 import type { NotifyRequest } from "~/ports/notifier";
-import type { NotifyResult } from "~/notifications/notify.server";
+import type { Notifier } from "~/ports/notifier";
 import { absolute, paths } from "~/urls";
 
 /** An unclicked link should not stay valid all day. */
@@ -12,8 +12,13 @@ export const TOKEN_TTL_MS = 60 * 60 * 1000;
 /** Live links per account, so requesting repeatedly cannot flood an inbox. */
 export const MAX_ACTIVE_TOKENS = 3;
 
+/**
+ * Hands the reset email to the notification queue. It resolves once the message
+ * is queued, NOT once it is sent: whether the mail went out is recorded by the
+ * consumer in `notification_logs` under the `logId` passed here.
+ */
 export interface PasswordResetNotifier {
-  send(input: NotifyRequest<"admin_password_reset">): Promise<NotifyResult>;
+  send(input: NotifyRequest<"admin_password_reset">): ReturnType<Notifier["send"]>;
 }
 
 /**
@@ -36,7 +41,13 @@ export interface RequestResetOutcome {
   requested: true;
   /** Present only when a token was actually issued. Never send this to a client. */
   token?: string;
-  emailSent: boolean;
+  /**
+   * The reset email was handed to the notifier for queueing. This says nothing
+   * about delivery — that is the consumer's row under `notificationLogId`.
+   */
+  queued: boolean;
+  /** Pre-minted id of the `notification_logs` row the send will write. */
+  notificationLogId?: string;
 }
 
 export async function requestPasswordReset(input: {
@@ -47,6 +58,8 @@ export async function requestPasswordReset(input: {
   users: Pick<AdminUserPort, "findByEmailWithHash">;
   tokens: Pick<PasswordResetTokenPort, "countActiveForUser" | "create">;
   notifier: PasswordResetNotifier;
+  /** Mints the log id, so the caller can name the row before it exists. */
+  newId: () => string;
 }): Promise<RequestResetOutcome> {
   const email = normalizeEmail(input.email);
   const now = Date.now();
@@ -57,12 +70,12 @@ export async function requestPasswordReset(input: {
     console.log(
       JSON.stringify({
         event: "password_reset.requested_unknown",
-        email,
+        // No email here: it is PII, and for an unknown account it is attacker-supplied.
         // Distinguished in the log only — never in the response.
         reason: user ? "disabled" : "no_such_account",
       }),
     );
-    return { requested: true, emailSent: false };
+    return { requested: true, queued: false };
   }
 
   const tokens = deps.tokens;
@@ -74,7 +87,7 @@ export async function requestPasswordReset(input: {
         limit: MAX_ACTIVE_TOKENS,
       }),
     );
-    return { requested: true, emailSent: false };
+    return { requested: true, queued: false };
   }
 
   const token = generateToken();
@@ -85,14 +98,17 @@ export async function requestPasswordReset(input: {
     now,
   });
 
-  // Goes through the notification system, so this send is logged, deduped and
-  // rendered from the registered template like every other notification. The
-  // dedupe key is the token itself: a retried job cannot email the same link
-  // twice, while a genuinely new request has a new token and sends.
-  const notified = await deps.notifier.send({
+  // Goes through the notification queue, so the request returns at once and the
+  // send is logged, deduped, retried and rendered from the registered template
+  // like every other notification. The dedupe key is the token's hash: a
+  // redelivered message cannot email the same link twice, while a genuinely new
+  // request has a new token and sends.
+  const notificationLogId = deps.newId();
+  await deps.notifier.send({
     event: "admin_password_reset",
     to: { email: user.email },
     dedupeKey: `admin_password_reset:${await hashToken(token)}`,
+    logId: notificationLogId,
     payload: {
       recipientName: user.name,
       resetUrl: absolute(
@@ -103,21 +119,15 @@ export async function requestPasswordReset(input: {
     },
   });
 
-  const [result] = notified.dispatched;
-  const emailSent = result?.outcome.status === "sent";
-
   console.log(
     JSON.stringify({
-      event: "password_reset.issued",
+      event: "password_reset.queued",
       adminUserId: user.id,
-      emailSent,
-      notificationLogId: result?.logId,
-      // Recorded so a suppressed reset is explainable rather than mysterious.
-      decisions: notified.decisions,
+      notificationLogId,
     }),
   );
 
-  return { requested: true, token, emailSent };
+  return { requested: true, token, queued: true, notificationLogId };
 }
 
 export type ResetFailure =

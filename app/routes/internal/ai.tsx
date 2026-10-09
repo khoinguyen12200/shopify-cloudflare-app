@@ -48,6 +48,7 @@ import { rankModelsForRole, recommendedChain } from "~/ai/ranking";
 import { isDemoted } from "~/ai/chain";
 import { useActionToast } from "~/internal/use-action-toast";
 import { formatNumber } from "~/i18n/format";
+import { formatMoney, fromMinorUnits, toCurrency } from "~/money";
 import type { Locale } from "~/i18n/config";
 
 /** The internal console is staff-only and English-only — no i18n here. */
@@ -122,11 +123,22 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   };
 };
 
+/**
+ * The catalogue's price (micro-USD per million tokens) as USD via `~/money`,
+ * rounded to whole cents with integer arithmetic — never `toFixed`.
+ */
+function outputPrice(model: CatalogueModel): string {
+  const usd = toCurrency("USD");
+  if (!usd.ok) return "n/a";
+  const cents = fromMinorUnits(Math.round(model.outputMicroUsdPerMTokens / 10_000), usd.value);
+  return cents.ok ? formatMoney("en-US", cents.value) : "n/a";
+}
+
 /** Everything a person needs to judge a model, from the catalogue's own facts. */
 function modelNote(model: CatalogueModel): string {
   const parts = [
     `${Math.round(model.contextWindow / 1000)}k ctx`,
-    `$${(model.outputMicroUsdPerMTokens / 1_000_000).toFixed(2)}/M out`,
+    `${outputPrice(model)}/M out`,
   ];
   if (model.toolCalling) parts.push("tools");
   if (model.reasoning) parts.push("thinks aloud");
@@ -161,6 +173,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       // Seeds the top of this purpose's own ranking. An explicit button rather
       // than a silent default, so "no models" stays a real, choosable state and
       // what the runtime will actually use is always what the page shows.
+      // Sequential on purpose: each append reads the chain's current max priority,
+      // and the list is the fixed-length recommendation (CHAIN_LENGTH), staff-only.
       for (const id of recommendedChain(role)) {
         await repo.addToChain({ role, modelId: id, updatedBy: actor.email, at });
       }

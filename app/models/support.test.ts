@@ -276,7 +276,7 @@ describe("SupportRepo", () => {
       const repo = new SupportRepo();
       const mine = await open(repo, { shop: SHOP });
       const theirs = await open(repo, { shop: OTHER });
-      await repo.attach({
+      await repo.attachMany([{
         shop: SHOP,
         messageId: (await repo.find(SHOP, mine.id))!.messages[0]!.id,
         id: "att_1",
@@ -285,7 +285,7 @@ describe("SupportRepo", () => {
         contentType: "image/png",
         sizeBytes: 10,
         at: 1000,
-      });
+      }]);
 
       const purged = await repo.purgeShop(SHOP);
       expect(purged.r2Keys).toEqual(["support/alpha/x"]);
@@ -294,6 +294,46 @@ describe("SupportRepo", () => {
       expect(await repo.find(SHOP, mine.id)).toBeUndefined();
       // The other shop is untouched.
       expect(await repo.find(OTHER, theirs.id)).toBeDefined();
+    });
+  });
+  it("attaches many files in one call across statement chunks, scoped to the shop", async () => {
+    await run(async () => {
+      const repo = new SupportRepo();
+      const mine = await open(repo, { shop: SHOP });
+      const theirs = await open(repo, { shop: OTHER });
+      const mineMessage = (await repo.find(SHOP, mine.id))?.messages[0]?.id ?? "";
+      await repo.attachMany(Array.from({ length: 25 }, (_, n) => ({
+        shop: SHOP, messageId: mineMessage, id: `bulk_${n}`, r2Key: `support/alpha/${n}`,
+        filename: `f${n}.png`, contentType: "image/png", sizeBytes: n + 1, at: 1000,
+      })));
+      await repo.attachMany([]);
+
+      expect((await repo.find(SHOP, mine.id))?.attachments).toHaveLength(25);
+      // The other shop's thread never sees them, and its own id cannot reach mine.
+      expect((await repo.find(OTHER, theirs.id))?.attachments).toHaveLength(0);
+      expect(await repo.find(OTHER, mine.id)).toBeUndefined();
+    });
+  });
+
+  it("adopts many staged uploads atomically and refuses another shop's uploads", async () => {
+    await run(async () => {
+      const repo = new SupportRepo();
+      const mine = await open(repo, { shop: SHOP });
+      const message = (await repo.find(SHOP, mine.id))?.messages[0]?.id ?? "";
+      const ids = Array.from({ length: 12 }, (_, n) => `up_${n}`);
+      await Promise.all(ids.map((id) => repo.stageUpload({
+        id, shop: SHOP, ticketId: null, r2Key: `support/alpha/${id}`, filename: `${id}.txt`,
+        contentType: "text/plain", sizeBytes: 1, createdAt: 1, expiresAt: 10_000,
+      })));
+
+      expect(await repo.adoptPendingUploads(OTHER, message, ids, 5)).toBe(false);
+      expect((await repo.find(SHOP, mine.id))?.attachments).toHaveLength(0);
+
+      expect(await repo.adoptPendingUploads(SHOP, message, ids, 5)).toBe(true);
+      expect((await repo.find(SHOP, mine.id))?.attachments).toHaveLength(12);
+      // Consumed: a replay finds nothing left to claim.
+      expect(await repo.adoptPendingUploads(SHOP, message, ids, 6)).toBe(false);
+      expect((await repo.find(SHOP, mine.id))?.attachments).toHaveLength(12);
     });
   });
 });

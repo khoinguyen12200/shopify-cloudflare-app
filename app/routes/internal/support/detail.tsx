@@ -1,4 +1,4 @@
-import { shopSubscriptions } from "~/wiring.server";
+import { shopSubscriptions, adminSessionUsers } from "~/wiring.server";
 import { Form, useActionData, useLoaderData, useNavigation } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
 
@@ -53,7 +53,7 @@ import {
 const LOCALE: Locale = "en";
 
 export const loader = async ({ params, request }: LoaderFunctionArgs) => {
-  await requireAdminUser(request, { users: adminUsers() });
+  await requireAdminUser(request, { users: adminSessionUsers() });
   const service = supportService();
 
   const ticketId = params.ticketId ?? "";

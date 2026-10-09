@@ -7,6 +7,7 @@ import {
   withApiAudit,
 } from "../helpers.server";
 import { setShopDevStatus } from "~/services/internal-admin/ops.server";
+import { readJsonObject } from "~/lib/json-body";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const opt = handleOptions(request);
@@ -20,12 +21,8 @@ export async function action({ request }: ActionFunctionArgs) {
 
   const actor = await authenticateApiRequest(request, "mcp:shops:write");
 
-  let body: Record<string, unknown>;
-  try {
-    body = (await request.json()) as Record<string, unknown>;
-  } catch {
-    return apiError("invalid_request", "Expected JSON body", 400);
-  }
+  const body = await readJsonObject(request);
+  if (!body) return apiError("invalid_request", "Expected JSON body", 400);
 
   const shop = typeof body.shop === "string" ? body.shop.trim() : "";
   const isDevStore = Boolean(body.is_dev_store ?? body.isDevStore);

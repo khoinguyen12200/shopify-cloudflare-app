@@ -11,6 +11,7 @@ import {
   shopSubscriptionItems,
   shopSubscriptions,
   shopifyEvents,
+  shopifySyncCheckpoints,
   shops,
   supportAttachments,
   supportMessages,
@@ -82,6 +83,9 @@ export class TenantPurgeRepo {
       db.delete(notificationPreferences).where(eq(notificationPreferences.scope, shop)),
       db.delete(notificationOptOuts).where(eq(notificationOptOuts.scope, shop)),
       db.delete(mcpAuditLogs).where(eq(mcpAuditLogs.shop, shop)),
+      // Per-shop sync bookkeeping is keyed by name (`{job}:{shop}`), not by a shop column, so the coverage check above
+      // cannot see it; it is listed here so a redaction leaves no trace of the domain behind.
+      db.delete(shopifySyncCheckpoints).where(inArray(shopifySyncCheckpoints.name, [`partner_history:${shop}`, `uninstall_probe:${shop}`])),
       db.delete(shops).where(eq(shops.shop, shop)),
     ]);
     return deleted.reduce((total, result) => total + result.meta.changes, 0);

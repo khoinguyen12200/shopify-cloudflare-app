@@ -1,16 +1,16 @@
 import { webhookScopeObservations } from "~/wiring.server";
 import type { ActionFunctionArgs } from "react-router";
-import { verifyShopifyWebhook } from "~/adapters/shopify-webhook.server";
+import { verifyShopifyWebhook, webhookSecrets } from "~/adapters/shopify-webhook.server";
 import { getEnv } from "~/request-context.server";
 import { scopesUpdatePayloadSchema } from "~/schemas/webhooks";
 import { webhookDeliveries } from "~/wiring.server";
-import { ingestWebhook, sha256Json } from "~/services/webhook-ingest";
+import { ingestWebhook, parseTriggeredAt, sha256Json } from "~/services/webhook-ingest";
 import { formatWebhookLog, withWebhookFailureLog, writeWebhookLog } from "~/services/webhook-logging";
 
 export const action = ({ request }: ActionFunctionArgs) => withWebhookFailureLog(request, () => receive(request));
 
 async function receive(request: Request): Promise<Response> {
-  const authenticated = await verifyShopifyWebhook(request, getEnv().SHOPIFY_API_SECRET);
+  const authenticated = await verifyShopifyWebhook(request, webhookSecrets(getEnv()));
   const parsed = scopesUpdatePayloadSchema.safeParse(authenticated.payload);
   if (!parsed.success) throw new Response("Invalid app/scopes_update payload", { status: 400 });
 
@@ -29,7 +29,7 @@ async function receive(request: Request): Promise<Response> {
     topic: authenticated.topic,
     shop: authenticated.shop,
     apiVersion: authenticated.apiVersion,
-    triggeredAt: authenticated.triggeredAt ? Date.parse(authenticated.triggeredAt) : now,
+    triggeredAt: parseTriggeredAt(authenticated.triggeredAt, now),
     receivedAt: now,
     payload: authenticated.payload,
   });

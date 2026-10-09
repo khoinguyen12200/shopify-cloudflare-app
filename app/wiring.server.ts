@@ -5,7 +5,9 @@ import { ShopifyPartnerAdapter } from "~/adapters/shopify-partner.server";
 import { ShopifyEventRepo } from "~/models/shopify-events.server";
 import { ShopSubscriptionRepo } from "~/models/shop-subscriptions.server";
 import { ShopRepo } from "~/models/shops.server";
+import { ShopMetricsRepo } from "~/models/shop-metrics.server";
 import { AdminUserRepo } from "~/models/admin-users.server";
+import { cachedAdminLookup, createAdminSessionCache } from "~/adapters/admin-session-cache.server";
 import { AiRepo } from "~/models/ai.server";
 import { OperationalHealthRepo } from "~/models/operational-health.server";
 import { SupportRepo } from "~/models/support.server";
@@ -15,10 +17,16 @@ import { ShopSyncCheckpointRepo } from "~/models/shop-sync-checkpoints.server";
 import { PasswordResetTokenRepo } from "~/models/password-reset-tokens.server";
 import { TenantPurgeRepo } from "~/models/tenant-purge.server";
 import { KVSessionStorage } from "~/session-storage.server";
-import type { ConsumerDelivery, WebhookHandlerRegistry } from "~/services/webhook-consumer";
+import type { WebhookHandlerRegistry } from "~/services/webhook-consumer";
+import { appUninstalledHandler } from "~/services/webhook-handlers/app-uninstalled";
+import { appScopesUpdateHandler } from "~/services/webhook-handlers/app-scopes-update";
+import { complianceHandler } from "~/services/webhook-handlers/compliance";
+import { recordUninstall, type RecordUninstallPorts } from "~/services/record-uninstall";
+import { probeInstalledShops } from "~/services/probe-installed-shops";
+import { ShopTokenProbeRepo } from "~/models/shop-token-probes.server";
+import { ShopifyTokenRefresh } from "~/adapters/shopify-token-refresh.server";
 import { getEnv } from "~/request-context.server";
-import { notify } from "~/notifications/notify.server";
-import { notificationDependencies } from "~/wiring/notifications.server";
+import { queuedNotifier } from "~/wiring/notifications.server";
 import type { PasswordResetNotifier } from "~/services/password-reset.server";
 import { signAttachmentToken } from "~/support/file-token";
 import { AiService } from "~/services/ai.server";
@@ -173,22 +181,37 @@ export async function persistShopIdentity(admin: { graphql: (query: string) => P
   }, now);
 }
 
+function adminSessionCache() {
+  return createAdminSessionCache(getEnv().SESSION);
+}
+
+/** Authoritative staff repo (D1). Writes drop the advisory session-lookup cache. */
 export function adminUsers(): AdminUserPort {
-  return new AdminUserRepo();
+  return new AdminUserRepo({ invalidate: (id) => adminSessionCache().invalidate(id) });
+}
+
+/**
+ * Per-request "who is signed in" lookup for the console's guards: KV first, D1
+ * on a miss, ≤ 60 s stale after a disable/role change (see admin-session-cache).
+ * Never use it for management decisions or `requireOwner` — those read `adminUsers()`.
+ */
+export function adminSessionUsers(): Pick<AdminUserPort, "findById"> {
+  return cachedAdminLookup(adminSessionCache(), new AdminUserRepo());
 }
 
 /** Adapter factories are the only production boundary to repository classes. */
-export type ShopsPort = Pick<ShopRepo, "get" | "recordAuthenticatedIdentity" | "recordInstall" | "updateShopIdentity" | "recordUninstall" | "markReconciled" | "listAll" | "setDevStatus">;
-export type SupportPort = Pick<SupportRepo, "find" | "findForStaff" | "stageUpload" | "adoptPendingUploads" | "findAttachment" | "listForShop" | "listOpenForStaff" | "listKnownContacts" | "replyAsStaff" | "closeAsStaff" | "markReadAsStaff" | "setCcEmails" | "attach" | "open" | "openAsStaff" | "reply" | "markRead" | "listExpiredUploads" | "deleteExpiredUploads">;
-export type ShopSubscriptionsPort = Pick<ShopSubscriptionRepo, "currentForShop" | "listCurrent" | "upsertObservation">;
+export type ShopsPort = Pick<ShopRepo, "get" | "recordAuthenticatedIdentity" | "recordInstall" | "updateShopIdentity" | "applyUninstall" | "markReconciled" | "listAll" | "setDevStatus">;
+export type SupportPort = Pick<SupportRepo, "find" | "findForStaff" | "stageUpload" | "adoptPendingUploads" | "findAttachment" | "listForShop" | "listOpenForStaff" | "listKnownContacts" | "replyAsStaff" | "closeAsStaff" | "markReadAsStaff" | "setCcEmails" | "attachMany" | "open" | "openAsStaff" | "reply" | "markRead" | "listExpiredUploads" | "deleteExpiredUploads">;
+export type ShopSubscriptionsPort = Pick<ShopSubscriptionRepo, "currentForShop" | "listCurrentForShops" | "upsertObservation">;
 export type ShopifyEventsPort = Pick<ShopifyEventRepo, "listSubscriptionEvents" | "listRelationshipEvents" | "listRecentSubscriptionEvents" | "recordPartnerRelationship" | "recordPartnerSubscription" | "listAllUninstallFeedback">;
 export type ShopSyncCheckpointsPort = Pick<ShopSyncCheckpointRepo, "read" | "markSucceeded" | "markFailed" | "readCheckpoint" | "markCheckpointSucceeded" | "markCheckpointFailed">;
-export type WebhookScopeObservationsPort = Pick<WebhookScopeObservationRepo, "record" | "list" | "applyScopes" | "listGrantedForShop">;
+export type WebhookScopeObservationsPort = Pick<WebhookScopeObservationRepo, "record" | "list" | "applyScopes" | "listGrantedForShop" | "latestChangeAt">;
 export type WebhookDeliveryRepositoryPort = Pick<WebhookDeliveryRepo, "listForShop" | "claim" | "get" | "markQueued" | "markProcessing" | "markProcessed" | "markFailed" | "markDeadLetter" | "listFailures">;
 export type OperationalHealthPort = Pick<OperationalHealthRepo, "read">;
 export type AiRepositoryPort = Pick<AiRepo, "chainFor" | "markHealth" | "recordRun" | "allModels" | "tokensSince" | "recentRuns" | "addToChain" | "removeFromChain" | "reorder" | "setEnabled">;
 
 export function shops(): ShopsPort { return new ShopRepo(); }
+export function shopMetrics(): ShopMetricsRepo { return new ShopMetricsRepo(); }
 export function support(): SupportPort { return new SupportRepo(); }
 export function shopSubscriptions(): ShopSubscriptionsPort { return new ShopSubscriptionRepo({ invalidate: invalidateEntitlements }); }
 export function shopifyEvents(): ShopifyEventsPort { return new ShopifyEventRepo(); }
@@ -232,15 +255,17 @@ export function subscriptionsPort(): SubscriptionPort {
   const current = async (shop: string) => {
     const relationship = await shops().get(shop);
     if (!relationship || relationship.relationshipStatus !== "INSTALLED") return { status: "UNKNOWN" as const, planHandle: null, revision: 0 };
+    const now = Date.now();
     const [projection, activeGrant] = await Promise.all([
       shopSubscriptions().currentForShop(shop),
-      planGrants().findActiveGrant(shop),
+      planGrants().findActiveGrant(shop, now),
     ]);
     const effective = resolveEffectivePlan(
       projection?.planHandle,
       projection?.status,
       activeGrant,
       PLAN_LIST,
+      now,
     );
     const effectiveStatus = effective.source === "promo"
       ? ("ACTIVE" as const)
@@ -345,7 +370,7 @@ export function passwordResetTokens(): PasswordResetTokenPort {
 }
 
 export function passwordResetNotifier(): PasswordResetNotifier {
-  return { send: (input) => notify(input, notificationDependencies()) };
+  return queuedNotifier();
 }
 
 /** Targeted billing refresh composition. Missing Partner credentials stay observable. */
@@ -434,7 +459,7 @@ export function supportService(): SupportService {
     repo: support(),
     admins: adminUsers(),
     clock: { now: () => Date.now() },
-    notifier: { send: async (input) => { await notify(input, notificationDependencies()); } },
+    notifier: queuedNotifier(),
     appUrl: env.SHOPIFY_APP_URL,
     withinRateLimit: async (shop) => env.SUPPORT_LIMITER ? (await env.SUPPORT_LIMITER.limit({ key: shop })).success : true,
     signAttachment: async (attachmentId, expiresAt) => signAttachmentToken({ secret: requireAttachmentTokenSecret(env), attachmentId, expiresAt }),
@@ -466,30 +491,47 @@ export function tenantPurgeDependencies() {
   };
 }
 
+/** Everything the uninstall use case needs, bound to D1 and KV. Shared by the webhook handler and the cron probe. */
+function recordUninstallPorts(env: Env): RecordUninstallPorts {
+  const sessions = new KVSessionStorage(env.SESSION);
+  const repository = new ShopRepo();
+  return {
+    shops: { facts: (shop) => repository.get(shop), applyUninstall: (shop, next) => repository.applyUninstall(shop, next) },
+    cleanup: async (shop) => {
+      await invalidateEntitlements(shop);
+      const found = await sessions.findSessionsByShop(shop);
+      await sessions.deleteSessions(found.map(({ id }) => id));
+    },
+    reconcile: (shop) => reconcileAfterUninstall({
+      refreshSubscription: () => refreshShopSubscription(env, shop),
+      refreshHistory: () => refreshShopHistory(env, shop),
+    }),
+  };
+}
+
+/**
+ * The consumer's registry: one entry per `WebhookTopic`, so TypeScript fails the build when a topic is added without
+ * a handler. A new topic is a new file under `app/services/webhook-handlers/`, one entry here, and one test.
+ */
 export function webhookConsumer() {
   const env = getEnv();
   const sessions = new KVSessionStorage(env.SESSION);
-  const scopes = webhookScopeObservations();
+  const compliance = { tenantPurge: tenantPurgeDependencies(), now: Date.now };
   const handlers = {
-    "app/uninstalled": async (delivery: ConsumerDelivery) => {
-      await shops().recordUninstall(delivery.shop, Date.now());
-      await invalidateEntitlements(delivery.shop);
-      const found = await sessions.findSessionsByShop(delivery.shop);
-      await sessions.deleteSessions(found.map(({ id }) => id));
-      const result = await reconcileAfterUninstall({
-        refreshSubscription: () => refreshShopSubscription(env, delivery.shop),
-        refreshHistory: () => refreshShopHistory(env, delivery.shop),
-      });
-      if (!result.ok) {
-        console.error(JSON.stringify({ event: "shopify.uninstall.reconciliation_failed", shop: delivery.shop, code: result.code, detail: result.detail }));
-      }
-    },
-    "app/scopes_update": async (delivery: ConsumerDelivery) => {
-      const current = await scopes.list(delivery.id, delivery.shop);
-      await scopes.applyScopes(delivery.id, delivery.shop, current, Date.now());
-      const found = await sessions.findSessionsByShop(delivery.shop);
-      await Promise.all(found.map(async (session) => { session.scope = current.join(","); await sessions.storeSession(session); }));
-    },
+    "app/uninstalled": appUninstalledHandler(recordUninstallPorts(env)),
+    "app/scopes_update": appScopesUpdateHandler({
+      shops: { facts: (shop) => shops().get(shop) },
+      scopes: webhookScopeObservations(),
+      sessions: {
+        updateScope: async (shop, scope) => {
+          const found = await sessions.findSessionsByShop(shop);
+          await Promise.all(found.map(async (session) => { session.scope = scope; await sessions.storeSession(session); }));
+        },
+      },
+    }),
+    "customers/data_request": complianceHandler("CUSTOMERS_DATA_REQUEST", compliance),
+    "customers/redact": complianceHandler("CUSTOMERS_REDACT", compliance),
+    "shop/redact": complianceHandler("SHOP_REDACT", compliance),
   } satisfies WebhookHandlerRegistry;
   return {
     deliveries: webhookDeliveryRepository(),
@@ -523,6 +565,21 @@ export function scheduledDependencies() {
         ledger: historyLedger(),
         clock: { now: () => now },
         appId: env.SHOPIFY_PARTNER_APP_ID || null,
+      }, now),
+    },
+    uninstallProbe: {
+      run: (now: number) => probeInstalledShops({
+        probes: new ShopTokenProbeRepo(),
+        refresher: new ShopifyTokenRefresh({
+          sessions: new KVSessionStorage(env.SESSION),
+          clientId: env.SHOPIFY_API_KEY,
+          clientSecret: env.SHOPIFY_API_SECRET,
+          fetch,
+          freshForMs: 5 * 60 * 1000,
+          timeoutMs: 10_000,
+        }),
+        uninstall: (shop, observation) => recordUninstall(recordUninstallPorts(env), shop, observation),
+        clock: { now: () => Date.now() },
       }, now),
     },
   };

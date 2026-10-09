@@ -1,4 +1,4 @@
-import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
+import type { HeadersFunction, LoaderFunctionArgs, ShouldRevalidateFunction } from "react-router";
 import { Outlet, useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
@@ -19,7 +19,11 @@ export const handle = { i18n: ["common", "admin"] };
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const env = getEnv();
   const { admin, session } = await authenticateAdmin(request);
-  await persistShopIdentity(admin, session.shop);
+  // Independent of each other: the identity write-through and the stored zone.
+  const [, timeZone] = await Promise.all([
+    persistShopIdentity(admin, session.shop),
+    shopTimeZone(admin, session.shop),
+  ]);
 
   // The public client_id, read from the Worker's env binding — there is no
   // process.env in workerd.
@@ -30,8 +34,23 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // merchant picked in the Shopify admin, automatically. Do NOT add a language
   // switcher to this surface — the app would then be able to disagree with the
   // admin around it.
-  return { apiKey: env.SHOPIFY_API_KEY || "", timeZone: await shopTimeZone(admin, session.shop) };
+  return { apiKey: env.SHOPIFY_API_KEY || "", timeZone };
 };
+
+/**
+ * This shell's data (the public API key and the shop's zone) is fixed for the
+ * lifetime of the embedded session, so client-side navigations between /app
+ * pages must not re-run it: every click would otherwise repeat the session-token
+ * check and the D1 reads before the page's own loader even starts.
+ *
+ * Safe for auth because every child loader and action calls `authenticateAdmin`
+ * itself (Shopify requires a valid session token on each request, and a failure
+ * still throws the library's 401 / App Bridge bounce response from that child).
+ * After an action the default applies, so the shell refreshes alongside the
+ * data the action changed.
+ */
+export const shouldRevalidate: ShouldRevalidateFunction = ({ formMethod, defaultShouldRevalidate }) =>
+  formMethod ? defaultShouldRevalidate : false;
 
 export default function App() {
   const { apiKey, timeZone } = useLoaderData<typeof loader>();

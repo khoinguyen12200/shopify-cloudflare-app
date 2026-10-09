@@ -53,12 +53,10 @@ export class SupportService {
   async adoptAttachments(
     shop: string,
     messageId: string,
-    attachments: readonly Omit<Parameters<SupportRepository["attach"]>[0], "shop" | "messageId" | "at">[],
+    attachments: readonly Omit<Parameters<SupportRepository["attachMany"]>[0][number], "shop" | "messageId" | "at">[],
   ): Promise<void> {
     const at = this.dependencies.clock.now();
-    for (const attachment of attachments) {
-      await this.dependencies.repo.attach({ shop, messageId, at, ...attachment });
-    }
+    await this.dependencies.repo.attachMany(attachments.map((attachment) => ({ shop, messageId, at, ...attachment })));
   }
 
   /** File a new ticket, then tell the staff who asked to hear about it. */
@@ -192,20 +190,20 @@ export class SupportService {
 
     const urls = threadUrls(this.dependencies.appUrl, input.ticketId);
 
-    for (const recipient of recipients) {
-      await this.dependencies.notifier.send({
-        event: "support_merchant_activity",
-        to: { email: recipient.email },
-        payload: {
-          recipientName: recipient.name,
-          shopName: input.shopName,
-          subject: input.subject,
-          excerpt: excerpt(input.body),
-          threadUrl: urls.staff,
-          isNew: input.isNew,
-        },
-      });
-    }
+    // Enqueueing is cheap and independent per recipient, so all go at once. The
+    // notifier never rejects, so one bad enqueue cannot suppress the others.
+    await Promise.all(recipients.map((recipient) => this.dependencies.notifier.send({
+      event: "support_merchant_activity",
+      to: { email: recipient.email },
+      payload: {
+        recipientName: recipient.name,
+        shopName: input.shopName,
+        subject: input.subject,
+        excerpt: excerpt(input.body),
+        threadUrl: urls.staff,
+        isNew: input.isNew,
+      },
+    })));
   }
 
   /**

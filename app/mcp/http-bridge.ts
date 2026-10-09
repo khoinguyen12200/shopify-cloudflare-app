@@ -1,23 +1,7 @@
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
+import { isJSONRPCRequest, JSONRPCMessageSchema, type JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import { buildMcpServer } from "./registry";
 import type { McpActorContext } from "./helpers";
-
-type AnyMessage = JSONRPCMessage & {
-  id?: string | number | null;
-  method?: string;
-};
-
-function isRequest(m: unknown): m is AnyMessage {
-  return (
-    m !== null &&
-    typeof m === "object" &&
-    "method" in m &&
-    "id" in m &&
-    (m as AnyMessage).id !== undefined &&
-    (m as AnyMessage).id !== null
-  );
-}
 
 const DISPATCH_TIMEOUT_MS = 60_000;
 
@@ -32,22 +16,33 @@ export async function dispatchHttpMcp(
   body: unknown,
   ctx: McpActorContext,
 ): Promise<{ status: number; body?: unknown }> {
-  const messages: unknown[] = Array.isArray(body) ? body : [body];
+  const candidates: unknown[] = Array.isArray(body) ? body : [body];
+  const messages: JSONRPCMessage[] = [];
+  for (const candidate of candidates) {
+    const parsed = JSONRPCMessageSchema.safeParse(candidate);
+    if (!parsed.success) {
+      return {
+        status: 400,
+        body: { jsonrpc: "2.0", id: null, error: { code: -32600, message: "Invalid Request" } },
+      };
+    }
+    messages.push(parsed.data);
+  }
   const pendingIds = new Set(
-    messages.filter(isRequest).map((m) => (m as AnyMessage).id),
+    messages.filter(isJSONRPCRequest).map((m) => m.id),
   );
 
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
   const server = buildMcpServer(ctx);
 
-  const responses: AnyMessage[] = [];
+  const responses: JSONRPCMessage[] = [];
   const collected = new Promise<void>((resolve) => {
     if (pendingIds.size === 0) {
       resolve();
       return;
     }
-    clientSide.onmessage = (msg: AnyMessage) => {
-      if (msg && msg.id !== undefined && msg.id !== null && pendingIds.has(msg.id)) {
+    clientSide.onmessage = (msg) => {
+      if ("id" in msg && msg.id !== undefined && pendingIds.has(msg.id)) {
         responses.push(msg);
         pendingIds.delete(msg.id);
         if (pendingIds.size === 0) resolve();
@@ -60,7 +55,7 @@ export async function dispatchHttpMcp(
     await clientSide.start();
 
     for (const m of messages) {
-      await clientSide.send(m as JSONRPCMessage);
+      await clientSide.send(m);
     }
 
     let timer: ReturnType<typeof setTimeout> | undefined;

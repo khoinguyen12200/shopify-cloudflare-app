@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { beforeEach, describe, it, expect } from "vitest";
 import { env } from "cloudflare:test";
 import { runWithRequestContext } from "~/request-context.server";
 import { setupTestDatabase } from "~/test/db";
@@ -10,14 +10,42 @@ import {
 import { createAdmin } from "~/services/admin-management.server";
 import { requestPasswordReset } from "~/services/password-reset.server";
 import { notify } from "./notify.server";
-import { adminUsers, passwordResetNotifier, passwordResetTokens } from "~/wiring.server";
-import { notificationDependencies } from "~/wiring/notifications.server";
+import { adminUsers, passwordResetTokens } from "~/wiring.server";
+import {
+  notificationConsumerDependencies,
+  notificationDependencies,
+  notificationLogs,
+} from "~/wiring/notifications.server";
+import { createQueuedNotifier } from "~/services/notification-enqueue";
+import { handleNotificationBatch } from "~/services/notification-queue";
+import { fakeNotificationQueue, recordedMessage } from "~/test/fake-notification-queue";
 
 setupTestDatabase();
+beforeEach(() => { queue.enqueued.length = 0; });
 
 const inRequest = <T>(fn: () => Promise<T>) => runWithRequestContext(env, fn);
 const ORIGIN = "https://example.test";
-const resetDeps = { users: adminUsers(), tokens: passwordResetTokens(), notifier: passwordResetNotifier() };
+const queue = fakeNotificationQueue();
+const resetDeps = {
+  users: adminUsers(),
+  tokens: passwordResetTokens(),
+  notifier: createQueuedNotifier({
+    queue,
+    logs: notificationLogs(),
+    newId: () => crypto.randomUUID(),
+    now: () => Date.now(),
+    log: () => {},
+  }),
+  newId: () => crypto.randomUUID(),
+};
+
+/** Deliver everything the request enqueued to the real consumer, once each. */
+async function drainQueue() {
+  const messages = queue.bodies().map((body) => recordedMessage(body));
+  queue.enqueued.length = 0;
+  await handleNotificationBatch({ messages }, notificationConsumerDependencies());
+  return messages;
+}
 
 /**
  * END TO END, through the real call site.
@@ -48,6 +76,7 @@ describe("the admin forgot-password flow reaches the notification system", () =>
     const rows = await inRequest(async () => {
       await seedAdmin();
       await requestPasswordReset({ email: "admin@example.org", origin: ORIGIN }, resetDeps);
+      await drainQueue();
       return new NotificationLogRepo().recent();
     });
 
@@ -66,6 +95,7 @@ describe("the admin forgot-password flow reaches the notification system", () =>
     const rows = await inRequest(async () => {
       await seedAdmin();
       await requestPasswordReset({ email: "admin@example.org", origin: ORIGIN }, resetDeps);
+      await drainQueue();
       return new NotificationLogRepo().recent();
     });
 
@@ -81,6 +111,7 @@ describe("the admin forgot-password flow reaches the notification system", () =>
     const rows = await inRequest(async () => {
       await seedAdmin();
       await requestPasswordReset({ email: "admin@example.org", origin: ORIGIN }, resetDeps);
+      await drainQueue();
       return new NotificationLogRepo().recent();
     });
     expect(rows[0]!.settledAt).not.toBeNull();
@@ -91,9 +122,11 @@ describe("the admin forgot-password flow reaches the notification system", () =>
     // includes not leaving a trail that reveals it.
     const rows = await inRequest(async () => {
       await requestPasswordReset({ email: "nobody@example.org", origin: ORIGIN }, resetDeps);
+      await drainQueue();
       return new NotificationLogRepo().recent();
     });
     expect(rows).toHaveLength(0);
+    expect(queue.enqueued).toHaveLength(0);
   });
 
   it("still returns the token, so the flow works without a mailer", async () => {
@@ -102,7 +135,28 @@ describe("the admin forgot-password flow reaches the notification system", () =>
       return requestPasswordReset({ email: "admin@example.org", origin: ORIGIN }, resetDeps);
     });
     expect(result.token).toBeTruthy();
-    expect(result.emailSent).toBe(false);
+    expect(result.queued).toBe(true);
+  });
+
+  it("returns before anything is sent: the request only enqueues", async () => {
+    const outcome = await inRequest(async () => {
+      await seedAdmin();
+      const result = await requestPasswordReset({ email: "admin@example.org", origin: ORIGIN }, resetDeps);
+      return { result, rowsBefore: await new NotificationLogRepo().recent() };
+    });
+    expect(outcome.rowsBefore).toHaveLength(0);
+    expect(queue.enqueued).toHaveLength(1);
+    expect(queue.enqueued[0]?.logId).toBe(outcome.result.notificationLogId);
+  });
+
+  it("the consumer writes the row under the pre-minted log id", async () => {
+    const outcome = await inRequest(async () => {
+      await seedAdmin();
+      const result = await requestPasswordReset({ email: "admin@example.org", origin: ORIGIN }, resetDeps);
+      await drainQueue();
+      return { result, rows: await new NotificationLogRepo().recent() };
+    });
+    expect(outcome.rows.map((row) => row.id)).toEqual([outcome.result.notificationLogId]);
   });
 });
 

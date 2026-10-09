@@ -7,6 +7,7 @@ import {
   compare,
   equals,
   formatMoney,
+  fromApiNumber,
   fromDecimalString,
   fromMinorUnits,
   fromMoneyV2,
@@ -310,5 +311,45 @@ describe("formatting", () => {
 
   it("renders zero", () => {
     expect(formatMoney("en-US", zero(USD))).toBe("$0.00");
+  });
+});
+
+describe("fromApiNumber — SDK-parsed numbers, digit-string based", () => {
+  const minor = (n: number, c: string) => unwrap(fromApiNumber(n, c)).amount;
+
+  it("keeps normal prices exact where multiplying would not", () => {
+    expect(19.99 * 100).not.toBe(1999); // why this path exists
+    expect(minor(19.99, "USD")).toBe(1999);
+    expect(minor(1999.5, "USD")).toBe(199950);
+    expect(minor(500, "JPY")).toBe(500);
+  });
+
+  it("covers zero, negative and cent boundaries", () => {
+    expect(minor(0, "USD")).toBe(0);
+    expect(minor(-0, "USD")).toBe(0);
+    expect(minor(-19.99, "USD")).toBe(-1999);
+    expect(minor(0.01, "USD")).toBe(1);
+    expect(minor(0.3, "USD")).toBe(30);
+  });
+
+  it("handles 0- and 3-decimal currencies", () => {
+    expect(minor(1234.567, "KWD")).toBe(1234567);
+    expect(minor(1, "KWD")).toBe(1000);
+    expect(minor(5000, "JPY")).toBe(5000);
+  });
+
+  it("refuses extra precision instead of rounding", () => {
+    expect(fromApiNumber(19.999, "USD")).toMatchObject({ ok: false, reason: "precision_loss" });
+    expect(fromApiNumber(500.5, "JPY")).toMatchObject({ ok: false, reason: "precision_loss" });
+    expect(fromApiNumber(0.1 + 0.2, "USD")).toMatchObject({ ok: false, reason: "precision_loss" });
+  });
+
+  it("refuses NaN, Infinity, exponent forms and unknown currencies", () => {
+    expect(fromApiNumber(Number.NaN, "USD").ok).toBe(false);
+    expect(fromApiNumber(Number.POSITIVE_INFINITY, "USD").ok).toBe(false);
+    expect(fromApiNumber(Number.NEGATIVE_INFINITY, "USD").ok).toBe(false);
+    expect(fromApiNumber(1e21, "USD")).toMatchObject({ ok: false, reason: "malformed_amount" });
+    expect(fromApiNumber(1e-7, "USD")).toMatchObject({ ok: false, reason: "malformed_amount" });
+    expect(fromApiNumber(10, "ZZZ").ok).toBe(false);
   });
 });

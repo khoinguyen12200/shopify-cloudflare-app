@@ -9,7 +9,7 @@ import {
   uploadSupportAttachment,
 } from "~/services/internal-admin/ops.server";
 import { mcpMutation, mcpRead, MUTATION, READ_ONLY, type McpActorContext } from "../helpers";
-import { SUPPORT_CATEGORIES, type SupportCategory } from "~/support/categories";
+import { SUPPORT_CATEGORIES } from "~/support/categories";
 
 const CATEGORY_ENUM = z.enum(SUPPORT_CATEGORIES);
 
@@ -138,7 +138,7 @@ export function registerTicketTools(server: McpServer, ctx: McpActorContext) {
         shopName: args.shopName,
         subject: args.subject,
         body: args.body,
-        category: args.category as SupportCategory,
+        category: args.category,
         merchantEmail: args.merchantEmail,
         ccEmails: args.ccEmails ?? [],
         staffName: args.staffName ?? "Support Team",

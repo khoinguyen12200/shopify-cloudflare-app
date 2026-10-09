@@ -51,9 +51,9 @@ const FILENAME_MAX = 100;
 function kindOf(contentType: string): AttachmentKind | null {
   // Browsers send `video/MP4` and sometimes append parameters.
   const type = contentType.split(";")[0]?.trim().toLowerCase() ?? "";
-  if ((IMAGE_TYPES as readonly string[]).includes(type)) return "image";
-  if ((VIDEO_TYPES as readonly string[]).includes(type)) return "video";
-  if ((FILE_TYPES as readonly string[]).includes(type)) return "file";
+  if (IMAGE_TYPES.some((known) => known === type)) return "image";
+  if (VIDEO_TYPES.some((known) => known === type)) return "video";
+  if (FILE_TYPES.some((known) => known === type)) return "file";
   return null;
 }
 

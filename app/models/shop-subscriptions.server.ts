@@ -1,4 +1,4 @@
-import { and, desc, eq, ne, or, sql, exists } from "drizzle-orm";
+import { and, desc, eq, inArray, ne, or, sql, exists } from "drizzle-orm";
 import type { SubscriptionStatus, SubscriptionObservation } from "~/domain/subscription-lifecycle";
 import { shopSubscriptionItems, shopSubscriptions } from "~/db/schema";
 import { getDb } from "~/request-context.server";
@@ -48,6 +48,9 @@ const kindByStatus: Record<SubscriptionStatus, "none" | "pending" | "active" | "
   NONE: "none", PENDING: "pending", ACTIVE: "active", CANCELLATION_SCHEDULED: "cancellation_scheduled", FROZEN: "frozen", CANCELED: "canceled", UNKNOWN: "unknown",
 };
 
+/** D1 caps bound parameters at 100 per statement. */
+const SHOP_CHUNK = 90;
+
 export class ShopSubscriptionRepo {
   constructor(private readonly cache?: SubscriptionCacheInvalidator) {}
   async currentForShop(shop: string): Promise<CurrentSubscriptionProjection | undefined> {
@@ -70,23 +73,33 @@ export class ShopSubscriptionRepo {
     return rows[0];
   }
 
-  async listCurrent(): Promise<CurrentSubscriptionProjection[]> {
-    const rows = await getDb().select({
-      shop: shopSubscriptions.shop,
-      status: shopSubscriptions.status,
-      billingInterval: shopSubscriptions.billingInterval,
-      planHandle: shopSubscriptions.planHandle,
-      priceAmount: shopSubscriptionItems.priceAmount,
-      priceCurrency: shopSubscriptionItems.priceCurrency,
-      trialEndsAt: shopSubscriptions.trialEndsAt,
-      currentPeriodEndsAt: shopSubscriptions.currentPeriodEndsAt,
-      currentPeriodStartsAt: shopSubscriptions.currentPeriodStartsAt,
-      cancellationEffectiveAt: shopSubscriptions.cancellationEffectiveAt,
-      revision: shopSubscriptions.revision,
-    }).from(shopSubscriptions).leftJoin(shopSubscriptionItems, and(
-      eq(shopSubscriptionItems.shop, shopSubscriptions.shop),
-      eq(shopSubscriptionItems.subscriptionId, shopSubscriptions.subscriptionId),
-    )).orderBy(shopSubscriptionItems.position);
+  /**
+   * Current projections for just these shops. D1 allows 100 bound parameters per
+   * statement, so the shop list is read in chunks of 90 — a handful of queries
+   * at most, never one per shop.
+   */
+  async listCurrentForShops(shopDomains: readonly string[]): Promise<CurrentSubscriptionProjection[]> {
+    const unique = [...new Set(shopDomains)];
+    const rows: CurrentSubscriptionProjection[] = [];
+    for (let from = 0; from < unique.length; from += SHOP_CHUNK) {
+      const chunk = unique.slice(from, from + SHOP_CHUNK);
+      rows.push(...await getDb().select({
+        shop: shopSubscriptions.shop,
+        status: shopSubscriptions.status,
+        billingInterval: shopSubscriptions.billingInterval,
+        planHandle: shopSubscriptions.planHandle,
+        priceAmount: shopSubscriptionItems.priceAmount,
+        priceCurrency: shopSubscriptionItems.priceCurrency,
+        trialEndsAt: shopSubscriptions.trialEndsAt,
+        currentPeriodEndsAt: shopSubscriptions.currentPeriodEndsAt,
+        currentPeriodStartsAt: shopSubscriptions.currentPeriodStartsAt,
+        cancellationEffectiveAt: shopSubscriptions.cancellationEffectiveAt,
+        revision: shopSubscriptions.revision,
+      }).from(shopSubscriptions).leftJoin(shopSubscriptionItems, and(
+        eq(shopSubscriptionItems.shop, shopSubscriptions.shop),
+        eq(shopSubscriptionItems.subscriptionId, shopSubscriptions.subscriptionId),
+      )).where(inArray(shopSubscriptions.shop, chunk)).orderBy(shopSubscriptionItems.position));
+    }
     return rows;
   }
 

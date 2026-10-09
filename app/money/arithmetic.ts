@@ -1,5 +1,5 @@
 import { err, ok, type Result } from "~/lib/result";
-import type { MinorUnits, Money, MoneyError } from "./types";
+import { mintMinorUnits, type Money, type MoneyError } from "./types";
 
 /**
  * Arithmetic on minor units — integers throughout, so nothing can drift.
@@ -23,7 +23,7 @@ export function add(a: Money, b: Money): Result<Money, MoneyError> {
   if (!sameCurrency(a, b)) return mismatch(a, b);
   const sum = a.amount + b.amount;
   if (!Number.isSafeInteger(sum)) return err("out_of_range", "sum is not exact");
-  return ok({ amount: sum as MinorUnits, currency: a.currency });
+  return ok({ amount: mintMinorUnits(sum), currency: a.currency });
 }
 
 export function subtract(a: Money, b: Money): Result<Money, MoneyError> {
@@ -32,7 +32,7 @@ export function subtract(a: Money, b: Money): Result<Money, MoneyError> {
   if (!Number.isSafeInteger(difference)) {
     return err("out_of_range", "difference is not exact");
   }
-  return ok({ amount: difference as MinorUnits, currency: a.currency });
+  return ok({ amount: mintMinorUnits(difference), currency: a.currency });
 }
 
 /** Sum a list. An empty list needs a currency, so it takes one. */
@@ -40,7 +40,7 @@ export function sum(
   items: readonly Money[],
   currency: Money["currency"],
 ): Result<Money, MoneyError> {
-  let total: Money = { amount: 0 as MinorUnits, currency };
+  let total: Money = { amount: mintMinorUnits(0), currency };
   for (const item of items) {
     const next = add(total, item);
     if (!next.ok) return next;
@@ -69,7 +69,7 @@ export function multiply(
   if (!Number.isSafeInteger(product)) {
     return err("out_of_range", "product is not exact");
   }
-  return ok({ amount: product as MinorUnits, currency: money.currency });
+  return ok({ amount: mintMinorUnits(product), currency: money.currency });
 }
 
 export type Rounding = "half_up" | "half_away_from_zero" | "down" | "up";
@@ -105,7 +105,7 @@ export function applyRate(
   if (!Number.isSafeInteger(rounded)) {
     return err("out_of_range", "result is not exact");
   }
-  return ok({ amount: rounded as MinorUnits, currency: money.currency });
+  return ok({ amount: mintMinorUnits(rounded), currency: money.currency });
 }
 
 function roundToInteger(value: number, rounding: Rounding): number {
@@ -122,7 +122,7 @@ function roundToInteger(value: number, rounding: Rounding): number {
 }
 
 export function negate(money: Money): Money {
-  return { amount: -money.amount as MinorUnits, currency: money.currency };
+  return { amount: mintMinorUnits(-money.amount), currency: money.currency };
 }
 
 export function isZero(money: Money): boolean {
@@ -194,7 +194,7 @@ export function allocate(
 
   return ok(
     shares.map((share) => ({
-      amount: (negative ? -share : share) as MinorUnits,
+      amount: mintMinorUnits(negative ? -share : share),
       currency: money.currency,
     })),
   );

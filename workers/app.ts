@@ -9,6 +9,9 @@ import { scheduledDependencies, webhookConsumer } from "../app/wiring.server";
 import { consumeWebhook } from "../app/services/webhook-consumer";
 import { handleWebhookQueueBatch } from "../app/services/webhook-queue";
 import { webhookLogLevel } from "../app/services/webhook-logging";
+import { handleNotificationBatch } from "../app/services/notification-queue";
+import { notificationConsumerDependencies } from "../app/wiring/notifications.server";
+import { queueKind } from "../app/lib/queue-names";
 
 /**
  * With `future.v8_middleware`, a loader/action's `context` is a
@@ -44,7 +47,19 @@ export default {
   },
 
   async queue(batch, env) {
+    const kind = queueKind(batch.queue);
+    if (kind === "unknown") {
+      // Real work addressed to a consumer we do not have. Acking would delete it
+      // silently; retrying keeps it until the queue's DLQ takes it.
+      console.error(JSON.stringify({ event: "queue.unknown", queue: batch.queue, messages: batch.messages.length }));
+      batch.retryAll({ delaySeconds: 60 });
+      return;
+    }
     await runWithRequestContext(env, async () => {
+      if (kind === "notification") {
+        await handleNotificationBatch(batch, notificationConsumerDependencies());
+        return;
+      }
       await handleWebhookQueueBatch(batch, {
         consume: async (work) => {
           // Queue attempts count completed retries; the consumer counts deliveries.

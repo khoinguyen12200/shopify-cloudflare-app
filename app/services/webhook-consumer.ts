@@ -1,5 +1,5 @@
 import type { QueuedWebhook } from "~/ports/webhook-queue";
-import { isWebhookTopic, transitionWebhookDelivery, WEBHOOK_PROCESSING_LEASE_MS, type WebhookTopic } from "~/domain/webhook-delivery-lifecycle";
+import { isWebhookTopic, topicRequiresShopRecord, transitionWebhookDelivery, WEBHOOK_PROCESSING_LEASE_MS, type WebhookTopic } from "~/domain/webhook-delivery-lifecycle";
 export type { QueuedWebhook } from "~/ports/webhook-queue";
 
 export interface ConsumerDelivery {
@@ -7,6 +7,8 @@ export interface ConsumerDelivery {
   readonly shop: string;
   readonly topic: string;
   readonly status: string;
+  /** Epoch ms at which Shopify triggered the webhook (`X-Shopify-Triggered-At`) — what ordering decisions use. */
+  readonly triggeredAt: number;
   readonly processingStartedAt?: number | null;
   readonly failureCode?: string | null;
 }
@@ -45,7 +47,10 @@ export async function consumeWebhook(
 ): Promise<WebhookConsumerResult> {
   const delivery = await dependencies.deliveries.get(work.shop, work.id);
   if (!delivery) return { outcome: "missing", topic: null };
-  if (await dependencies.isRedactedShop?.(work.shop)) return { outcome: "missing", topic: delivery.topic };
+  // Topics that exist to run when the shop is gone (the purge itself, the compliance answers) skip this guard.
+  if ((!isWebhookTopic(delivery.topic) || topicRequiresShopRecord(delivery.topic)) && await dependencies.isRedactedShop?.(work.shop)) {
+    return { outcome: "missing", topic: delivery.topic };
+  }
   if (delivery.status === "processed") return { outcome: "duplicate", topic: delivery.topic };
   if (delivery.status === "dead_letter" && !isWebhookTopic(delivery.topic)) {
     return { outcome: "unsupported", topic: delivery.topic };

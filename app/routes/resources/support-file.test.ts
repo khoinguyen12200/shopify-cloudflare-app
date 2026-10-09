@@ -32,7 +32,7 @@ async function storedAttachment(): Promise<string> {
 
   const id = crypto.randomUUID();
   await env.UPLOADS.put(`support/${SHOP}/shot.png`, "pretend-png-bytes");
-  await repo.attach({
+  await repo.attachMany([{
     shop: SHOP,
     messageId: created.messageId,
     id,
@@ -41,7 +41,7 @@ async function storedAttachment(): Promise<string> {
     contentType: "image/png",
     sizeBytes: 17,
     at: 1_000,
-  });
+  }]);
   return id;
 }
 
@@ -91,7 +91,7 @@ describe("streaming a support attachment", () => {
       });
       const id = crypto.randomUUID();
       await env.UPLOADS.put(`support/${SHOP}/orders.csv`, "order_id\n1");
-      await repo.attach({ shop: SHOP, messageId: created.messageId, id, r2Key: `support/${SHOP}/orders.csv`, filename: "orders.csv", contentType: "text/csv", sizeBytes: 10, at: 1_000 });
+      await repo.attachMany([{ shop: SHOP, messageId: created.messageId, id, r2Key: `support/${SHOP}/orders.csv`, filename: "orders.csv", contentType: "text/csv", sizeBytes: 10, at: 1_000 }]);
       const token = await signAttachmentToken({ secret: SECRET, attachmentId: id, expiresAt: Date.now() + 60_000 });
 
       const response = await get(id, token);

@@ -17,6 +17,13 @@
 # first request, nowhere near the cause.
 # SHOPIFY_API_SECRET=
 
+# Optional, ONLY while rotating the app's client secret: the PREVIOUS secret. Shopify says the webhook HMAC can take up
+# to an hour to start using a new secret, so webhooks are accepted if signed with either this or SHOPIFY_API_SECRET.
+# Not declared in wrangler.jsonc (wrangler has no optional secrets). In production:
+#   wrangler secret put SHOPIFY_API_SECRET_PREVIOUS --env production
+# and delete it once the hour has passed: a revoked secret that stays accepted lets anyone who holds it forge webhooks.
+# SHOPIFY_API_SECRET_PREVIOUS=
+
 # Optional: custom dev-store domain.
 # SHOP_CUSTOM_DOMAIN=
 

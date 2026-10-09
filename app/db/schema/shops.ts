@@ -61,6 +61,8 @@ export const shops = sqliteTable(
     index("shops_uninstalled_at_idx").on(table.uninstalledAt),
     index("shops_relationship_status_idx").on(table.relationshipStatus),
     index("shops_is_dev_store_idx").on(table.isDevStore),
+    // The staff console lists shops newest-install-first with a LIMIT.
+    index("shops_installed_at_idx").on(table.installedAt),
   ],
 );
 

@@ -35,3 +35,8 @@ export const CATEGORY_LABEL_EN: Record<SupportCategory, string> = {
   feature_request: "Feature request",
   billing: "Billing",
 };
+
+/** Narrow an untrusted string to a category; `undefined` when it is not one we know. */
+export function toSupportCategory(value: string): SupportCategory | undefined {
+  return SUPPORT_CATEGORIES.find((category) => category === value);
+}

@@ -20,7 +20,7 @@ describe("internal password reset rate limiting", () => {
       productionLike: false,
       requestReset: async () => {
         issued += 1;
-        return { requested: true, emailSent: false };
+        return { requested: true, queued: false };
       },
     });
 

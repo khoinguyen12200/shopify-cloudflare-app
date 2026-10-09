@@ -9,6 +9,7 @@ export type {
 } from "./types";
 export { toCurrency, currencyDecimals, minorUnitsPerMajor } from "./currency";
 export {
+  fromApiNumber,
   fromDecimalString,
   fromMinorUnits,
   fromMoneyV2,

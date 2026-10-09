@@ -20,7 +20,7 @@ export interface EffectivePlanResult {
 
 export function isPromoGrantActive(
   grant: ActivePromoGrant | null | undefined,
-  now: number = Date.now(),
+  now: number,
 ): grant is ActivePromoGrant {
   if (!grant) return false;
   return grant.revokedAt === null && now >= grant.startsAt && now < grant.expiresAt;
@@ -31,7 +31,7 @@ export function resolveEffectivePlan(
   organicStatus: SubscriptionStatus | null | undefined,
   promoGrant: ActivePromoGrant | null | undefined,
   planList: readonly Plan[],
-  now: number = Date.now(),
+  now: number,
 ): EffectivePlanResult {
   const isOrganicActive =
     organicStatus === "ACTIVE" || organicStatus === "CANCELLATION_SCHEDULED";
@@ -46,7 +46,7 @@ export function resolveEffectivePlan(
     ? planList.find((p) => p.handle === validPromo.planHandle) ?? null
     : null;
 
-  if (!matchedPromo) {
+  if (!validPromo || !matchedPromo) {
     return {
       planHandle: matchedOrganic.handle,
       source: "organic",
@@ -59,8 +59,8 @@ export function resolveEffectivePlan(
 
   const promoInfo = {
     planHandle: matchedPromo.handle,
-    expiresAt: validPromo!.expiresAt,
-    remainingDays: Math.max(0, Math.ceil((validPromo!.expiresAt - now) / 86_400_000)),
+    expiresAt: validPromo.expiresAt,
+    remainingDays: Math.max(0, Math.ceil((validPromo.expiresAt - now) / 86_400_000)),
   };
 
   if (organicRank >= promoRank) {

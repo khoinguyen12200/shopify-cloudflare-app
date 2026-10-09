@@ -21,6 +21,8 @@ export async function handleForgotPasswordAction(request: Request, deps: ForgotP
   if (!email) return data({ error: "emailRequired" as const }, { status: 400 });
 
   const result = await deps.requestReset(email, new URL(request.url).origin);
-  const showLink = !result.emailSent && !deps.productionLike;
+  // The email is only QUEUED here, so a development deployment (which may have
+  // no mailer at all) always gets the link on screen; production never does.
+  const showLink = !deps.productionLike;
   return data({ sent: true as const, devToken: showLink ? result.token : undefined });
 }

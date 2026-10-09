@@ -1,6 +1,31 @@
 import { err, ok, type Result } from "~/lib/result";
 
-export type WebhookTopic = "app/uninstalled" | "app/scopes_update";
+export type WebhookTopic =
+  | "app/uninstalled"
+  | "app/scopes_update"
+  | "customers/data_request"
+  | "customers/redact"
+  | "shop/redact";
+
+/**
+ * Per-topic facts the consumer needs before it dispatches. Keyed by the union so adding a topic without
+ * stating them fails the build.
+ *
+ * `requiresShopRecord: false` marks a topic whose whole purpose is to run when the `shops` row is missing or about to
+ * go: `shop/redact` purges the shop, so "the shop row is gone" must not make it a no-op (the delivery row is the
+ * proof that Shopify asked), and the compliance topics are owed an answer even for a shop this app never recorded.
+ */
+const WEBHOOK_TOPICS: Readonly<Record<WebhookTopic, Readonly<{ requiresShopRecord: boolean }>>> = {
+  "app/uninstalled": { requiresShopRecord: true },
+  "app/scopes_update": { requiresShopRecord: true },
+  "customers/data_request": { requiresShopRecord: false },
+  "customers/redact": { requiresShopRecord: false },
+  "shop/redact": { requiresShopRecord: false },
+};
+
+export function topicRequiresShopRecord(topic: WebhookTopic): boolean {
+  return WEBHOOK_TOPICS[topic].requiresShopRecord;
+}
 
 export const WEBHOOK_PROCESSING_LEASE_MS = 5 * 60 * 1000;
 
@@ -51,5 +76,5 @@ function isStatus(value: string): value is WebhookDeliveryStatus {
 }
 
 export function isWebhookTopic(value: string): value is WebhookTopic {
-  return value === "app/uninstalled" || value === "app/scopes_update";
+  return Object.hasOwn(WEBHOOK_TOPICS, value);
 }

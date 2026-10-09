@@ -35,8 +35,8 @@ import {
   Store,
 } from "lucide-react";
 import { requireAdminUser } from "~/services/admin-auth.server";
-import { adminUsers, shops, support } from "~/wiring.server";
-import { CATEGORY_LABEL_EN, SUPPORT_CATEGORIES, type SupportCategory } from "~/support/categories";
+import { adminUsers, shopMetrics, support, adminSessionUsers } from "~/wiring.server";
+import { CATEGORY_LABEL_EN, SUPPORT_CATEGORIES, toSupportCategory, type SupportCategory } from "~/support/categories";
 import { BODY_MAX, SUBJECT_MAX } from "~/schemas/support";
 import { usePendingUploads } from "~/routes/app/support/use-pending-uploads";
 import { InternalAttachmentPicker } from "~/components/support/InternalAttachmentPicker";
@@ -53,9 +53,9 @@ export interface ShopContactInfo {
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const actor = await requireAdminUser(request, { users: adminUsers() });
+  const actor = await requireAdminUser(request, { users: adminSessionUsers() });
   const [allShops, knownContacts] = await Promise.all([
-    shops().listAll(),
+    shopMetrics().contacts(),
     support().listKnownContacts(),
   ]);
 
@@ -85,9 +85,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const ccRaw = String(form.get("ccEmails") ?? "").trim();
   const ccEmails = ccRaw ? ccRaw.split(",").map((e) => e.trim()).filter(Boolean) : [];
   const categoryRaw = String(form.get("category") ?? "question");
-  const category = (SUPPORT_CATEGORIES.includes(categoryRaw as SupportCategory)
-    ? categoryRaw
-    : "question") as SupportCategory;
+  const category = toSupportCategory(categoryRaw) ?? "question";
   const subject = String(form.get("subject") ?? "").trim();
   const body = String(form.get("body") ?? "").trim();
   const uploadIds = String(form.get("uploadIds") ?? "")
@@ -257,7 +255,7 @@ export default function NewInternalSupportTicket() {
                     <Select
                       name="category"
                       value={category}
-                      onValueChange={(val) => setCategory(val as SupportCategory)}
+                      onValueChange={(val) => setCategory(toSupportCategory(val) ?? "question")}
                     >
                       <SelectTrigger id="category">
                         <SelectValue placeholder="Category" />

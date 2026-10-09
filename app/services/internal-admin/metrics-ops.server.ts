@@ -1,13 +1,13 @@
 import {
   aiRepository,
   operationalHealth,
-  shops,
-  shopSubscriptions,
+  shopMetrics,
   supportService,
   webhookDeliveryRepository,
 } from "~/wiring.server";
-import { computeBillingStats } from "~/billing/dashboard-stats";
+import { computeBillingStatsFromGroups } from "~/billing/dashboard-stats";
 import { planForShopifyHandle } from "~/billing/plans";
+import { assembleTrend, trendWindows } from "~/domain/merchant-trend";
 import { formatMoney } from "~/money";
 
 export interface RevenueAndPlansResult {
@@ -30,59 +30,66 @@ export interface RevenueAndPlansResult {
   };
 }
 
+/** The dashboard's billing stats and merchant trend, both computed by grouped SQL. */
+export async function loadDashboardOverview({ trendMonths, now }: { trendMonths: number; now: number }) {
+  const metrics = shopMetrics();
+  const windows = trendWindows(trendMonths, now);
+  const [shopGroups, revenueGroups, counts] = await Promise.all([
+    metrics.billingShopGroups(),
+    metrics.billingRevenueGroups(),
+    metrics.installTrend(windows),
+  ]);
+  return {
+    stats: computeBillingStatsFromGroups(shopGroups, revenueGroups),
+    trend: assembleTrend(windows, counts),
+  };
+}
+
+/** Display name for a stored plan handle; no subscription means the free plan. */
+function planNameFor(planHandle: string | null): string {
+  return planForShopifyHandle(planHandle)?.name ?? (planHandle ? planHandle : "Free");
+}
+
 /** Get real MRR, plan distribution, and dev store metrics. */
 export async function getRevenueAndPlans({
   excludeDev = true,
 }: {
   excludeDev?: boolean;
 } = {}): Promise<RevenueAndPlansResult> {
-  const [allShops, currentSubscriptions] = await Promise.all([
-    shops().listAll(),
-    shopSubscriptions().listCurrent(),
+  const metrics = shopMetrics();
+  const [shopGroups, revenueGroups, breakdown] = await Promise.all([
+    metrics.billingShopGroups(),
+    metrics.billingRevenueGroups(!excludeDev),
+    metrics.planBreakdown(),
   ]);
 
-  const currentByShop = new Map(currentSubscriptions.map((sub) => [sub.shop, sub]));
+  const billingStats = computeBillingStatsFromGroups(
+    excludeDev ? shopGroups : shopGroups.map((group) => ({ ...group, isDevStore: false })),
+    revenueGroups,
+  );
 
-  // Projections for computeBillingStats
-  const projections = allShops
-    .filter((s) => s.uninstalledAt === null)
-    .map((shop) => {
-      const sub = currentByShop.get(shop.shop);
-      return {
-        shop: shop.shop,
-        relationshipStatus: shop.relationshipStatus,
-        subscriptionStatus: sub?.status ?? null,
-        billingInterval: sub?.billingInterval ?? null,
-        priceAmount: sub?.priceAmount ?? null,
-        priceCurrency: sub?.priceCurrency ?? null,
-        isDevStore: excludeDev ? shop.isDevStore : false,
-      };
-    });
-
-  const billingStats = computeBillingStats(projections);
-
-  // Group by plan
   const planCounts = new Map<string, { planName: string; real: number; dev: number }>();
-  for (const shop of allShops.filter((s) => s.uninstalledAt === null)) {
-    const sub = currentByShop.get(shop.shop);
-    const planHandle = sub?.planHandle ?? "free";
-    const planName = planForShopifyHandle(sub?.planHandle)?.name ?? (sub?.planHandle ? sub.planHandle : "Free");
-
-    const entry = planCounts.get(planHandle) ?? { planName, real: 0, dev: 0 };
-    if (shop.isDevStore) {
-      entry.dev += 1;
+  let devStoresTotal = 0;
+  for (const row of breakdown) {
+    const planHandle = row.planHandle ?? "free";
+    const entry = planCounts.get(planHandle) ?? { planName: planNameFor(row.planHandle), real: 0, dev: 0 };
+    if (row.isDevStore) {
+      entry.dev += row.shops;
+      devStoresTotal += row.shops;
     } else {
-      entry.real += 1;
+      entry.real += row.shops;
     }
     planCounts.set(planHandle, entry);
   }
 
-  const plans = Array.from(planCounts.entries()).map(([planHandle, data]) => ({
-    planHandle,
-    planName: data.planName,
-    realStores: data.real,
-    devStores: data.dev,
-  }));
+  const plans = Array.from(planCounts.entries())
+    .map(([planHandle, data]) => ({
+      planHandle,
+      planName: data.planName,
+      realStores: data.real,
+      devStores: data.dev,
+    }))
+    .sort((a, b) => a.planHandle.localeCompare(b.planHandle));
 
   const mrr = billingStats.mrrByCurrency.map((m) => ({
     amount: m.amount,
@@ -97,7 +104,7 @@ export async function getRevenueAndPlans({
       totalRealStores: billingStats.totalShops,
       paidRealStores: billingStats.paidShops,
       freeRealStores: billingStats.freeShops,
-      devStoresTotal: allShops.filter((s) => s.isDevStore && s.uninstalledAt === null).length,
+      devStoresTotal,
     },
   };
 }
@@ -113,44 +120,30 @@ export async function getChurnAndRetention({
   now?: number;
 } = {}) {
   const windowDays = days ?? periodDays;
-  const allShops = await shops().listAll();
   const cutoff = now - windowDays * 24 * 60 * 60 * 1000;
-
-  const totalStores = allShops.length;
-  const activeStores = allShops.filter((s) => s.uninstalledAt === null);
-  const uninstalledStores = allShops.filter((s) => s.uninstalledAt !== null);
-
-  const installedInPeriod = allShops.filter((s) => s.installedAt >= cutoff);
-  const uninstalledInPeriod = uninstalledStores.filter(
-    (s) => s.uninstalledAt !== null && s.uninstalledAt >= cutoff,
-  );
-
-  const realActive = activeStores.filter((s) => !s.isDevStore);
-  const realUninstalled = uninstalledStores.filter((s) => !s.isDevStore);
-  const realInstalledInPeriod = installedInPeriod.filter((s) => !s.isDevStore);
-  const realUninstalledInPeriod = uninstalledInPeriod.filter((s) => !s.isDevStore);
+  const counts = await shopMetrics().churnCounts(cutoff);
 
   const churnRate =
-    realActive.length + realUninstalledInPeriod.length > 0
-      ? (realUninstalledInPeriod.length / (realActive.length + realUninstalledInPeriod.length)) * 100
+    counts.realActive + counts.realUninstalledInPeriod > 0
+      ? (counts.realUninstalledInPeriod / (counts.realActive + counts.realUninstalledInPeriod)) * 100
       : 0;
 
   return {
     periodDays: days,
     overview: {
-      totalAllTime: totalStores,
-      currentlyActive: activeStores.length,
-      currentlyUninstalled: uninstalledStores.length,
-      realActiveStores: realActive.length,
-      realUninstalledStores: realUninstalled.length,
-      devStoresActive: activeStores.filter((s) => s.isDevStore).length,
+      totalAllTime: counts.total,
+      currentlyActive: counts.active,
+      currentlyUninstalled: counts.total - counts.active,
+      realActiveStores: counts.realActive,
+      realUninstalledStores: counts.realUninstalled,
+      devStoresActive: counts.devActive,
     },
     activityInPeriod: {
-      installsTotal: installedInPeriod.length,
-      installsReal: realInstalledInPeriod.length,
-      uninstallsTotal: uninstalledInPeriod.length,
-      uninstallsReal: realUninstalledInPeriod.length,
-      netStoreGrowth: realInstalledInPeriod.length - realUninstalledInPeriod.length,
+      installsTotal: counts.installedInPeriod,
+      installsReal: counts.realInstalledInPeriod,
+      uninstallsTotal: counts.uninstalledInPeriod,
+      uninstallsReal: counts.realUninstalledInPeriod,
+      netStoreGrowth: counts.realInstalledInPeriod - counts.realUninstalledInPeriod,
       churnRatePercent: Math.round(churnRate * 10) / 10,
     },
   };
@@ -158,22 +151,20 @@ export async function getChurnAndRetention({
 
 /** System health vitals. */
 export async function getSystemHealth() {
-  const [health, allShops, openTickets] = await Promise.all([
+  const [health, active, openTickets] = await Promise.all([
     operationalHealth().read(),
-    shops().listAll(),
+    shopMetrics().activeCounts(),
     supportService().listOpenForStaff(),
   ]);
-
-  const activeStores = allShops.filter((s) => s.uninstalledAt === null);
 
   return {
     failedWebhooks: health.failedWebhooks,
     deadLetterWebhooks: health.deadLetterWebhooks,
     lifecycleEvents: health.lifecycleEvents,
     subscriptionEvents: health.subscriptionEvents,
-    totalActiveStores: activeStores.length,
-    realActiveStores: activeStores.filter((s) => !s.isDevStore).length,
-    devStores: activeStores.filter((s) => s.isDevStore).length,
+    totalActiveStores: active.real + active.dev,
+    realActiveStores: active.real,
+    devStores: active.dev,
     openTicketsCount: openTickets.length,
   };
 }

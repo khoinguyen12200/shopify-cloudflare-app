@@ -44,6 +44,7 @@ export const action = async ({ request }: ActionFunctionArgs) => handleForgotPas
     users: adminUsers(),
     tokens: passwordResetTokens(),
     notifier: passwordResetNotifier(),
+    newId: () => crypto.randomUUID(),
   }),
 });
 

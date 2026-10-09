@@ -42,7 +42,7 @@ export const SCOPE_DESCRIPTIONS: Record<McpScope, { label: string; description: 
 
 /** Validate if a string is a recognized McpScope. */
 export function isMcpScope(value: string): value is McpScope {
-  return (MCP_SCOPES as readonly string[]).includes(value);
+  return MCP_SCOPES.some((scope) => scope === value);
 }
 
 /** Parse and deduplicate raw scopes from a space-separated string or array. */

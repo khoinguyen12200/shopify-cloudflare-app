@@ -28,7 +28,7 @@ import { MIN_PASSWORD_LENGTH } from "~/lib/password-policy";
 import { formatDateTime } from "~/i18n/format";
 import { UTC } from "~/i18n/time-zone";
 import type { Locale } from "~/i18n/config";
-import { adminUsers } from "~/wiring.server";
+import { adminUsers, adminSessionUsers } from "~/wiring.server";
 
 const LOCALE: Locale = "en";
 
@@ -47,8 +47,7 @@ const PROFILE_SUCCESS: Record<SuccessKey, string> = {
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const users = adminUsers();
-  return { user: await requireAdminUser(request, { users }) };
+  return { user: await requireAdminUser(request, { users: adminSessionUsers() }) };
 };
 
 type SuccessKey = "detailsSaved" | "passwordChanged";

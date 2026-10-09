@@ -1,4 +1,4 @@
-import { applyRate, fromMinorUnits, sum, toCurrency, type Money } from "~/money";
+import { applyRate, fromMinorUnits, multiply, sum, toCurrency, type Money } from "~/money";
 import type { Shop } from "~/db/schema";
 import type { SubscriptionStatus } from "~/domain/subscription-lifecycle";
 import { isOperationalRelationshipStatus } from "~/domain/shop-lifecycle";
@@ -33,7 +33,11 @@ export interface BillingStats {
 const PAID_STATUSES: ReadonlySet<SubscriptionStatus> = new Set(["ACTIVE", "CANCELLATION_SCHEDULED"]);
 
 /** An annual charge's monthly equivalent, for a like-for-like MRR figure. */
-function monthlyEquivalent(projection: BillingProjection): Money | null {
+function monthlyEquivalent(projection: {
+  readonly billingInterval: string | null;
+  readonly priceAmount: number | null;
+  readonly priceCurrency: string | null;
+}): Money | null {
   if (projection.priceAmount === null || projection.priceCurrency === null) return null;
   const currency = toCurrency(projection.priceCurrency);
   if (!currency.ok) return null;
@@ -47,57 +51,80 @@ function monthlyEquivalent(projection: BillingProjection): Money | null {
 }
 
 /**
- * Dashboard numbers derived from relationship and current subscription projections.
+ * Shops that share every field that matters to the stats, with how many there
+ * are. This is the shape a SQL `GROUP BY` returns, so the dashboard never loads
+ * a row per shop.
  */
-export function computeBillingStats(
-  projections: readonly BillingProjection[],
+export interface ShopBillingGroup {
+  readonly relationshipStatus: Shop["relationshipStatus"];
+  readonly subscriptionStatus: SubscriptionStatus | null;
+  readonly planHandle: string | null;
+  readonly isDevStore: boolean;
+  /** How many shops fall in this group. */
+  readonly shops: number;
+}
+
+/** Current pricing items that share a price, with how many there are. */
+export interface RevenueBillingGroup {
+  readonly relationshipStatus: Shop["relationshipStatus"];
+  readonly subscriptionStatus: SubscriptionStatus | null;
+  readonly billingInterval: string | null;
+  readonly priceAmount: number | null;
+  readonly priceCurrency: string | null;
+  /** How many pricing items fall in this group. */
+  readonly items: number;
+}
+
+/**
+ * Dashboard numbers from grouped counts: one group per distinct shop shape, and
+ * one per distinct price. Dev stores are counted but never reach revenue, so
+ * `revenueGroups` should already exclude them.
+ */
+export function computeBillingStatsFromGroups(
+  shopGroups: readonly ShopBillingGroup[],
+  revenueGroups: readonly RevenueBillingGroup[],
   knownPlans: readonly Plan[] = PLAN_LIST,
 ): BillingStats {
-  const monthlyByCurrency = new Map<string, Money[]>();
-  const paidShops = new Set<string>();
-  const realShops = new Set<string>();
-  const devShops = new Set<string>();
-  const shopPlan = new Map<string, string>();
+  const defaultPaid = knownPlans.find((p) => p.priceMonthly.amount > 0)?.handle ?? "paid";
+  const freeHandle = knownPlans.find((p) => p.priceMonthly.amount === 0)?.handle ?? "free";
 
   const shopsByPlan: Record<string, number> = {};
   for (const plan of knownPlans) {
     shopsByPlan[plan.handle] = 0;
   }
 
-  for (const projection of projections) {
-    if (projection.isDevStore) {
-      devShops.add(projection.shop);
+  let realShops = 0;
+  let paidShops = 0;
+  let devShops = 0;
+
+  for (const group of shopGroups) {
+    if (group.isDevStore) {
+      devShops += group.shops;
       continue;
     }
-    realShops.add(projection.shop);
+    realShops += group.shops;
 
-    if (!isOperationalRelationshipStatus(projection.relationshipStatus)) continue;
-    if (!projection.subscriptionStatus || !PAID_STATUSES.has(projection.subscriptionStatus)) continue;
-    paidShops.add(projection.shop);
-
-    if (projection.planHandle) {
-      const match = knownPlans.find((p) => p.handle === projection.planHandle);
-      shopPlan.set(projection.shop, match ? match.handle : projection.planHandle);
-    } else if (!shopPlan.has(projection.shop)) {
-      const defaultPaid = knownPlans.find((p) => p.priceMonthly.amount > 0)?.handle ?? "paid";
-      shopPlan.set(projection.shop, defaultPaid);
-    }
-
-    const monthly = monthlyEquivalent(projection);
-    if (!monthly) continue; // Malformed arithmetic degrades this one figure, not the page.
-    const bucket = monthlyByCurrency.get(monthly.currency) ?? [];
-    bucket.push(monthly);
-    monthlyByCurrency.set(monthly.currency, bucket);
+    const isPaid =
+      isOperationalRelationshipStatus(group.relationshipStatus) &&
+      group.subscriptionStatus !== null &&
+      PAID_STATUSES.has(group.subscriptionStatus);
+    const plan = isPaid ? (group.planHandle ?? defaultPaid) : freeHandle;
+    if (isPaid) paidShops += group.shops;
+    shopsByPlan[plan] = (shopsByPlan[plan] ?? 0) + group.shops;
   }
 
-  const freeHandle = knownPlans.find((p) => p.priceMonthly.amount === 0)?.handle ?? "free";
-  for (const shop of realShops) {
-    if (paidShops.has(shop)) {
-      const plan = shopPlan.get(shop) ?? (knownPlans.find((p) => p.priceMonthly.amount > 0)?.handle ?? "paid");
-      shopsByPlan[plan] = (shopsByPlan[plan] ?? 0) + 1;
-    } else {
-      shopsByPlan[freeHandle] = (shopsByPlan[freeHandle] ?? 0) + 1;
-    }
+  const monthlyByCurrency = new Map<string, Money[]>();
+  for (const group of revenueGroups) {
+    if (!isOperationalRelationshipStatus(group.relationshipStatus)) continue;
+    if (!group.subscriptionStatus || !PAID_STATUSES.has(group.subscriptionStatus)) continue;
+
+    const monthly = monthlyEquivalent(group);
+    if (!monthly) continue; // Malformed arithmetic degrades this one figure, not the page.
+    const line = multiply(monthly, group.items);
+    if (!line.ok) continue;
+    const bucket = monthlyByCurrency.get(line.value.currency) ?? [];
+    bucket.push(line.value);
+    monthlyByCurrency.set(line.value.currency, bucket);
   }
 
   const mrrByCurrency: Money[] = [];
@@ -109,11 +136,44 @@ export function computeBillingStats(
   }
 
   return {
-    totalShops: realShops.size,
-    paidShops: paidShops.size,
-    freeShops: realShops.size - paidShops.size,
-    devShops: devShops.size,
+    totalShops: realShops,
+    paidShops,
+    freeShops: realShops - paidShops,
+    devShops,
     mrrByCurrency,
     shopsByPlan,
   };
+}
+
+/**
+ * The same numbers from one projection per shop-and-pricing-item. Kept for
+ * callers (and tests) that hold per-shop rows; it only reshapes them into
+ * groups, so there is exactly one derivation.
+ */
+export function computeBillingStats(
+  projections: readonly BillingProjection[],
+  knownPlans: readonly Plan[] = PLAN_LIST,
+): BillingStats {
+  const firstByShop = new Map<string, BillingProjection>();
+  for (const projection of projections) {
+    if (!firstByShop.has(projection.shop)) firstByShop.set(projection.shop, projection);
+  }
+  const shopGroups: ShopBillingGroup[] = [...firstByShop.values()].map((projection) => ({
+    relationshipStatus: projection.relationshipStatus,
+    subscriptionStatus: projection.subscriptionStatus,
+    planHandle: projection.planHandle ?? null,
+    isDevStore: projection.isDevStore ?? false,
+    shops: 1,
+  }));
+  const revenueGroups: RevenueBillingGroup[] = projections
+    .filter((projection) => !projection.isDevStore)
+    .map((projection) => ({
+      relationshipStatus: projection.relationshipStatus,
+      subscriptionStatus: projection.subscriptionStatus,
+      billingInterval: projection.billingInterval,
+      priceAmount: projection.priceAmount,
+      priceCurrency: projection.priceCurrency,
+      items: 1,
+    }));
+  return computeBillingStatsFromGroups(shopGroups, revenueGroups, knownPlans);
 }

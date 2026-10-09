@@ -25,6 +25,26 @@ export function normalizeEmail(email: string): string {
  * not a merchant's records. See the schema comment.
  */
 export class AdminUserRepo {
+  /**
+   * `cache` is told about every write that changes what a session lookup would
+   * return (status, role, name, deletion) so the advisory KV copy is dropped at
+   * the write site. Optional: models stay usable with no KV, e.g. in tests.
+   */
+  constructor(private readonly cache?: { invalidate(id: string): Promise<void> }) {}
+
+  private async invalidate(id: string): Promise<void> {
+    try {
+      await this.cache?.invalidate(id);
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          event: "admin_session_cache.invalidation_failed",
+          error: error instanceof Error ? error.message : "unknown",
+        }),
+      );
+    }
+  }
+
   /** Includes the hash — for the login path only. */
   async findByEmailWithHash(email: string): Promise<AdminUser | undefined> {
     const rows = await getDb()
@@ -97,6 +117,7 @@ export class AdminUserRepo {
       .update(adminUsers)
       .set({ name: input.name.trim(), updatedAt: input.now })
       .where(eq(adminUsers.id, id));
+    await this.invalidate(id);
   }
 
   async updatePassword(
@@ -126,6 +147,7 @@ export class AdminUserRepo {
       .update(adminUsers)
       .set({ status, updatedAt: now })
       .where(eq(adminUsers.id, id));
+    await this.invalidate(id);
   }
 
   /**
@@ -155,10 +177,12 @@ export class AdminUserRepo {
       .update(adminUsers)
       .set({ role, updatedAt: now })
       .where(eq(adminUsers.id, id));
+    await this.invalidate(id);
   }
 
   async remove(id: string): Promise<void> {
     await getDb().delete(adminUsers).where(eq(adminUsers.id, id));
+    await this.invalidate(id);
   }
 
   async countAll(): Promise<number> {

@@ -19,7 +19,7 @@ import {
 } from "ngk-dashboard";
 import { Store } from "lucide-react";
 import { requireAdminUser } from "~/services/admin-auth.server";
-import { adminUsers } from "~/wiring.server";
+import { adminSessionUsers } from "~/wiring.server";
 import { formatDate } from "~/i18n/format";
 import { UTC } from "~/i18n/time-zone";
 import type { Locale } from "~/i18n/config";
@@ -29,7 +29,7 @@ import { listShopsDirectory } from "~/services/internal-admin/ops.server";
 const LOCALE: Locale = "en";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await requireAdminUser(request, { users: adminUsers() });
+  await requireAdminUser(request, { users: adminSessionUsers() });
   const directory = await listShopsDirectory({ limit: 1_000 });
 
   return {

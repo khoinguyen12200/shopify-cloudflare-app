@@ -23,12 +23,24 @@
   // inbox row and Queue handoff succeed. The DLQ preserves exhausted work for
   // operator inspection instead of silently losing lifecycle changes.
   "queues": {
-    "producers": [{ "binding": "WEBHOOK_QUEUE", "queue": "shopify-webhooks" }],
-    "consumers": [{
-      "queue": "shopify-webhooks",
-      "max_retries": 8,
-      "dead_letter_queue": "shopify-webhooks-dlq"
-    }]
+    "producers": [
+      { "binding": "WEBHOOK_QUEUE", "queue": "shopify-webhooks" },
+      // Email is enqueued, never sent inside the request: the request returns
+      // fast and a transient provider failure retries instead of being lost.
+      { "binding": "NOTIFICATION_QUEUE", "queue": "notifications" }
+    ],
+    "consumers": [
+      {
+        "queue": "shopify-webhooks",
+        "max_retries": 8,
+        "dead_letter_queue": "shopify-webhooks-dlq"
+      },
+      {
+        "queue": "notifications",
+        "max_retries": 8,
+        "dead_letter_queue": "notifications-dlq"
+      }
+    ]
   },
 
   // ─────────────────────────── LOCAL DEV + TESTS ───────────────────────────
@@ -157,12 +169,22 @@
     "production": {
       "observability": { "enabled": true },
       "queues": {
-        "producers": [{ "binding": "WEBHOOK_QUEUE", "queue": "shopify-webhooks-prod" }],
-        "consumers": [{
-          "queue": "shopify-webhooks-prod",
-          "max_retries": 8,
-          "dead_letter_queue": "shopify-webhooks-dlq-prod"
-        }]
+        "producers": [
+          { "binding": "WEBHOOK_QUEUE", "queue": "shopify-webhooks-prod" },
+          { "binding": "NOTIFICATION_QUEUE", "queue": "notifications-prod" }
+        ],
+        "consumers": [
+          {
+            "queue": "shopify-webhooks-prod",
+            "max_retries": 8,
+            "dead_letter_queue": "shopify-webhooks-dlq-prod"
+          },
+          {
+            "queue": "notifications-prod",
+            "max_retries": 8,
+            "dead_letter_queue": "notifications-dlq-prod"
+          }
+        ]
       },
       "kv_namespaces": [
         // Replace with the real id: `wrangler kv namespace create SESSION`

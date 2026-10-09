@@ -1,4 +1,4 @@
-import { shopifyEvents } from "~/wiring.server";
+import { shopifyEvents, adminSessionUsers } from "~/wiring.server";
 import { useLoaderData } from "react-router";
 import type { LoaderFunctionArgs, MetaFunction } from "react-router";
 
@@ -20,7 +20,6 @@ import {
 } from "ngk-dashboard";
 import { Receipt } from "lucide-react";
 import { requireAdminUser } from "~/services/admin-auth.server";
-import { adminUsers } from "~/wiring.server";
 import { planForShopifyHandle } from "~/billing/plans";
 import { formatDateTime } from "~/i18n/format";
 import { UTC } from "~/i18n/time-zone";
@@ -34,7 +33,7 @@ const LOCALE: Locale = "en";
 const RECENT_LIMIT = 200;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await requireAdminUser(request, { users: adminUsers() });
+  await requireAdminUser(request, { users: adminSessionUsers() });
   const events = await shopifyEvents().listRecentSubscriptionEvents(RECENT_LIMIT);
   return { events };
 };

@@ -1,5 +1,6 @@
 import {
   shops,
+  shopMetrics,
   shopSubscriptions,
   supportService,
   webhookScopeObservations,
@@ -9,6 +10,24 @@ import {
 import { PLAN_LIST, planForShopifyHandle } from "~/billing/plans";
 import { statusOf } from "~/support/status";
 import { nanoid } from "nanoid";
+
+/** Display name for a stored plan handle; no subscription means the free plan. */
+function planNameFor(planHandle: string | null): string {
+  return planForShopifyHandle(planHandle)?.name ?? (planHandle ? planHandle : "Free");
+}
+
+/**
+ * Lower-cased handles a `plan` filter can mean: the text itself (an unknown
+ * handle is its own display name), plus every known plan whose handle or name
+ * equals it. `free` also matches shops with no subscription — see the repo.
+ */
+function planHandleCandidates(plan: string): string[] {
+  const wanted = plan.toLowerCase();
+  const known = PLAN_LIST
+    .filter((p) => p.handle.toLowerCase() === wanted || p.name.toLowerCase() === wanted)
+    .map((p) => p.handle.toLowerCase());
+  return [...new Set([wanted, ...known])];
+}
 
 /** Newly installed stores in the last N hours. */
 export async function listNewStores({
@@ -21,38 +40,23 @@ export async function listNewStores({
   now?: number;
 } = {}) {
   const cutoff = now - sinceHours * 60 * 60 * 1000;
-  const [allShops, subscriptions] = await Promise.all([
-    shops().listAll(),
-    shopSubscriptions().listCurrent(),
-  ]);
+  const rows = await shopMetrics().installedSince(cutoff, type);
 
-  const subByShop = new Map(subscriptions.map((s) => [s.shop, s]));
-
-  return allShops
-    .filter((s) => s.installedAt >= cutoff)
-    .filter((s) => {
-      if (type === "real") return !s.isDevStore;
-      if (type === "dev") return s.isDevStore;
-      return true;
-    })
-    .map((shop) => {
-      const sub = subByShop.get(shop.shop);
-      return {
-        shop: shop.shop,
-        name: shop.name,
-        email: shop.email,
-        contactEmail: shop.contactEmail,
-        logoUrl: shop.logoUrl,
-        installedAt: shop.installedAt,
-        isDevStore: shop.isDevStore,
-        relationshipStatus: shop.relationshipStatus,
-        planName: planForShopifyHandle(sub?.planHandle)?.name ?? (sub?.planHandle ? sub.planHandle : "Free"),
-        active: shop.uninstalledAt === null,
-      };
-    });
+  return rows.map((shop) => ({
+    shop: shop.shop,
+    name: shop.name,
+    email: shop.email,
+    contactEmail: shop.contactEmail,
+    logoUrl: shop.logoUrl,
+    installedAt: shop.installedAt,
+    isDevStore: shop.isDevStore,
+    relationshipStatus: shop.relationshipStatus,
+    planName: planNameFor(shop.planHandle),
+    active: shop.uninstalledAt === null,
+  }));
 }
 
-/** Directory of stores with filtering. */
+/** Directory of stores with filtering; filtered and limited by the database. */
 export async function listShopsDirectory({
   filter = "all",
   type = "all",
@@ -64,50 +68,30 @@ export async function listShopsDirectory({
   plan?: string;
   limit?: number;
 } = {}) {
-  const [allShops, subscriptions] = await Promise.all([
-    shops().listAll(),
-    shopSubscriptions().listCurrent(),
-  ]);
-
-  const subByShop = new Map(subscriptions.map((s) => [s.shop, s]));
-
-  let filtered = allShops;
-  if (filter === "active") filtered = filtered.filter((s) => s.uninstalledAt === null);
-  if (filter === "uninstalled") filtered = filtered.filter((s) => s.uninstalledAt !== null);
-
-  if (type === "real") filtered = filtered.filter((s) => !s.isDevStore);
-  if (type === "dev") filtered = filtered.filter((s) => s.isDevStore);
-
-  const mapped = filtered.map((shop) => {
-    const sub = subByShop.get(shop.shop);
-    const planHandle = sub?.planHandle ?? "free";
-    const planName = planForShopifyHandle(sub?.planHandle)?.name ?? (sub?.planHandle ? sub.planHandle : "Free");
-    return {
-      shop: shop.shop,
-      name: shop.name,
-      email: shop.email,
-      contactEmail: shop.contactEmail,
-      logoUrl: shop.logoUrl,
-      url: shop.url,
-      shopifyShopId: shop.shopifyShopId,
-      installedAt: shop.installedAt,
-      uninstalledAt: shop.uninstalledAt,
-      relationshipStatus: shop.relationshipStatus,
-      isDevStore: shop.isDevStore,
-      planHandle,
-      planName,
-      billingInterval: sub?.billingInterval ?? null,
-      subscriptionStatus: sub?.status ?? "NONE",
-    };
+  const rows = await shopMetrics().directory({
+    activity: filter,
+    kind: type,
+    planHandles: plan ? planHandleCandidates(plan) : undefined,
+    limit,
   });
 
-  if (plan) {
-    return mapped
-      .filter((s) => s.planHandle.toLowerCase() === plan.toLowerCase() || s.planName.toLowerCase() === plan.toLowerCase())
-      .slice(0, limit);
-  }
-
-  return mapped.slice(0, limit);
+  return rows.map((shop) => ({
+    shop: shop.shop,
+    name: shop.name,
+    email: shop.email,
+    contactEmail: shop.contactEmail,
+    logoUrl: shop.logoUrl,
+    url: shop.url,
+    shopifyShopId: shop.shopifyShopId,
+    installedAt: shop.installedAt,
+    uninstalledAt: shop.uninstalledAt,
+    relationshipStatus: shop.relationshipStatus,
+    isDevStore: shop.isDevStore,
+    planHandle: shop.planHandle ?? "free",
+    planName: planNameFor(shop.planHandle),
+    billingInterval: shop.billingInterval,
+    subscriptionStatus: shop.subscriptionStatus ?? "NONE",
+  }));
 }
 
 /** Complete dossier for a single shop. */
@@ -238,7 +222,7 @@ export async function revokeShopPromoPlan(
   grantId: string,
   revokedBy: string,
 ) {
-  const success = await planGrants().revokeGrant(shopDomain, grantId, revokedBy);
+  const success = await planGrants().revokeGrant(shopDomain, grantId, revokedBy, Date.now());
   if (success) {
     await invalidateEntitlements(shopDomain);
   }

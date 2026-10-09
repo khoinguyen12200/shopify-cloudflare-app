@@ -12,8 +12,9 @@ describe("runScheduledSweeps", () => {
         deleteExpiredUploads: async () => 0,
       },
       history: { reconcile: async () => { calls.push("history"); return { status: "succeeded", pages: 1, events: 0 }; } },
+      uninstallProbe: { run: async () => { calls.push("probe"); return { examined: 0 }; } },
     });
-    expect(calls).toEqual(["tokens", "uploads", "history"]);
+    expect(calls).toEqual(["tokens", "uploads", "history", "probe"]);
   });
 
   it("sweeps uploads in list, R2 delete, D1 delete order", async () => {
@@ -26,8 +27,9 @@ describe("runScheduledSweeps", () => {
         deleteExpiredUploads: async (ids, cutoff) => { calls.push(`d1:${ids.join(",")}:${cutoff}`); return ids.length; },
       },
       history: { reconcile: async () => { calls.push("history"); return { status: "succeeded", pages: 1, events: 0 }; } },
+      uninstallProbe: { run: async () => { calls.push("probe"); return { examined: 0 }; } },
     });
-    expect(calls).toEqual(["list:200", "r2:r2/upload-1", "d1:upload-1:200", "history"]);
+    expect(calls).toEqual(["list:200", "r2:r2/upload-1", "d1:upload-1:200", "history", "probe"]);
   });
 
   it("leaves uploads for a later tick when R2 deletion fails", async () => {
@@ -42,13 +44,14 @@ describe("runScheduledSweeps", () => {
           deleteExpiredUploads: async () => { calls.push("d1"); return 0; },
         },
         history: { reconcile: async () => { calls.push("history"); return { status: "succeeded", pages: 1, events: 0 }; } },
+        uninstallProbe: { run: async () => { calls.push("probe"); return { examined: 0 }; } },
       });
       expect(error).toHaveBeenCalledWith(expect.stringContaining('"event":"cron.sweep_failed"'));
       expect(error).toHaveBeenCalledWith(expect.stringContaining('"sweep":"pending_uploads"'));
     } finally {
       error.mockRestore();
     }
-    expect(calls).toEqual(["r2", "history"]);
+    expect(calls).toEqual(["r2", "history", "probe"]);
   });
 
   it("does not call R2 or D1 when there are no expired uploads", async () => {
@@ -61,7 +64,8 @@ describe("runScheduledSweeps", () => {
         deleteExpiredUploads: async () => { calls.push("d1"); return 0; },
       },
       history: { reconcile: async () => { calls.push("history"); return { status: "succeeded", pages: 1, events: 0 }; } },
+      uninstallProbe: { run: async () => { calls.push("probe"); return { examined: 0 }; } },
     });
-    expect(calls).toEqual(["history"]);
+    expect(calls).toEqual(["history", "probe"]);
   });
 });

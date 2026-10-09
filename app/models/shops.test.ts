@@ -94,7 +94,7 @@ describe("ShopRepo", () => {
     const found = await inRequest(async () => {
       const repo = new ShopRepo();
       await repo.recordInstall(shop, 1);
-      await repo.recordUninstall(shop, 2);
+      await repo.applyUninstall(shop, { kind: "uninstalled", occurredAt: 2, externalId: "test:2" });
       await repo.recordInstall(shop, 3);
       return repo.get(shop);
     });
@@ -108,7 +108,7 @@ describe("ShopRepo", () => {
     const found = await inRequest(async () => {
       const repo = new ShopRepo();
       await repo.recordInstall(shop, 1);
-      await repo.recordUninstall(shop, 99);
+      await repo.applyUninstall(shop, { kind: "uninstalled", occurredAt: 99, externalId: "test:99" });
       return repo.get(shop);
     });
 

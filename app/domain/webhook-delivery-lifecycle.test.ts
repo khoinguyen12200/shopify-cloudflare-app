@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { transitionWebhookDelivery, type WebhookDeliveryStatus, type WebhookTransitionEvent } from "./webhook-delivery-lifecycle";
+import { isWebhookTopic, topicRequiresShopRecord, transitionWebhookDelivery, type WebhookDeliveryStatus, type WebhookTransitionEvent } from "./webhook-delivery-lifecycle";
 
 describe("webhook delivery lifecycle", () => {
   const legal: readonly [WebhookDeliveryStatus, WebhookTransitionEvent, WebhookDeliveryStatus][] = [
@@ -42,5 +42,23 @@ describe("webhook delivery lifecycle", () => {
   it("rejects unknown stored states", () => {
     expect(transitionWebhookDelivery({ status: "retired", processingStartedAt: null }, { type: "claim", now: 1, leaseMs: 1 }))
       .toEqual({ ok: false, reason: "illegal_transition" });
+  });
+});
+
+describe("webhook topics", () => {
+  const topics = ["app/uninstalled", "app/scopes_update", "customers/data_request", "customers/redact", "shop/redact"] as const;
+
+  it.each(topics)("recognises %s", (topic) => {
+    expect(isWebhookTopic(topic)).toBe(true);
+  });
+
+  it("rejects unknown, retired, differently-cased and inherited-property topics", () => {
+    for (const topic of ["orders/create", "", "SHOP_REDACT", "shop/Redact", "toString", "__proto__", "constructor"]) {
+      expect(isWebhookTopic(topic)).toBe(false);
+    }
+  });
+
+  it("lets only the compliance topics run when the shop record is gone", () => {
+    expect(topics.filter((topic) => !topicRequiresShopRecord(topic))).toEqual(["customers/data_request", "customers/redact", "shop/redact"]);
   });
 });

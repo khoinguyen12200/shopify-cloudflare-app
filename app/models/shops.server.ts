@@ -150,11 +150,34 @@ export class ShopRepo {
     await getDb().update(shops).set({ isDevStore }).where(eq(shops.shop, shop));
   }
 
-  async recordUninstall(shop: string, now: number): Promise<void> {
-    await getDb()
+  /**
+   * Record an uninstall already accepted by `decideUninstall`. The UPDATE repeats the lifecycle ordering key in its
+   * WHERE, so the guard and the write are one statement: a reinstall that lands between the caller's read and this
+   * write makes it match no row and answer `stale`, instead of overwriting the newer install.
+   */
+  async applyUninstall(shop: string, transition: RelationshipState): Promise<"applied" | "stale"> {
+    const changed = await getDb()
       .update(shops)
-      .set({ uninstalledAt: now, currentInstalledAt: null, relationshipStatus: "UNINSTALLED", relationshipOccurredAt: now, relationshipExternalId: `uninstall:${now}` })
-      .where(eq(shops.shop, shop));
+      .set({
+        uninstalledAt: transition.occurredAt,
+        currentInstalledAt: null,
+        relationshipStatus: relationshipStatuses[transition.kind],
+        relationshipOccurredAt: transition.occurredAt,
+        relationshipExternalId: transition.externalId,
+      })
+      .where(and(
+        eq(shops.shop, shop),
+        or(
+          isNull(shops.relationshipOccurredAt),
+          lt(shops.relationshipOccurredAt, transition.occurredAt),
+          and(
+            eq(shops.relationshipOccurredAt, transition.occurredAt),
+            lt(shops.relationshipExternalId, transition.externalId),
+          ),
+        ),
+      ))
+      .returning({ shop: shops.shop });
+    return changed.length === 1 ? "applied" : "stale";
   }
 
   /**

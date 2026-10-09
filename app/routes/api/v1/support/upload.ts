@@ -10,6 +10,7 @@ import { uploadSupportAttachment } from "~/services/internal-admin/ops.server";
 import { safeFilename, validateUpload, attachmentKey } from "~/support/attachment";
 import { getEnv } from "~/request-context.server";
 import { support } from "~/wiring.server";
+import { readJsonObject } from "~/lib/json-body";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const opt = handleOptions(request);
@@ -26,12 +27,8 @@ export async function action({ request }: ActionFunctionArgs) {
 
   // 1. JSON with base64 payload
   if (contentTypeHeader.includes("application/json")) {
-    let bodyData: Record<string, unknown>;
-    try {
-      bodyData = (await request.json()) as Record<string, unknown>;
-    } catch {
-      return apiError("invalid_request", "Expected valid JSON body", 400);
-    }
+    const bodyData = await readJsonObject(request);
+    if (!bodyData) return apiError("invalid_request", "Expected valid JSON body", 400);
 
     const shop = typeof bodyData.shop === "string" ? bodyData.shop.trim() : "";
     const filename = typeof bodyData.filename === "string" ? bodyData.filename.trim() : "";

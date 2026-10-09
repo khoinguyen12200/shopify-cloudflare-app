@@ -1,5 +1,5 @@
 import { err, ok, type Result } from "~/lib/result";
-import type { CurrencyCode, MoneyError } from "./types";
+import { mintCurrencyCode, type CurrencyCode, type MoneyError } from "./types";
 
 /**
  * How many decimal places a currency has.
@@ -49,7 +49,7 @@ export function toCurrency(code: string): Result<CurrencyCode, MoneyError> {
   if (!KNOWN_CURRENCIES.has(upper)) {
     return err("unknown_currency", `"${upper}" is not a known ISO 4217 currency`);
   }
-  return ok(upper as CurrencyCode);
+  return ok(mintCurrencyCode(upper));
 }
 
 /**

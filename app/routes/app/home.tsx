@@ -8,34 +8,23 @@ import { pricingReturnDestination } from "~/billing/pricing-return";
 import { formatMoney, formatNumber } from "~/i18n/format";
 import { useLocale } from "~/i18n/useLocale";
 import { authenticateAdmin } from "~/admin/require-merchant.server";
-import { persistShopIdentity, shops } from "~/wiring.server";
+import { shops } from "~/wiring.server";
 
 export const handle = { i18n: ["common", "admin"] };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, session } =
-    await authenticateAdmin(request);
-  await persistShopIdentity(admin, session.shop);
+  // The layout persists the shop identity (name included) on the first load, so
+  // the name is read from D1 — one local read instead of an Admin API round trip
+  // on every visit.
+  const { session } = await authenticateAdmin(request);
 
   const destination = pricingReturnDestination(request.url);
   if (destination) throw redirect(destination);
 
-  const [response, record] = await Promise.all([
-    admin.graphql(
-      `#graphql
-        query ScaffoldShop {
-          shop {
-            name
-            myshopifyDomain
-          }
-        }`,
-    ),
-    shops().get(session.shop),
-  ]);
-  const body = await response.json();
+  const record = await shops().get(session.shop);
 
   return {
-    shopName: body.data?.shop?.name ?? session.shop,
+    shopName: record?.name ?? session.shop,
     installedAt: record?.installedAt ?? null,
   };
 };

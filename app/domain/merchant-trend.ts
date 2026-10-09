@@ -1,6 +1,8 @@
 /**
- * The three merchant numbers the internal dashboard charts, in one pass over
- * the shops table.
+ * The three merchant numbers the internal dashboard charts. The counting is
+ * done by the database (`ShopMetricsRepo.installTrend`) in a single aggregate
+ * scan; this module owns the calendar — which months, where each starts and
+ * ends — and the assembly of the result.
  *
  * Replaces `installsByMonth`, which answered only "how many installed this
  * month". That is the least useful of the three on its own: a month of five
@@ -14,7 +16,8 @@
  * `active` is deliberately a snapshot, not a running total of installs minus
  * uninstalls: it is derived from each shop's own dates, so a shop that
  * installed before the window still counts, and the chart never opens at zero
- * and invents a growth story that did not happen.
+ * and invents a growth story that did not happen. A month is the half-open
+ * interval [start, end), so the last millisecond of a month is never lost.
  *
  * Pure — `now` is a parameter, never `Date.now()` (@rules/code-craft.md).
  */
@@ -26,18 +29,18 @@ export interface MerchantMonth {
   readonly active: number;
 }
 
-export interface TrendShop {
-  readonly installedAt: number;
-  readonly uninstalledAt: number | null;
+export interface TrendWindow {
+  readonly month: string;
+  /** First instant of the month. */
+  readonly start: number;
+  /** First instant of the NEXT month. */
+  readonly end: number;
 }
 
 const MONTH_LABEL = new Intl.DateTimeFormat("en", { month: "short", timeZone: "UTC" });
 
-export function merchantTrend(
-  shops: readonly TrendShop[],
-  months: number,
-  now: number,
-): MerchantMonth[] {
+/** The last `months` calendar months ending with the one containing `now`, oldest first. */
+export function trendWindows(months: number, now: number): TrendWindow[] {
   const anchor = new Date(now);
   const anchorYear = anchor.getUTCFullYear();
   const anchorMonth = anchor.getUTCMonth();
@@ -45,36 +48,20 @@ export function merchantTrend(
   return Array.from({ length: months }, (_, index) => {
     const offset = months - 1 - index;
     const start = Date.UTC(anchorYear, anchorMonth - offset, 1);
-    // The first instant of the NEXT month, so "in this month" is a half-open
-    // interval and the last millisecond of the month is never lost to rounding.
     const end = Date.UTC(anchorYear, anchorMonth - offset + 1, 1);
-
-    let installs = 0;
-    let uninstalls = 0;
-    let active = 0;
-
-    for (const shop of shops) {
-      if (shop.installedAt >= start && shop.installedAt < end) installs += 1;
-
-      if (
-        shop.uninstalledAt !== null &&
-        shop.uninstalledAt >= start &&
-        shop.uninstalledAt < end
-      ) {
-        uninstalls += 1;
-      }
-
-      // Installed by the end of this month and not gone before it.
-      const arrived = shop.installedAt < end;
-      const stillHere = shop.uninstalledAt === null || shop.uninstalledAt >= end;
-      if (arrived && stillHere) active += 1;
-    }
-
-    return {
-      month: MONTH_LABEL.format(new Date(start)),
-      installs,
-      uninstalls,
-      active,
-    };
+    return { month: MONTH_LABEL.format(new Date(start)), start, end };
   });
+}
+
+/** Pair each window with its counts (same order, same length). */
+export function assembleTrend(
+  windows: readonly TrendWindow[],
+  counts: readonly { readonly installs: number; readonly uninstalls: number; readonly active: number }[],
+): MerchantMonth[] {
+  return windows.map((window, index) => ({
+    month: window.month,
+    installs: counts[index]?.installs ?? 0,
+    uninstalls: counts[index]?.uninstalls ?? 0,
+    active: counts[index]?.active ?? 0,
+  }));
 }

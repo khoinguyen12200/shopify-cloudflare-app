@@ -7,6 +7,7 @@ import {
   withApiAudit,
 } from "../helpers.server";
 import { replyToTicket } from "~/services/internal-admin/ops.server";
+import { parseInlineAttachments, readJsonObject } from "~/lib/json-body";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const opt = handleOptions(request);
@@ -20,12 +21,8 @@ export async function action({ request }: ActionFunctionArgs) {
 
   const actor = await authenticateApiRequest(request, "mcp:tickets:write");
 
-  let bodyData: Record<string, unknown>;
-  try {
-    bodyData = (await request.json()) as Record<string, unknown>;
-  } catch {
-    return apiError("invalid_request", "Expected JSON body", 400);
-  }
+  const bodyData = await readJsonObject(request);
+  if (!bodyData) return apiError("invalid_request", "Expected JSON body", 400);
 
   const ticketId = typeof bodyData.ticket_id === "string" ? bodyData.ticket_id.trim() : (typeof bodyData.id === "string" ? bodyData.id.trim() : "");
   const replyBody = typeof bodyData.body === "string" ? bodyData.body.trim() : "";
@@ -33,12 +30,7 @@ export async function action({ request }: ActionFunctionArgs) {
   const uploadIds = Array.isArray(bodyData.upload_ids)
     ? bodyData.upload_ids.filter((id): id is string => typeof id === "string")
     : [];
-  const attachments = Array.isArray(bodyData.attachments)
-    ? (bodyData.attachments as Array<{ filename?: unknown; contentType?: unknown; contentBase64?: unknown }>)
-        .filter((a): a is { filename: string; contentType: string; contentBase64: string } =>
-          typeof a.filename === "string" && typeof a.contentType === "string" && typeof a.contentBase64 === "string",
-        )
-    : [];
+  const attachments = parseInlineAttachments(bodyData.attachments);
 
   if (!ticketId || !replyBody) {
     return apiError("invalid_request", "ticket_id and body are required fields", 400);

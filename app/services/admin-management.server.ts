@@ -82,9 +82,12 @@ export async function createAdmin(input: {
       now: Date.now(),
     });
     return ok(user);
-  } catch {
-    // The unique index fired — someone else created it in between.
-    return fail("emailTaken");
+  } catch (error) {
+    // The unique index fired — someone else created it in between. Confirm that
+    // by looking, so any other failure (D1 down, hashing) is not misreported as
+    // a taken address.
+    if (await repo.findByEmailWithHash(email)) return fail("emailTaken");
+    throw error;
   }
 }
 

@@ -84,26 +84,27 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, session } =
-    await authenticateAdmin(request);
-  await persistShopIdentity(admin, session.shop);
+  // Shop identity is persisted once by the /app layout loader on the document load.
+  const { admin, session } = await authenticateAdmin(request);
   const pricingReturn = shouldShowProcessing(request.url);
 
   // Shopify owns the actual subscribe/upgrade/cancel flow (Managed Pricing);
   // this page only ever reads status. There's no in-app request()/cancel() —
   // Partner history projects entitlement changes, and D1 serves normal visits.
+  const now = Date.now();
   const [projection, activeGrant] = await Promise.all([
     shopSubscriptions().currentForShop(session.shop),
-    planGrants().findActiveGrant(session.shop),
+    planGrants().findActiveGrant(session.shop, now),
   ]);
   const effective = resolveEffectivePlan(
     projection?.planHandle,
     projection?.status,
     activeGrant,
     PLAN_LIST,
+    now,
   );
   const planName = planForShopifyHandle(projection?.planHandle)?.name ?? PLANS.free.name;
-  const status = resolveProjectionBillingStatus(projection, planName, Date.now());
+  const status = resolveProjectionBillingStatus(projection, planName, now);
 
   const promo = effective.source === "promo" && effective.activePromo
     ? {

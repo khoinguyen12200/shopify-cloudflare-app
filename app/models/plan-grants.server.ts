@@ -8,7 +8,7 @@ import {
 import type { PlanGrantsPort } from "~/ports/plan-grants";
 
 export class PlanGrantsRepo implements PlanGrantsPort {
-  async findActiveGrant(shop: string, now: number = Date.now()): Promise<ShopPlanGrant | null> {
+  async findActiveGrant(shop: string, now: number): Promise<ShopPlanGrant | null> {
     const rows = await getDb()
       .select()
       .from(shopPlanGrants)
@@ -33,7 +33,7 @@ export class PlanGrantsRepo implements PlanGrantsPort {
       .orderBy(desc(shopPlanGrants.createdAt));
   }
 
-  async countActiveGrants(now: number = Date.now()): Promise<number> {
+  async countActiveGrants(now: number): Promise<number> {
     const [row] = await getDb()
       .select({ count: count() })
       .from(shopPlanGrants)
@@ -56,7 +56,7 @@ export class PlanGrantsRepo implements PlanGrantsPort {
     return row;
   }
 
-  async revokeGrant(shop: string, grantId: string, revokedBy: string, now: number = Date.now()): Promise<boolean> {
+  async revokeGrant(shop: string, grantId: string, revokedBy: string, now: number): Promise<boolean> {
     const updated = await getDb()
       .update(shopPlanGrants)
       .set({

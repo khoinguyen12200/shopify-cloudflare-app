@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, max } from "drizzle-orm";
 import { webhookScopeObservations, shopGrantedScopes, shopScopeChanges, shopScopeChangeItems } from "~/db/schema";
 import { getDb } from "~/request-context.server";
 
@@ -21,6 +21,12 @@ export class WebhookScopeObservationRepo {
     ]);
     return "applied";
   }
+  /** The trigger time of the newest scope change already applied for this shop, or null when none was. */
+  async latestChangeAt(shop: string): Promise<number | null> {
+    const [row] = await getDb().select({ latest: max(shopScopeChanges.occurredAt) }).from(shopScopeChanges).where(eq(shopScopeChanges.shop, shop));
+    return row?.latest ?? null;
+  }
+
   async record(deliveryId: string, shop: string, scopes: readonly string[]): Promise<void> {
     const normalized = [...new Set(scopes)].sort();
     if (normalized.length === 0) return;

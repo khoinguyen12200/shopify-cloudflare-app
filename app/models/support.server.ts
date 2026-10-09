@@ -4,8 +4,12 @@ import { pendingUploads, supportAttachments, supportMessages, supportTickets, ty
 import type { SupportCategory } from "~/support/categories";
 import type { SupportAttachment, SupportAuthor, SupportThread, SupportTicket } from "~/support/types";
 import type { ExpiredUpload } from "~/ports/scheduled";
+import { chunk } from "~/lib/chunk";
 
 export type { SupportThread } from "~/support/types";
+
+/** Rows per statement: D1 allows 100 bound parameters, an attachment row binds 8. */
+const ATTACH_CHUNK = 10;
 
 /**
  * The ONLY place the support tables are queried — see @rules/data.md.
@@ -62,14 +66,21 @@ export class SupportRepo {
   async adoptPendingUploads(shop: string, messageId: string, ids: readonly string[], at: number): Promise<boolean> {
     const rows = await this.claimPendingUploads(shop, ids, at);
     if (rows.length !== new Set(ids).size) return false;
+    // One D1 batch (a single transaction): every attachment row lands and every
+    // staged upload is consumed, or neither. Chunked so each statement stays
+    // under D1's bound-parameter limit.
     const db = getDb();
-    for (const row of rows) {
-      await db.insert(supportAttachments).values({
+    const inserts = chunk(rows, ATTACH_CHUNK).map((slice) =>
+      db.insert(supportAttachments).values(slice.map((row) => ({
         id: row.id, messageId, shop, r2Key: row.r2Key, filename: row.filename,
         contentType: row.contentType, sizeBytes: row.sizeBytes, createdAt: at,
-      });
-      await db.delete(pendingUploads).where(and(eq(pendingUploads.shop, shop), eq(pendingUploads.id, row.id), isNull(pendingUploads.adoptedAt)));
-    }
+      }))),
+    );
+    const deletes = chunk(rows.map((row) => row.id), ATTACH_CHUNK).map((slice) =>
+      db.delete(pendingUploads).where(and(eq(pendingUploads.shop, shop), inArray(pendingUploads.id, [...slice]), isNull(pendingUploads.adoptedAt))),
+    );
+    const [first, ...rest] = [...inserts, ...deletes];
+    if (first !== undefined) await db.batch([first, ...rest]);
     return true;
   }
 
@@ -416,8 +427,12 @@ export class SupportRepo {
     return row;
   }
 
-  /** Record an uploaded file against a message. */
-  async attach(input: {
+  /**
+   * Record uploaded files against messages in one batch — never one insert per
+   * file. Every row carries its own `shop`, so a caller can only write rows
+   * under the shop it names.
+   */
+  async attachMany(inputs: readonly {
     shop: string;
     messageId: string;
     id: string;
@@ -426,17 +441,22 @@ export class SupportRepo {
     contentType: string;
     sizeBytes: number;
     at: number;
-  }): Promise<void> {
-    await getDb().insert(supportAttachments).values({
-      id: input.id,
-      messageId: input.messageId,
-      shop: input.shop,
-      r2Key: input.r2Key,
-      filename: input.filename,
-      contentType: input.contentType,
-      sizeBytes: input.sizeBytes,
-      createdAt: input.at,
-    });
+  }[]): Promise<void> {
+    const db = getDb();
+    const [first, ...rest] = chunk(inputs, ATTACH_CHUNK).map((slice) =>
+      db.insert(supportAttachments).values(slice.map((input) => ({
+        id: input.id,
+        messageId: input.messageId,
+        shop: input.shop,
+        r2Key: input.r2Key,
+        filename: input.filename,
+        contentType: input.contentType,
+        sizeBytes: input.sizeBytes,
+        createdAt: input.at,
+      }))),
+    );
+    if (first === undefined) return;
+    await db.batch([first, ...rest]);
   }
 
   /**

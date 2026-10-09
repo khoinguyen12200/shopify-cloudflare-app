@@ -77,7 +77,7 @@ describe("recording an install when a session is minted", () => {
     const found = await inRequest(async () => {
       const repo = new ShopRepo();
       await repo.recordInstall(SHOP, 1_000);
-      await repo.recordUninstall(SHOP, 2_000);
+      await repo.applyUninstall(SHOP, { kind: "uninstalled", occurredAt: 2_000, externalId: "test:2000" });
 
       await afterAuth(authOf(SHOP));
       return repo.get(SHOP);

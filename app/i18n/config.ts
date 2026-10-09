@@ -48,7 +48,7 @@ export const LOCALE_DIRECTION: Record<Locale, "ltr" | "rtl"> = {
 export function isSupportedLocale(value: unknown): value is Locale {
   return (
     typeof value === "string" &&
-    (SUPPORTED_LOCALES as readonly string[]).includes(value)
+    SUPPORTED_LOCALES.some((locale) => locale === value)
   );
 }
 

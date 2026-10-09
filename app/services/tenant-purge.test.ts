@@ -9,14 +9,14 @@ describe("purgeTenant", () => {
     ]);
   });
 
-  it("deletes R2 objects before relational rows and then KV sessions", async () => {
+  it("deletes R2 objects and KV sessions BEFORE the relational rows, which are the commit point", async () => {
     const order: string[] = [];
     const result = await purgeTenant({
       d1: { prepare: async () => ({ shop: "s", attachmentKeys: ["a", "b"] }), deleteRows: async () => { order.push("d1"); return 3; } },
       r2: { delete: async (keys) => { order.push(`r2:${keys.length}`); } },
       kv: { deleteSessions: async () => { order.push("kv"); return 2; } },
     }, "s");
-    expect(order).toEqual(["r2:2", "d1", "kv"]);
+    expect(order).toEqual(["r2:2", "kv", "d1"]);
     expect(result).toEqual({ rows: 3, attachments: 2, sessions: 2 });
   });
 
@@ -31,11 +31,21 @@ describe("purgeTenant", () => {
       r2: { delete: async (keys) => { for (const key of keys) state.r2.delete(key); seen.push(`r2:${state.r2.has("beta/file")}`); } },
       kv: { deleteSessions: async (shop) => { state.kv.delete(shop); seen.push(`kv:${state.kv.has("beta")}`); return 1; } },
     }, "alpha");
-    expect(seen).toEqual(["r2:true", "d1:true", "kv:true"]);
+    expect(seen).toEqual(["r2:true", "kv:true", "d1:true"]);
     expect([...state.r2]).toEqual(["beta/file"]);
     expect([...state.rows]).toEqual(["beta"]);
     expect([...state.kv]).toEqual(["beta"]);
     expect(result).toEqual({ rows: 1, attachments: 1, sessions: 1 });
+  });
+
+  it("keeps the delivery row (and so the retry) alive when KV deletion fails: D1 is only touched after R2 and KV succeed", async () => {
+    const order: string[] = [];
+    await expect(purgeTenant({
+      d1: { prepare: async () => ({ shop: "s", attachmentKeys: [] }), deleteRows: async () => { order.push("d1"); return 1; } },
+      r2: { delete: async () => undefined },
+      kv: { deleteSessions: async () => { throw new Error("kv down"); } },
+    }, "s")).rejects.toThrow("kv down");
+    expect(order).toEqual([]);
   });
 
   it("invalidates entitlement cache after tenant purge", async () => {

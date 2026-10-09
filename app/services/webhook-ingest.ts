@@ -71,6 +71,15 @@ function normalizeWebhookTopic(topic: string): string {
     : `${topic.slice(0, separator).toLowerCase()}/${topic.slice(separator + 1).toLowerCase()}`;
 }
 
+/**
+ * Epoch ms of `X-Shopify-Triggered-At`, which ordering decisions compare against. A missing or unparseable header
+ * falls back to receipt time rather than storing NaN, which would compare as neither older nor newer than anything.
+ */
+export function parseTriggeredAt(header: string | null, receivedAt: number): number {
+  const parsed = header === null ? Number.NaN : Date.parse(header);
+  return Number.isFinite(parsed) ? parsed : receivedAt;
+}
+
 export async function sha256Json(payload: unknown): Promise<string> {
   const bytes = new TextEncoder().encode(JSON.stringify(payload));
   const digest = await crypto.subtle.digest("SHA-256", bytes);

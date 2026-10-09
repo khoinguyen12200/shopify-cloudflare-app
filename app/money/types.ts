@@ -78,3 +78,18 @@ export interface ShopifyMoneyV2 {
   amount: string;
   currencyCode: string;
 }
+
+/**
+ * THE ONLY PLACES a plain number or string becomes a branded money type. Each
+ * caller inside `~/money` has already established the invariant (an integer in
+ * the safe range, or a code found in the ISO 4217 list) and says so by calling
+ * these; nothing outside the module may use them (they are not re-exported from
+ * `~/money`). Keeping the assertion here means one `as` to audit, not a dozen.
+ */
+export function mintMinorUnits(amount: number): MinorUnits {
+  return amount as MinorUnits;
+}
+
+export function mintCurrencyCode(code: string): CurrencyCode {
+  return code as CurrencyCode;
+}

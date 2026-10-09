@@ -17,6 +17,7 @@ import {
 } from "./password-reset.server";
 import { hashToken } from "~/lib/token";
 import { verifyPassword } from "~/lib/password";
+import { fakeNotifier } from "~/test/fake-notifier";
 
 setupTestDatabase();
 
@@ -26,7 +27,8 @@ const OLD_PASSWORD = "the-original-password";
 const resetDeps = {
   users: new AdminUserRepo(),
   tokens: new PasswordResetTokenRepo(),
-  notifier: { send: async () => ({ event: "admin_password_reset" as const, dispatched: [], decisions: [] }) },
+  notifier: { send: async () => undefined },
+  newId: () => crypto.randomUUID(),
 };
 
 async function seedUser(email = "user@example.com", status: "active" | "disabled" = "active") {
@@ -370,5 +372,29 @@ describe("cleanup", () => {
 
     expect(remaining.deleted).toBe(1);
     expect(remaining.current).toBeDefined();
+  });
+});
+
+describe("the reset email is queued, not sent inline", () => {
+  it("hands the notifier one request carrying the pre-minted log id", async () => {
+    const notifier = fakeNotifier();
+    const outcome = await inRequest(async () => {
+      await seedUser("queued@example.com");
+      return requestPasswordReset({ email: "queued@example.com", origin: ORIGIN }, { ...resetDeps, notifier, newId: () => "log-123" });
+    });
+
+    expect(outcome).toMatchObject({ requested: true, queued: true, notificationLogId: "log-123" });
+    const request = notifier.onlyFor("admin_password_reset");
+    expect(request.logId).toBe("log-123");
+    // Keyed by the token's hash, never the token.
+    expect(request.dedupeKey).toBe(`admin_password_reset:${await hashToken(outcome.token!)}`);
+    expect(request.dedupeKey).not.toContain(outcome.token!);
+  });
+
+  it("queues nothing for an unknown address", async () => {
+    const notifier = fakeNotifier();
+    const outcome = await inRequest(() => requestPasswordReset({ email: "nobody@example.com", origin: ORIGIN }, { ...resetDeps, notifier }));
+    expect(outcome).toEqual({ requested: true, queued: false });
+    expect(notifier.sent).toHaveLength(0);
   });
 });

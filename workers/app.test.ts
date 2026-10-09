@@ -11,7 +11,7 @@ setupTestDatabase();
 describe("worker webhook queue", () => {
   it("acks malformed work and retries failed work for DLQ delivery", async () => {
     const actions: string[] = [];
-    await worker.queue({ messages: [
+    await worker.queue({ queue: "shopify-webhooks", messages: [
       { body: { nope: true }, ack: () => actions.push("ack-invalid"), retry: () => actions.push("retry-invalid"), attempts: 1 },
       { body: { shop: "missing.myshopify.com", id: "missing" }, ack: () => actions.push("ack-missing"), retry: () => actions.push("retry-missing"), attempts: 1 },
     ] } as never, env);
@@ -24,7 +24,7 @@ describe("worker webhook queue", () => {
     await makeDb(env.DB).insert(schema.webhookDeliveries).values({ id: "worker-delivery", eventId: "worker-event", topic: "unsupported/topic", apiVersion: "2026-10", shop: "worker.myshopify.com", triggeredAt: 1, receivedAt: 1, payloadHash: "hash" }).run();
     const actions: string[] = [];
 
-    await worker.queue({ messages: [{
+    await worker.queue({ queue: "shopify-webhooks", messages: [{
       body: { shop: "worker.myshopify.com", id: "worker-delivery" },
       ack: () => actions.push("ack"), retry: () => actions.push("retry"), attempts: 8,
     }] } as never, env);
@@ -38,7 +38,7 @@ describe("worker webhook queue", () => {
     await makeDb(env.DB).insert(schema.webhookDeliveries).values({ id: "redacted-delivery", eventId: "redacted-event", topic: "app/uninstalled", apiVersion: "2026-10", shop: "redacted.myshopify.com", triggeredAt: 1, receivedAt: 1, payloadHash: "hash" }).run();
     const actions: string[] = [];
 
-    await worker.queue({ messages: [{
+    await worker.queue({ queue: "shopify-webhooks", messages: [{
       body: { shop: "redacted.myshopify.com", id: "redacted-delivery" },
       ack: () => actions.push("ack"), retry: () => actions.push("retry"), attempts: 1,
     }] } as never, env);
@@ -48,5 +48,28 @@ describe("worker webhook queue", () => {
     expect(actions).toEqual(["ack"]);
     expect(Number(rows?.count ?? 0)).toBe(0);
     expect(delivery?.status).toBe("received");
+  });
+});
+
+describe("worker queue routing", () => {
+  const invalidNotification = { event: "retired_event" };
+
+  it.each(["notifications", "notifications-prod"])("routes %s to the notification consumer", async (queue) => {
+    const actions: string[] = [];
+    await worker.queue({ queue, messages: [
+      { body: invalidNotification, ack: () => actions.push("ack"), retry: () => actions.push("retry"), attempts: 1 },
+    ] } as never, env);
+    expect(actions).toEqual(["ack"]);
+  });
+
+  it("keeps real work for an unknown queue instead of acking it", async () => {
+    const actions: string[] = [];
+    await worker.queue({
+      queue: "some-other-queue",
+      messages: [{ body: {}, ack: () => actions.push("ack"), retry: () => actions.push("retry"), attempts: 1 }],
+      retryAll: (options: unknown) => actions.push(`retryAll:${JSON.stringify(options)}`),
+      ackAll: () => actions.push("ackAll"),
+    } as never, env);
+    expect(actions).toEqual(['retryAll:{"delaySeconds":60}']);
   });
 });

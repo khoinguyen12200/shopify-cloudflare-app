@@ -1,4 +1,4 @@
-import { shops, shopifyEvents, shopSyncCheckpoints, webhookDeliveryRepository } from "~/wiring.server";
+import { shops, shopifyEvents, shopSyncCheckpoints, webhookDeliveryRepository, adminSessionUsers } from "~/wiring.server";
 import { Form, useLoaderData } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
 
@@ -67,7 +67,7 @@ interface EventHistoryRow {
 }
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  await requireAdminUser(request, { users: adminUsers() });
+  await requireAdminUser(request, { users: adminSessionUsers() });
   const shopDomain = decodeURIComponent(params.shop ?? "");
 
   const shop = await shops().get(shopDomain);
@@ -95,6 +95,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     latestSub?.status,
     promoStatus.activeGrant,
     PLAN_LIST,
+    Date.now(),
   );
 
   const promoAvailablePlans = PLAN_LIST

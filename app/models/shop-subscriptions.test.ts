@@ -210,7 +210,7 @@ describe("ShopSubscriptionRepo", () => {
         type: "ACTIVE_SUBSCRIPTION", status: "NONE", subscriptionId: "active:gid://shopify/Shop/1", occurredAt: 2, externalId: "none",
         planHandle: null, billingInterval: null, items: [],
       });
-      return repo.listCurrent();
+      return repo.listCurrentForShops(["retire.myshopify.com"]);
     });
     expect(rows).toMatchObject([{ shop: "retire.myshopify.com", status: "NONE", priceAmount: null, priceCurrency: null }]);
     expect(rows).toHaveLength(1);
@@ -226,12 +226,31 @@ describe("ShopSubscriptionRepo", () => {
           { itemType: "usage", priceAmount: 500, priceCurrency: "USD" },
         ],
       });
-      return repo.listCurrent();
+      await repo.upsertObservation("other.myshopify.com", {
+        type: "CREATED", status: "ACTIVE", subscriptionId: "sub-9", occurredAt: 1, externalId: "evt-9",
+        items: [{ itemType: "base", priceAmount: 4200, priceCurrency: "USD" }],
+      });
+      // Asking for one shop must never return another shop's subscription.
+      return repo.listCurrentForShops(["items.myshopify.com"]);
     });
     expect(rows).toMatchObject([
       { shop: "items.myshopify.com", priceAmount: 1900, priceCurrency: "USD" },
       { shop: "items.myshopify.com", priceAmount: 500, priceCurrency: "USD" },
     ]);
+  });
+
+  it("reads more shops than one D1 statement can bind, in chunks, and returns nothing for none", async () => {
+    const result = await inRequest(async () => {
+      const repo = new ShopSubscriptionRepo();
+      await repo.upsertObservation("chunk-last.myshopify.com", {
+        type: "CREATED", status: "ACTIVE", subscriptionId: "sub-c", occurredAt: 1, externalId: "evt-c",
+        items: [{ itemType: "base", priceAmount: 100, priceCurrency: "USD" }],
+      });
+      const many = [...Array.from({ length: 150 }, (_, index) => `pad-${index}.myshopify.com`), "chunk-last.myshopify.com"];
+      return { many: await repo.listCurrentForShops(many), none: await repo.listCurrentForShops([]) };
+    });
+    expect(result.many).toMatchObject([{ shop: "chunk-last.myshopify.com", priceAmount: 100 }]);
+    expect(result.none).toEqual([]);
   });
 });
 

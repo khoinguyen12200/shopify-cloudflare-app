@@ -57,7 +57,7 @@ describe("handleWebhookQueueBatch", () => {
       }] }, {
         consume: (work) => consumeWebhook({
           deliveries: new WebhookDeliveryRepo(), now: () => 100,
-          handlers: { "app/uninstalled": async () => { handlerWrites += 1; }, "app/scopes_update": async () => {} },
+          handlers: { "app/uninstalled": async () => { handlerWrites += 1; }, "app/scopes_update": async () => {}, "customers/data_request": async () => {}, "customers/redact": async () => {}, "shop/redact": async () => {} },
         }, work),
         log: () => {},
       });
@@ -78,7 +78,7 @@ describe("handleWebhookQueueBatch", () => {
       }] }, {
         consume: (work) => consumeWebhook({
           deliveries: new WebhookDeliveryRepo(), now: () => 100,
-          handlers: { "app/uninstalled": async () => { throw new Error("broken"); }, "app/scopes_update": async () => {} },
+          handlers: { "app/uninstalled": async () => { throw new Error("broken"); }, "app/scopes_update": async () => {}, "customers/data_request": async () => {}, "customers/redact": async () => {}, "shop/redact": async () => {} },
         }, work),
         log: () => {},
       });
@@ -100,7 +100,7 @@ describe("handleWebhookQueueBatch", () => {
       }] }, {
         consume: (work) => consumeWebhook({
           deliveries: new WebhookDeliveryRepo(), now: () => 100,
-          handlers: { "app/uninstalled": async () => {}, "app/scopes_update": async () => {} },
+          handlers: { "app/uninstalled": async () => {}, "app/scopes_update": async () => {}, "customers/data_request": async () => {}, "customers/redact": async () => {}, "shop/redact": async () => {} },
         }, work),
         log: () => {},
       });

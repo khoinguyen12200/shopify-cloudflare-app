@@ -9,7 +9,9 @@ export const THEME_KEY = "internal-theme";
  * before first paint, so there is no light→dark flash on load. Embed once, near
  * the top of the console layout.
  */
-export const THEME_INIT_SCRIPT = `(function(){try{var s=localStorage.getItem('${THEME_KEY}');var d=s?s==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.classList.toggle('dark',d);}catch(e){}})();`;
+// Only the storage read can throw (blocked or disabled storage): that case falls
+// back to "no saved choice", so the OS preference still decides the theme.
+export const THEME_INIT_SCRIPT = `(function(){var s=null;try{s=localStorage.getItem('${THEME_KEY}');}catch(e){s=null;}var d=s?s==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.classList.toggle('dark',d);})();`;
 
 /**
  * Watch the `class` attribute on <html>. The theme lives in the DOM (the init

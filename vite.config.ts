@@ -51,6 +51,16 @@ export default defineConfig(({ command }) => ({
     ...(host !== "localhost" ? { allowedHosts: [host] } : {}),
     ...(process.env.PORT ? { port: Number(process.env.PORT) } : {}),
   },
+  // Browser (client environment) dependency pre-bundling. ngk-dashboard, recharts
+  // and lucide-react are large and are first imported by the /internal routes
+  // (recharts only after the dashboard's lazy chunk loads), so Vite would not
+  // discover them at startup: the first visit to that route would trigger a
+  // re-optimisation and a full page reload in dev. Listing them here pre-bundles
+  // them up front. This does not touch the Worker (`ssr`) environment, which the
+  // Cloudflare plugin configures itself.
+  optimizeDeps: {
+    include: ["ngk-dashboard", "recharts", "lucide-react"],
+  },
   plugins: [
     // Runs the app in the Workers runtime (workerd) during dev, matching
     // production. Bindings are real (D1, KV) via Miniflare.

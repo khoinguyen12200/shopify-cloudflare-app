@@ -5,7 +5,7 @@ import { adminUsers, aiService, supportService } from "~/wiring.server";
 import type { ThreadForPrompt } from "~/ai/draft-prompt";
 import { toReplyTone } from "~/ai/tones";
 import { replyTask } from "~/ai/tasks/reply";
-import { SUPPORT_CATEGORIES, type SupportCategory } from "~/support/categories";
+import { toSupportCategory } from "~/support/categories";
 
 interface DraftStreamController {
   enqueue(chunk: Uint8Array): void;
@@ -83,9 +83,7 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
     thread = {
       subject: subject.trim() || "Customer Support",
       shopName: shop ? shop.replace(".myshopify.com", "") : "Merchant",
-      category: (SUPPORT_CATEGORIES.includes(categoryRaw as SupportCategory)
-        ? categoryRaw
-        : "question") as SupportCategory,
+      category: toSupportCategory(categoryRaw) ?? "question",
       messages: [],
     };
   }

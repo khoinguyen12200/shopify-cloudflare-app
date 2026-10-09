@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { shopLog } from "~/observability/shop-log";
 import { shops, support, supportService } from "~/wiring.server";
 import { getEnv } from "~/request-context.server";
 import { attachmentKey, safeFilename, validateUpload } from "~/support/attachment";
@@ -10,6 +12,18 @@ export interface AttachmentInput {
   contentType: string;
   contentBase64: string;
 }
+
+const shopContactResponse = z.object({
+  data: z.object({
+    shop: z.object({
+      id: z.string().optional(),
+      name: z.string().optional(),
+      email: z.string().optional(),
+      contactEmail: z.string().optional(),
+      url: z.string().optional(),
+    }).optional(),
+  }).optional(),
+});
 
 /**
  * Strategy: Resolve shop contact info (store name, merchant email, logo)
@@ -40,8 +54,8 @@ export async function resolveShopContact(shop: string): Promise<{
       const res = await admin.graphql(`#graphql
         query ShopContact { shop { id name email contactEmail url } }
       `);
-      const data = (await res.json()) as { data?: { shop?: { id?: string; name?: string; email?: string; contactEmail?: string; url?: string } } };
-      const contact = data?.data?.shop;
+      const parsedContact = shopContactResponse.safeParse(await res.json());
+      const contact = parsedContact.success ? parsedContact.data.data?.shop : undefined;
       if (contact) {
         shopName = contact.name || shopName;
         merchantEmail = contact.contactEmail || contact.email || null;
@@ -54,8 +68,12 @@ export async function resolveShopContact(shop: string): Promise<{
           url: contact.url,
         });
       }
-    } catch {
-      // Offline session unavailable or test fixture
+    } catch (error) {
+      // Decoration, not correctness: no offline session (or a fixture) just
+      // means no contact details. Logged so a systematic failure is visible.
+      await shopLog("support.contact_lookup_failed", shop, {
+        error: error instanceof Error ? error.message : "unknown",
+      });
     }
   }
 
@@ -134,33 +152,36 @@ export async function attachFilesToMessage(
     await support().adoptPendingUploads(shop, messageId, uploadIds, now);
   }
 
-  for (const att of attachments) {
+  const env = getEnv();
+  const prepared = attachments.flatMap((att) => {
     const binary = Uint8Array.from(atob(att.contentBase64), (c) => c.charCodeAt(0));
-    const check = validateUpload({ contentType: att.contentType, sizeBytes: binary.byteLength });
-    if (!check.ok) continue;
-
+    if (!validateUpload({ contentType: att.contentType, sizeBytes: binary.byteLength }).ok) return [];
     const uploadId = crypto.randomUUID();
-    const safeName = safeFilename(att.filename);
-    const r2Key = attachmentKey({ shop, ticketId, uploadId });
-    const env = getEnv();
-
-    if (env.UPLOADS) {
-      await env.UPLOADS.put(r2Key, binary, {
-        httpMetadata: { contentType: att.contentType },
-      });
-    }
-
-    await support().attach({
-      id: uploadId,
-      messageId,
-      shop,
-      r2Key,
-      filename: safeName,
+    return [{
+      binary,
       contentType: att.contentType,
-      sizeBytes: binary.byteLength,
-      at: now,
-    });
+      row: {
+        id: uploadId,
+        messageId,
+        shop,
+        r2Key: attachmentKey({ shop, ticketId, uploadId }),
+        filename: safeFilename(att.filename),
+        contentType: att.contentType,
+        sizeBytes: binary.byteLength,
+        at: now,
+      },
+    }];
+  });
+
+  // R2 puts are inherent I/O, one object each: run them concurrently (the
+  // request body already bounds how many attachments there are), then record
+  // every row in ONE batched write rather than one insert per file.
+  const uploads = env.UPLOADS;
+  if (uploads) {
+    await Promise.all(prepared.map(({ binary, contentType, row }) =>
+      uploads.put(row.r2Key, binary, { httpMetadata: { contentType } })));
   }
+  await support().attachMany(prepared.map(({ row }) => row));
 }
 
 /**

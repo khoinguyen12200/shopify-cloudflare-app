@@ -18,7 +18,7 @@ import {
 } from "ngk-dashboard";
 import { Check, Copy, Key } from "lucide-react";
 import { requireAdminUser } from "~/services/admin-auth.server";
-import { adminUsers } from "~/wiring.server";
+import { adminUsers, adminSessionUsers } from "~/wiring.server";
 import { getEnv } from "~/request-context.server";
 import {
   createPersonalAccessToken,
@@ -45,7 +45,7 @@ export type ActionData =
   | { ok: true; revokedClientId: string };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const user = await requireAdminUser(request, { users: adminUsers() });
+  const user = await requireAdminUser(request, { users: adminSessionUsers() });
   const [tokens, clients, auditLogs] = await Promise.all([
     listPersonalAccessTokens(),
     listOAuthClients(),

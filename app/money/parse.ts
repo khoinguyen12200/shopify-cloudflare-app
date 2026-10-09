@@ -1,11 +1,11 @@
 import { err, ok, type Result } from "~/lib/result";
 import { currencyDecimals, toCurrency } from "./currency";
-import type {
-  CurrencyCode,
-  MinorUnits,
-  Money,
-  MoneyError,
-  ShopifyMoneyV2,
+import {
+  mintMinorUnits,
+  type CurrencyCode,
+  type Money,
+  type MoneyError,
+  type ShopifyMoneyV2,
 } from "./types";
 
 /**
@@ -37,7 +37,7 @@ export function fromMinorUnits(
   if (!Number.isSafeInteger(amount)) {
     return err("out_of_range", `${amount} exceeds the exact integer range`);
   }
-  return ok({ amount: amount as MinorUnits, currency });
+  return ok({ amount: mintMinorUnits(amount), currency });
 }
 
 /**
@@ -114,7 +114,29 @@ export function fromDecimalString(
   }
 
   const amount = sign === "-" ? -magnitude : magnitude;
-  return ok({ amount: amount as MinorUnits, currency });
+  return ok({ amount: mintMinorUnits(amount), currency });
+}
+
+/**
+ * Money from a JS number that an SDK already parsed out of a decimal string
+ * (the Billing SDK hands `price.amount` over as a `number`).
+ *
+ * `String(n)` is the SHORTEST decimal that round-trips to the same double, so
+ * `String(19.99)` is `"19.99"` even though the double is not exactly 19.99 —
+ * that string is what the API sent. It is then parsed on the digits by
+ * `fromDecimalString`, which REFUSES extra precision rather than rounding, so
+ * a value the currency cannot hold (`19.999` USD) is an error. No arithmetic
+ * ever touches the float. NaN, Infinity and exponent forms (`1e21`, `1e-7`) are
+ * refused: they are not prices.
+ */
+export function fromApiNumber(
+  amount: number,
+  currencyInput: string,
+): Result<Money, MoneyError> {
+  if (!Number.isFinite(amount)) {
+    return err("malformed_amount", `${amount} is not a finite amount`);
+  }
+  return fromDecimalString(String(amount), currencyInput);
 }
 
 /**
@@ -169,5 +191,5 @@ export function toMoneyV2(money: Money): ShopifyMoneyV2 {
 
 /** Zero in a currency — the identity for `add`, and a safe default. */
 export function zero(currency: CurrencyCode): Money {
-  return { amount: 0 as MinorUnits, currency };
+  return { amount: mintMinorUnits(0), currency };
 }

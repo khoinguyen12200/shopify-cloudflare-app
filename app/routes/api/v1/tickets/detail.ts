@@ -10,6 +10,7 @@ import {
   closeTicket,
   getTicketThread,
 } from "~/services/internal-admin/ops.server";
+import { readJsonObject } from "~/lib/json-body";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const opt = handleOptions(request);
@@ -40,12 +41,8 @@ export async function action({ request }: ActionFunctionArgs) {
 
   const actor = await authenticateApiRequest(request, "mcp:tickets:write");
 
-  let body: Record<string, unknown>;
-  try {
-    body = (await request.json()) as Record<string, unknown>;
-  } catch {
-    return apiError("invalid_request", "Expected JSON body", 400);
-  }
+  const body = await readJsonObject(request);
+  if (!body) return apiError("invalid_request", "Expected JSON body", 400);
 
   const ticketId = typeof body.ticket_id === "string" ? body.ticket_id.trim() : (typeof body.id === "string" ? body.id.trim() : "");
   const intent = typeof body.intent === "string" ? body.intent.trim() : "close";

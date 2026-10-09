@@ -57,6 +57,21 @@ describe("TenantPurgeRepo", () => {
     expect(affected).toBe(2);
   });
 
+  it("removes the shop's named sync checkpoints (history and uninstall probe) and no one else's", async () => {
+    await runWithRequestContext(env, async () => {
+      const shop = "checkpoints.myshopify.com";
+      const other = "checkpoints-other.myshopify.com";
+      await db.insert(shops).values({ shop, installedAt: 1 });
+      await db.insert(shopifySyncCheckpoints).values([
+        { name: `partner_history:${shop}` }, { name: `uninstall_probe:${shop}` },
+        { name: `partner_history:${other}` }, { name: `uninstall_probe:${other}` }, { name: "partner_history" },
+      ]);
+      await new TenantPurgeRepo().deleteTenantRows(shop);
+      const left = await db.select({ name: shopifySyncCheckpoints.name }).from(shopifySyncCheckpoints).orderBy(shopifySyncCheckpoints.name);
+      expect(left.map((row) => row.name)).toEqual(["partner_history", `partner_history:${other}`, `uninstall_probe:${other}`]);
+    });
+  });
+
   it("counts pending uploads and scope observations exactly once", async () => {
     await runWithRequestContext(env, async () => {
       const shop = "count-observations.myshopify.com";

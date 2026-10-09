@@ -99,13 +99,14 @@ function activeSubscription(value: Record<string, unknown>): ActiveSubscription 
   const shop = object(value.shop);
   const cycle = object(value.currentBillingCycle);
   const pending = object(value.pendingUpdate);
+  const cycleStart = cycle ? string(cycle.startTime) : null;
+  const cycleEnd = cycle ? string(cycle.endTime) : null;
   return {
     shop: shop ? { id: string(shop.id), myshopifyDomain: string(shop.myshopifyDomain) } : null,
     billingPeriod: string(value.billingPeriod),
     cancelAtEndOfCycle: value.cancelAtEndOfCycle === true,
     trialEndsAt: string(value.trialEndsAt), legacySubscriptionId: string(value.legacySubscriptionId),
-    currentBillingCycle: cycle && string(cycle.startTime) && string(cycle.endTime)
-      ? { startTime: string(cycle.startTime)!, endTime: string(cycle.endTime)! } : null,
+    currentBillingCycle: cycleStart && cycleEnd ? { startTime: cycleStart, endTime: cycleEnd } : null,
     items: Array.isArray(value.items) ? value.items.map(subscriptionItem) : [],
     pendingUpdate: pending ? { billingPeriod: string(pending.billingPeriod), legacySubscriptionId: string(pending.legacySubscriptionId), items: Array.isArray(pending.items) ? pending.items.map(subscriptionItem) : [] } : null,
   };

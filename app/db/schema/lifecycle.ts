@@ -77,6 +77,8 @@ export const shopifyEvents = sqliteTable(
   (table) => [
     primaryKey({ columns: [table.source, table.eventId] }),
     index("shopify_events_shop_occurred_idx").on(table.shop, table.occurredAt),
+    // Dashboard health counts event types by prefix range.
+    index("shopify_events_event_type_idx").on(table.eventType),
   ],
 );
 

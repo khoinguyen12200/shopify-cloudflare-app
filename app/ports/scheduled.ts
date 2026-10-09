@@ -11,4 +11,6 @@ export interface ScheduledDependencies {
     deleteUploadObjects(keys: readonly string[]): Promise<void>;
   };
   readonly history: { reconcile(now: number): Promise<{ status: "succeeded"; pages: number; events: number } | { status: "failed"; code: string; detail: string }> };
+  /** Looks for shops that uninstalled without Shopify's webhook reaching us. Returns counts for the log. */
+  readonly uninstallProbe: { run(now: number): Promise<Readonly<Record<string, number>>> };
 }

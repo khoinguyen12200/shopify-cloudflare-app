@@ -31,6 +31,8 @@ export async function runScheduledSweeps(now: number, dependencies: ScheduledDep
     if (result.status === "failed") throw new Error(`${result.code}: ${result.detail}`);
     return { pages: result.pages, events: result.events };
   });
+  // Shopify tells apps not to rely on webhooks alone; this is what finds an uninstall whose webhook was lost.
+  await sweep("uninstall_reconciliation", async () => ({ ...(await dependencies.uninstallProbe.run(now)) }));
 }
 
 async function sweep(

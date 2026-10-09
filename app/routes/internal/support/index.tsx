@@ -1,4 +1,4 @@
-import { shopSubscriptions } from "~/wiring.server";
+import { shopSubscriptions, adminSessionUsers } from "~/wiring.server";
 import { Link, useLoaderData, useNavigation, useSubmit } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
 
@@ -40,12 +40,13 @@ const LOCALE: Locale = "en";
 const PAID_STATUSES = new Set(["ACTIVE", "CANCELLATION_SCHEDULED"]);
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const actor = await requireAdminUser(request, { users: adminUsers() });
+  const actor = await requireAdminUser(request, { users: adminSessionUsers() });
 
-  const [tickets, currentSubscriptions] = await Promise.all([
-    supportService().listOpenForStaff(),
-    shopSubscriptions().listCurrent(),
-  ]);
+  const tickets = await supportService().listOpenForStaff();
+  // Only the shops that have an open ticket, not every subscription in the table.
+  const currentSubscriptions = await shopSubscriptions().listCurrentForShops(
+    tickets.map((ticket) => ticket.shop),
+  );
   const currentByShop = new Map(currentSubscriptions.map((subscription) => [subscription.shop, subscription]));
 
   return {

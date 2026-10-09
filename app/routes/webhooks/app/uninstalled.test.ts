@@ -93,4 +93,25 @@ describe("app/uninstalled webhook", () => {
     const second = await post(await request());
     expect(second.status).toBe(200);
   });
+
+  describe("during a client-secret rotation", () => {
+    const postWithPrevious = (request: Request, previous: string) => runWithRequestContext(Object.assign({}, env, { SHOPIFY_API_SECRET_PREVIOUS: previous }), () =>
+      action({ request, params: {}, url: new URL(request.url), pattern: "/webhooks/app/uninstalled", context: new RouterContextProvider() }));
+    const deliver = (secret: string, webhookId: string) => signedWebhookRequest({ url: WEBHOOK_URL, topic: "app/uninstalled", shop: "rotating.myshopify.com", payload: {}, secret, webhookId });
+
+    it("accepts a delivery signed with the previous secret, and still the current one", async () => {
+      expect((await postWithPrevious(await deliver("the-old-secret", "rot-old"), "the-old-secret")).status).toBe(200);
+      expect((await postWithPrevious(await deliver("test-api-secret", "rot-new"), "the-old-secret")).status).toBe(200);
+    });
+
+    it("answers 401 for a secret that is neither, and for the old secret when no previous secret is configured", async () => {
+      await expect(postWithPrevious(await deliver("someone-else", "rot-bad"), "the-old-secret")).rejects.toMatchObject({ status: 401 });
+      await expect(post(await deliver("the-old-secret", "rot-unset"))).rejects.toMatchObject({ status: 401 });
+    });
+
+    it("ignores an empty previous secret", async () => {
+      await expect(postWithPrevious(await deliver("test-api-secret", "rot-empty-ok"), "")).resolves.toMatchObject({ status: 200 });
+      await expect(postWithPrevious(await deliver("someone-else", "rot-empty-bad"), "")).rejects.toMatchObject({ status: 401 });
+    });
+  });
 });

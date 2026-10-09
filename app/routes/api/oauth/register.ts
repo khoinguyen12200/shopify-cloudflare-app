@@ -1,5 +1,6 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { registerDynamicClient } from "~/services/mcp/oauth.server";
+import { readJsonObject } from "~/lib/json-body";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -27,14 +28,14 @@ export async function action({ request }: ActionFunctionArgs) {
   const contentType = request.headers.get("Content-Type") || "";
 
   if (contentType.includes("application/json")) {
-    try {
-      body = (await request.json()) as Record<string, unknown>;
-    } catch {
+    const parsed = await readJsonObject(request);
+    if (!parsed) {
       return new Response(
         JSON.stringify({ error: "invalid_request", error_description: "Malformed JSON" }),
         { status: 400, headers: { "Content-Type": "application/json", ...CORS_HEADERS } },
       );
     }
+    body = parsed;
   } else {
     try {
       const formData = await request.formData();

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { beforeEach, describe, it, expect } from "vitest";
 import { env } from "cloudflare:test";
 import { runWithRequestContext } from "~/request-context.server";
 import { setupTestDatabase } from "~/test/db";
@@ -10,10 +10,25 @@ import { SupportService } from "./support.server";
 import { supportService } from "~/wiring.server";
 import { verifyAttachmentToken } from "~/support/file-token";
 import { fakeNotifier } from "~/test/fake-notifier";
+import { fakeQueueBinding, recordedMessage } from "~/test/fake-notification-queue";
+import { handleNotificationBatch } from "~/services/notification-queue";
+import { notificationConsumerDependencies } from "~/wiring/notifications.server";
 
 setupTestDatabase();
 
-const inRequest = <T>(fn: () => Promise<T>) => runWithRequestContext(env, fn);
+// Notifications are QUEUED, so the real wiring writes no log row on its own. The
+// queue binding is replaced by a recorder (the outermost boundary) and
+// `recentRows()` hands what was queued to the real consumer, like production.
+const queued = fakeQueueBinding();
+beforeEach(() => { queued.bodies.length = 0; });
+const inRequest = <T>(fn: () => Promise<T>) =>
+  runWithRequestContext(Object.assign({}, env, { NOTIFICATION_QUEUE: queued.binding }), fn);
+
+async function recentRows() {
+  const messages = queued.bodies.splice(0).map((body) => recordedMessage(body));
+  await handleNotificationBatch({ messages }, notificationConsumerDependencies());
+  return new NotificationLogRepo().recent();
+}
 const adminDeps = { users: new AdminUserRepo() };
 
 /**
@@ -75,7 +90,7 @@ describe("opening a ticket", () => {
   it("adopts uploaded attachments through injected repository", async () => {
     const calls: string[] = [];
     const repo = {
-      attach: async () => { calls.push("attach"); }, open: async () => ({ id: "t", messageId: "m" }),
+      attachMany: async () => { calls.push("attachMany"); }, open: async () => ({ id: "t", messageId: "m" }),
       openAsStaff: async () => ({ id: "t", messageId: "m" }), reply: async () => false,
       replyAsStaff: async () => undefined, find: async () => undefined, findForStaff: async () => undefined,
       listForShop: async () => [], listOpenForStaff: async () => [], closeAsStaff: async () => false,
@@ -83,13 +98,13 @@ describe("opening a ticket", () => {
     };
     const service = new SupportService({ repo, admins: { supportNotifyRecipients: async () => [] }, clock: { now: () => 1 }, notifier: { send: async () => {} }, appUrl: "https://app.test", withinRateLimit: async () => true, signAttachment: async () => "token" });
     await service.adoptAttachments("shop.test", "message", [{ id: "upload", r2Key: "key", filename: "a.txt", contentType: "text/plain", sizeBytes: 1 }]);
-    expect(calls).toEqual(["attach"]);
+    expect(calls).toEqual(["attachMany"]);
   });
 
   it("uses injected support repository", async () => {
     const calls: string[] = [];
     const repo = {
-      attach: async () => {},
+      attachMany: async () => {},
       open: async () => { calls.push("open"); return { id: "ticket", messageId: "message" }; },
       openAsStaff: async () => ({ id: "ticket", messageId: "message" }),
       reply: async () => false,
@@ -155,7 +170,7 @@ describe("opening a ticket", () => {
     const rows = await inRequest(async () => {
       await staffMember();
       await openTicket(supportService(), newShop());
-      return new NotificationLogRepo().recent();
+      return recentRows();
     });
 
     expect(rows).toHaveLength(1);
@@ -173,7 +188,7 @@ describe("opening a ticket", () => {
       await staffMember("first@example.org");
       await staffMember("second@example.org");
       await openTicket(supportService(), newShop());
-      return new NotificationLogRepo().recent();
+      return recentRows();
     });
 
     expect(rows.map((row) => row.recipient).sort()).toEqual([
@@ -187,7 +202,7 @@ describe("opening a ticket", () => {
       const staff = await staffMember();
       await new AdminUserRepo().setNotifySupport(staff.id, false, 2_000);
       await openTicket(supportService(), newShop());
-      return new NotificationLogRepo().recent();
+      return recentRows();
     });
 
     expect(rows).toHaveLength(0);
@@ -248,7 +263,7 @@ describe("replying", () => {
 
       return {
         thread: await service.find(shop, created.id),
-        rows: await new NotificationLogRepo().recent(),
+        rows: await recentRows(),
       };
     });
 
@@ -288,7 +303,7 @@ describe("replying", () => {
       });
       expect(replied.ok).toBe(true);
 
-      return new NotificationLogRepo().recent();
+      return recentRows();
     });
 
     expect(rows).toHaveLength(1);
@@ -306,7 +321,7 @@ describe("replying", () => {
       const service = supportService();
       const created = await openTicket(service, shop, { merchantEmail: null });
       await service.replyAsStaff({ ticketId: created.id, staffName: "Sam", body: "Hi" });
-      return new NotificationLogRepo().recent();
+      return recentRows();
     });
 
     expect(rows).toHaveLength(0);
@@ -320,7 +335,7 @@ describe("replying", () => {
       const service = supportService();
       const created = await openTicket(service, shop);
       await service.replyAsStaff({ ticketId: created.id, staffName: "Sam", body: "Hi" });
-      return new NotificationLogRepo().recent();
+      return recentRows();
     });
 
     expect(rows[0]?.shop).toBe(shop);
@@ -415,7 +430,7 @@ describe("attachment URLs", () => {
       const created = await openTicket(service, shop);
       const attachmentId = crypto.randomUUID();
 
-      await new SupportRepo().attach({
+      await new SupportRepo().attachMany([{
         shop,
         messageId: created.messageId,
         id: attachmentId,
@@ -424,7 +439,7 @@ describe("attachment URLs", () => {
         contentType: "image/png",
         sizeBytes: 10,
         at: 1_000,
-      });
+      }]);
 
       return { url: await service.attachmentUrl(attachmentId), id: attachmentId };
     });

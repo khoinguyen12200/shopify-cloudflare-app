@@ -99,11 +99,16 @@ export async function notify<E extends NotificationEvent>(
   // is `refused` rather than `failed` because nothing was attempted.
   const logs = dependencies.logs;
   const now = Date.now();
+  // A pre-minted id names exactly ONE row, whichever outcome writes it first —
+  // a refusal included, so the id a caller was handed always resolves to a row.
+  let unspentLogId = input.logId;
 
   for (const decision of eligibility.decisions) {
     if (decision.allowed) continue;
+    const id = unspentLogId ?? crypto.randomUUID();
+    unspentLogId = undefined;
     await logs.recordSettled({
-      id: crypto.randomUUID(),
+      id,
       event: input.event,
       channel: decision.channel,
       // The address may legitimately be absent — that IS the refusal in the
@@ -137,12 +142,14 @@ export async function notify<E extends NotificationEvent>(
       }),
     );
 
+    const logId = unspentLogId;
+    unspentLogId = undefined;
     dispatched.push(
       await dispatch(message, {
         event: input.event,
         dedupeKey: input.dedupeKey,
         shop: input.scope,
-        logId: input.logId,
+        logId,
       }, {}, dependencies.logs),
     );
   }

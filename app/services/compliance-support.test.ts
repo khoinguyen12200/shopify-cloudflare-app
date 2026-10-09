@@ -37,7 +37,7 @@ async function ticketWithFile(shop: string, key: string) {
   });
 
   await env.UPLOADS.put(key, "pretend-bytes");
-  await repo.attach({
+  await repo.attachMany([{
     shop,
     messageId: created.messageId,
     id: crypto.randomUUID(),
@@ -46,7 +46,7 @@ async function ticketWithFile(shop: string, key: string) {
     contentType: "image/png",
     sizeBytes: 13,
     at: 1_000,
-  });
+  }]);
 
   return created;
 }

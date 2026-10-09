@@ -2,6 +2,7 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { revokeTokenById } from "~/services/mcp/tokens.server";
 import { sha256 } from "~/domain/mcp/tokens";
 import { mcpTokens } from "~/wiring.server";
+import { readJsonObject } from "~/lib/json-body";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -29,12 +30,9 @@ export async function action({ request }: ActionFunctionArgs) {
   const contentType = request.headers.get("Content-Type") || "";
 
   if (contentType.includes("application/json")) {
-    try {
-      const parsed = (await request.json()) as Record<string, unknown>;
-      if (typeof parsed.token === "string") tokenToRevoke = parsed.token;
-    } catch {
-      // Ignore malformed JSON, RFC 7009 returns 200 on no-op
-    }
+    // Malformed JSON is a no-op: RFC 7009 answers 200 either way.
+    const parsed = await readJsonObject(request);
+    if (typeof parsed?.token === "string") tokenToRevoke = parsed.token;
   } else {
     try {
       const formData = await request.formData();

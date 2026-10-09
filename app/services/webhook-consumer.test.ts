@@ -12,7 +12,7 @@ function dependencies(): WebhookConsumerDependencies & { readonly handled: strin
       async get() {
         return {
           id: "delivery-1", shop: "example.myshopify.com", topic: "app/uninstalled",
-          status: "queued",
+          status: "queued", triggeredAt: 50,
         };
       },
       async markProcessing() { return "claimed" as const; },
@@ -22,6 +22,9 @@ function dependencies(): WebhookConsumerDependencies & { readonly handled: strin
     handlers: {
       "app/uninstalled": async (delivery) => { handled.push(delivery.id); },
       "app/scopes_update": async () => {},
+      "customers/data_request": async () => {},
+      "customers/redact": async () => {},
+      "shop/redact": async (delivery) => { handled.push(`redact:${delivery.id}`); },
     },
     now: () => 100,
     handled,
@@ -60,7 +63,7 @@ describe("consumeWebhook", () => {
     const deliveries = {
       ...deps.deliveries,
       async get() { return {
-        id: "delivery-1", shop: "example.myshopify.com", topic: "app/uninstalled", status: "processed",
+        id: "delivery-1", shop: "example.myshopify.com", topic: "app/uninstalled", status: "processed", triggeredAt: 50,
       }; },
     };
     await expect(consumeWebhook({ ...deps, deliveries }, {
@@ -105,7 +108,7 @@ describe("consumeWebhook", () => {
     const deliveries = {
       ...deps.deliveries,
       async get() {
-        return { id: "delivery-1", shop: "example.myshopify.com", topic: "retired/topic", status: states.includes("dead_letter") ? "dead_letter" : "queued", failureCode: states.includes("dead_letter") ? "dead_letter" : null, processingStartedAt: null };
+        return { id: "delivery-1", shop: "example.myshopify.com", topic: "retired/topic", status: states.includes("dead_letter") ? "dead_letter" : "queued", triggeredAt: 50, failureCode: states.includes("dead_letter") ? "dead_letter" : null, processingStartedAt: null };
       },
       async markFailed() { states.push("failed"); },
       async markDeadLetter() { states.push("dead_letter"); },

@@ -8,12 +8,13 @@ const DEFAULT_ENTITLEMENTS: PlanEntitlements = {
   "projects.max": { kind: "disabled" },
 };
 
-const ENTITLEMENT_KEYS = new Set<string>(["ai.reply_draft", "ai.monthly_tokens", "projects.max"]);
+const ENTITLEMENT_KEYS: readonly EntitlementKey[] = ["ai.reply_draft", "ai.monthly_tokens", "projects.max"];
 
 export function entitlementFor(planHandle: string | null | undefined, key: string): Entitlement {
   const plan = planForShopifyHandle(planHandle);
-  if (!plan || !ENTITLEMENT_KEYS.has(key)) return { kind: "disabled" };
-  return plan.entitlements[key as EntitlementKey] ?? { kind: "disabled" };
+  const known = ENTITLEMENT_KEYS.find((candidate) => candidate === key);
+  if (!plan || !known) return { kind: "disabled" };
+  return plan.entitlements[known] ?? { kind: "disabled" };
 }
 
 export function entitlementsFor(planHandle: string | null | undefined): PlanEntitlements {
