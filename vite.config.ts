@@ -39,6 +39,15 @@ function shopifyDevVars(): Record<string, string> {
   return vars;
 }
 
+// @react-router/dev re-evaluates this file to build a "child compiler" (a second
+// Vite server, used only for CSS). It would start a second workerd, a second
+// remote AI session and a second dependency optimizer on the same cache.
+const configLoadsKey = Symbol.for("vite-config-loads");
+const previousLoads = Reflect.get(globalThis, configLoadsKey);
+const configLoads = typeof previousLoads === "number" ? previousLoads + 1 : 1;
+Reflect.set(globalThis, configLoadsKey, configLoads);
+const isChildCompiler = configLoads > 1;
+
 export default defineConfig(({ command }) => ({
   // Vite 8 resolves tsconfig `paths` (the `~/*` alias) natively — this replaces
   // the vite-tsconfig-paths plugin the upstream template used.
@@ -84,12 +93,16 @@ export default defineConfig(({ command }) => ({
   plugins: [
     // Runs the app in the Workers runtime (workerd) during dev, matching
     // production. Bindings are real (D1, KV) via Miniflare.
-    cloudflare({
-      viteEnvironment: { name: "ssr" },
-      ...(command === "serve"
-        ? { config: () => ({ vars: shopifyDevVars() }) }
-        : {}),
-    }),
+    ...(isChildCompiler && command === "serve"
+      ? []
+      : [
+          cloudflare({
+            viteEnvironment: { name: "ssr" },
+            ...(command === "serve"
+              ? { config: () => ({ vars: shopifyDevVars() }) }
+              : {}),
+          }),
+        ]),
     // Tailwind only affects CSS that `@import "tailwindcss"` — which is only
     // app/styles/internal/internal.tailwind.css, loaded by the /internal routes.
     // The public SCSS and the Polaris admin are untouched.
